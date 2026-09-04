@@ -1,0 +1,67 @@
+@import "tailwindcss";
+
+/* 设计 token：深色 espresso + 奶油字 + 琥珀点缀。
+   全站共用这一套，禁止单页另起皮肤（见 docs/002「UI 风格」）。 */
+@theme {
+  --color-bg: #12100e;
+  --color-panel: #1c1814;
+  --color-line: #3a3228;
+  --color-chip: #2a231c;
+  --color-cream: #f3e6d0;
+  --color-muted: #9c8b74;
+  --color-amber: #c88d44;
+  --color-amber2: #e0a85a;
+  --color-warn: #c45c3e;
+
+  --font-serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+}
+
+html,
+body,
+#root {
+  min-height: 100vh;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-cream);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+/* 数字与标题走衬线，这是整站气质的来源 */
+.serif {
+  font-family: var(--font-serif);
+}
+
+input,
+select,
+button {
+  font: inherit;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.6);
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.rise {
+  animation: rise 0.28s ease both;
+}

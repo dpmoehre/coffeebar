@@ -6,7 +6,7 @@
 
 **不是点单点菜，不是后厨 KDS，也不是给全公司下单的系统。**
 
-应用代码还在落地前。约定与数据模型见 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md)。页面气质可点 [_Doc/2026-09-04-ui-样张/index.html](_Doc/2026-09-04-ui-样张/index.html)。
+**豆子部分已经能跑**（豆库、豆卡、批次、冲煮、消耗、撤回、补货、统计、画像）；酒和 MCP 还没开工。约定与数据模型见 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md)，实现进度见 [docs/003-🚧-豆子第一期实现.md](docs/003-🚧-豆子第一期实现.md)。页面气质可点 [_Doc/2026-09-04-ui-样张/index.html](_Doc/2026-09-04-ui-样张/index.html)。
 
 ---
 
@@ -70,26 +70,41 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 
 ---
 
-## 怎么跑（落地后）
+## 怎么跑
 
-目标是少步骤，不用 Docker。
+不用 Docker。小主机上只要三个脚本：
 
-1. 在小主机上跑一次 `install.bat`（装好 uv、Node，同步依赖，构建前端）。
-2. 日常双击 `start.bat`，浏览器打开 `http://localhost`。
-3. 需要备份时跑 `backup.bat`，拷走 `data/`（库文件 + 照片）。
+1. **装一次**：双击 [`scripts/install.bat`](scripts/install.bat)。会装 uv、同步 Python 依赖、装前端依赖并构建。没有 Node 会提示你去装 LTS。
+2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。
+3. **备份**：双击 [`scripts/backup.bat`](scripts/backup.bat)。服务开着也能安全导出，库文件和照片打包进 `%USERPROFILE%\coffeebar-backup`。
 
-密钥和口令写本机 `.env`，不要提交。换机器：拷仓库 + 拷 `data/` + 再装一次。
+想用 `http://coffee` 这种短地址而不是带端口的，再加 Caddy：`caddy run --config scripts/Caddyfile`。
 
-当前还没有这些脚本和运行入口，先不要当已经能安装。
+### 在 Mac / Linux 上开发
+
+```bash
+uv sync                                    # 后端依赖
+uv run uvicorn app.main:app --reload       # API 在 :8000
+cd web && npm install && npm run dev       # 前端在 :5173，自动代理 /api
+```
+
+跑测试与端到端自检：
+
+```bash
+uv run pytest                    # 75 个用例：账面、成本快照、撤回、平均粉量、写锁
+uv run python scripts/smoke.py   # 对着真在跑的服务走一遍完整场景并打印数字
+```
+
+数据都在 `data/`（SQLite + 照片），不入库。换机器：拷仓库 + 拷 `data/` + 再跑一次 `install.bat`。密钥和口令写本机 `.env`，不要提交。
 
 ---
 
-## 技术形态（已选定）
+## 技术形态
 
-- 网页：Vite + React + Tailwind + anime.js（冲煮 SVG）。
-- 服务：FastAPI（uv）+ SQLite + 本地照片目录。
-- 入口：Caddy 反代；本机 `localhost`，内网用主机名或 IP。
-- MCP：本机进程，调用同一套 FastAPI / 同一份 SQLite。
+- 网页：Vite + React + Tailwind v4 + anime.js（冲煮 SVG）。构建产物由服务直接托管，不另起前端进程。
+- 服务：FastAPI（uv）+ SQLite（标准库 `sqlite3`，WAL，无 ORM）+ 本地照片目录。
+- 入口：默认 `:8000` 直连；想要短地址再上 Caddy。
+- MCP：本机进程，调用同一套 FastAPI / 同一份 SQLite（未开工）。
 - 视觉：深色 espresso、奶油字、琥珀点缀；样张以 [_Doc/2026-09-04-ui-样张/画像.png](_Doc/2026-09-04-ui-样张/画像.png) 为准。
 
 ---
@@ -98,6 +113,10 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 
 | 路径 | 说明 |
 | ---- | ---- |
+| [app/](app/) | 后端：`store.py` 账面与流水、`brew.py` 冲煮计算、`stats.py` 平均粉量与汇总、`locks.py` 写锁、`schema.sql` 建表 |
+| [web/](web/) | 前端：`pages/` 四个页面、`components/` 冲煮方案与雷达、`ui.jsx` 共用组件 |
+| [tests/](tests/) | 关键口径的用例 |
+| [scripts/](scripts/) | `install/start/backup.bat`、`smoke.py`、`Caddyfile` |
 | [CLAUDE.md](CLAUDE.md) | Agent 规则唯一正文 |
 | [AGENTS.md](AGENTS.md) | 引用入口，不重复规则 |
 | [todo.md](todo.md) | 按日期倒序的精炼索引 |

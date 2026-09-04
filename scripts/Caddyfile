@@ -1,0 +1,19 @@
+# 可选：想用 http://coffee 这种短地址而不是带端口的，再上 Caddy。
+# 只跑 start.bat 的话不需要这个文件。
+#
+# 用法：caddy run --config scripts/Caddyfile
+# 手机上要认这个名字，得在路由器加一条本地 DNS，或改各设备 hosts。
+
+:80 {
+	encode zstd gzip
+
+	# 照片走磁盘，别经过 Python
+	handle /photos/* {
+		root * data
+		file_server
+	}
+
+	handle {
+		reverse_proxy 127.0.0.1:8000
+	}
+}
