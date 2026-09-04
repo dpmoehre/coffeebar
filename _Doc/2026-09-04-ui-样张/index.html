@@ -204,6 +204,33 @@
     table.nums td.r, table.nums th.r { text-align: right; color: var(--amber); }
     table.nums th.r { color: var(--muted); }
     .kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .lots { display: grid; gap: 8px; margin-top: 6px; }
+    .lot {
+      display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center;
+      border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px;
+      cursor: pointer; font-size: 13px;
+    }
+    .lot.on { border-color: var(--amber); background: rgba(200,141,68,.1); }
+    .lot i {
+      width: 14px; height: 14px; border-radius: 50%; border: 1px solid #6b5438; display: block;
+    }
+    .lot.on i { background: var(--amber); border-color: var(--amber); }
+    .lot .g { color: var(--amber); white-space: nowrap; }
+    .lot em { font-style: normal; color: var(--muted); }
+    .undo {
+      background: none; border: 0; color: var(--muted); font: inherit; font-size: 12px;
+      cursor: pointer; text-decoration: underline; padding: 0;
+    }
+    .undo:hover { color: var(--amber); }
+    .voided { opacity: .45; text-decoration: line-through; }
+    .prow {
+      display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center;
+      padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px;
+    }
+    .prow input {
+      background: var(--bg); border: 1px solid var(--line); color: var(--cream);
+      border-radius: 8px; padding: 6px 8px; font: inherit; width: 100%;
+    }
     .brew-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
     .brew-head label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
     .brew-head input, .brew-head select {
@@ -441,9 +468,10 @@
         </div>
         <div class="wide2">
           <div class="panel">
-            <div>库存</div>
-            <p class="meta">账面 <b id="stock-g">142</b> g / 标称 200 g / 开袋实称 198 g</p>
+            <div>库存 · 2 袋在库</div>
+            <p class="meta">在喝这袋：账面 <b id="stock-g">142</b> g / 标称 200 g / 开袋实称 198 g</p>
             <div class="bar" id="stock-bar"><i style="width:71%"></i></div>
+            <p class="meta" style="margin-top:10px">另有 1 袋未开封（200 g · ¥128 · 9 月 1 日入）。冲的时候可以选用哪袋。</p>
             <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
           </div>
           <div class="panel">
@@ -489,6 +517,13 @@
               <button class="chip" id="btn-restart">重来</button>
             </div>
           </div>
+        </div>
+        <div class="panel" style="margin-top:18px">
+          <div class="top" style="align-items:center">
+            <div>最近消耗 · 记错了可以撤回</div>
+            <button class="btn ghost" id="btn-people">管理「谁喝的」</button>
+          </div>
+          <table class="nums" id="log-rows"></table>
         </div>
       </section>
 
@@ -654,11 +689,26 @@
   </dialog>
   <dialog id="dlg-once">
     <h2>冲一次</h2>
+    <label>用哪一袋（默认上次那袋，可改）</label>
+    <div id="once-lots" class="lots"></div>
     <label>粉量（克）</label><input id="once-g" type="number" value="16" />
-    <label>谁喝的</label><input id="once-who" value="我" />
+    <p class="meta" id="once-check">这袋账面 142 g，够冲约 8 杯。</p>
+    <label>谁喝的</label>
+    <div class="row" id="once-people" style="margin:6px 0 0"></div>
+    <input id="once-who" placeholder="输入新名字即创建" value="我" />
     <menu>
       <button class="btn ghost" id="once-cancel">取消</button>
       <button class="btn" id="once-ok">记下并扣库存</button>
+    </menu>
+  </dialog>
+  <dialog id="dlg-people">
+    <h2>管理「谁喝的」</h2>
+    <p class="meta">改名只改一处，历史记录自动跟着变。停用的人不再出现在选人列表里，但他的记录还在。</p>
+    <div id="people-rows"></div>
+    <label>新增</label><input id="people-new" placeholder="打个名字就有这个人" />
+    <menu>
+      <button class="btn ghost" id="people-close">关闭</button>
+      <button class="btn" id="people-add">添加</button>
     </menu>
   </dialog>
   <div class="toast" id="toast"></div>
@@ -671,6 +721,21 @@
       { name: "曼特宁", meta: "印尼 · 深烘 · 94 °C", g: 210, max: 250, tags: ["草本"] }
     ];
     const heatMap = { 3: [1, 0], 6: [2, 1], 12: [1, 0], 18: [3, 0], 21: [0, 1], 27: [2, 0] };
+
+    // 同一支豆的几袋：冲的时候由人选，不自动 FIFO
+    const lots = [
+      { label: "在喝这袋", sub: "8 月 21 日开封 · 标称 200 / 实称 198", left: 142, usable: 198, price: 118 },
+      { label: "未开封", sub: "9 月 1 日入 · 标称 200", left: 200, usable: 200, price: 128 }
+    ];
+    let lotSel = 0;
+    // 谁喝的：可增、可改名、可停用；停用不删记录
+    const people = [{ name: "我", on: true }, { name: "小王", on: true }, { name: "阿陈", on: true }];
+    // 消耗流水：撤回只划掉不物理删
+    const log = [
+      { t: "今天 09:12", who: "我", g: 16, lot: "在喝这袋", cost: 9.5, voided: false },
+      { t: "今天 08:40", who: "小王", g: 15, lot: "在喝这袋", cost: 8.9, voided: false },
+      { t: "昨天 16:05", who: "阿陈", g: 16, lot: "在喝这袋", cost: 9.5, voided: true }
+    ];
 
     const pages = document.querySelectorAll(".page");
     function go(id) {
@@ -688,6 +753,86 @@
       el.textContent = t;
       el.style.display = "block";
       setTimeout(() => { el.style.display = "none"; }, 2000);
+    }
+
+    function renderLots() {
+      document.getElementById("once-lots").innerHTML = lots.map((l, i) => `
+        <div class="lot${i === lotSel ? " on" : ""}" data-i="${i}">
+          <i></i>
+          <div>${l.label}<em> · ${l.sub}</em></div>
+          <div class="g">${l.left} g · ¥${l.price}</div>
+        </div>`).join("");
+      document.querySelectorAll("#once-lots .lot").forEach((el) => {
+        el.onclick = () => { lotSel = +el.dataset.i; renderLots(); checkDose(); };
+      });
+    }
+
+    function checkDose() {
+      const dose = Number(document.getElementById("once-g").value) || 16;
+      const lot = lots[lotSel];
+      const el = document.getElementById("once-check");
+      if (lot.left < dose) {
+        el.textContent = `这袋只剩 ${lot.left} g，不够 ${dose} g。换一袋、改粉量，或先盘点补重。`;
+        el.style.color = "var(--warn)";
+      } else {
+        const cup = (dose * lot.price) / lot.usable;
+        el.textContent = `这袋账面 ${lot.left} g，够冲约 ${Math.floor(lot.left / dose)} 杯 · 这杯约 ¥${cup.toFixed(1)}`;
+        el.style.color = "";
+      }
+    }
+
+    function renderPeopleChips() {
+      document.getElementById("once-people").innerHTML = people.filter((p) => p.on)
+        .map((p) => `<button class="chip" type="button" data-n="${p.name}">${p.name}</button>`).join("");
+      document.querySelectorAll("#once-people .chip").forEach((el) => {
+        el.onclick = () => { document.getElementById("once-who").value = el.dataset.n; };
+      });
+    }
+
+    function renderPeopleRows() {
+      document.getElementById("people-rows").innerHTML = people.map((p, i) => `
+        <div class="prow">
+          <input value="${p.name}" data-name="${i}" />
+          <span class="meta">${p.on ? "" : "已停用"}</span>
+          <button class="undo" type="button" data-toggle="${i}">${p.on ? "停用" : "恢复"}</button>
+        </div>`).join("");
+      document.querySelectorAll("#people-rows [data-name]").forEach((el) => {
+        el.onchange = () => {
+          const i = +el.dataset.name, was = people[i].name, now = el.value.trim() || was;
+          people[i].name = now;
+          log.forEach((r) => { if (r.who === was) r.who = now; });
+          renderPeopleChips(); renderLog();
+          toast(`改名不动历史：${was} → ${now}`);
+        };
+      });
+      document.querySelectorAll("#people-rows [data-toggle]").forEach((el) => {
+        el.onclick = () => {
+          const p = people[+el.dataset.toggle];
+          p.on = !p.on;
+          renderPeopleRows(); renderPeopleChips();
+          toast(p.on ? `${p.name} 已恢复` : `${p.name} 已停用，记录保留`);
+        };
+      });
+    }
+
+    function renderLog() {
+      document.getElementById("log-rows").innerHTML = `
+        <thead><tr><th>时间</th><th>谁喝的</th><th>哪一袋</th><th class="r">粉量</th><th class="r">这杯钱</th><th></th></tr></thead>
+        <tbody>${log.map((r, i) => `
+          <tr class="${r.voided ? "voided" : ""}">
+            <td>${r.t}</td><td>${r.who}</td><td>${r.lot}</td>
+            <td class="r">${r.g} g</td><td class="r">¥${r.cost.toFixed(1)}</td>
+            <td class="r"><button class="undo" type="button" data-i="${i}">${r.voided ? "恢复" : "撤回"}</button></td>
+          </tr>`).join("")}</tbody>`;
+      document.querySelectorAll("#log-rows .undo").forEach((el) => {
+        el.onclick = () => {
+          const r = log[+el.dataset.i];
+          r.voided = !r.voided;
+          beans[current].g = Math.max(0, beans[current].g + (r.voided ? r.g : -r.g));
+          openCard(current); renderGrid(); renderLog();
+          toast(r.voided ? `已撤回，${r.g} g 加回库存（流水划掉不删）` : "已恢复这笔");
+        };
+      });
     }
 
     function renderGrid() {
@@ -909,15 +1054,38 @@
       document.getElementById("dlg-new").close();
       renderGrid(); toast("已加入豆库（仅样张）");
     };
-    document.getElementById("btn-brew-once").onclick = () => document.getElementById("dlg-once").showModal();
+    document.getElementById("btn-brew-once").onclick = () => {
+      renderLots(); renderPeopleChips(); checkDose();
+      document.getElementById("dlg-once").showModal();
+    };
     document.getElementById("once-cancel").onclick = () => document.getElementById("dlg-once").close();
+    document.getElementById("once-g").addEventListener("input", checkDose);
     document.getElementById("once-ok").onclick = () => {
       const use = Number(document.getElementById("once-g").value) || 16;
-      const who = document.getElementById("once-who").value || "我";
+      const who = document.getElementById("once-who").value.trim() || "我";
+      const lot = lots[lotSel];
+      if (lot.left < use) { toast("这袋不够，换一袋或改粉量"); return; }
+      lot.left -= use;
+      if (!people.some((p) => p.name === who)) people.push({ name: who, on: true });
+      log.unshift({ t: "刚刚", who, g: use, lot: lot.label, cost: (use * lot.price) / lot.usable, voided: false });
       beans[current].g = Math.max(0, beans[current].g - use);
-      openCard(current); renderGrid();
+      openCard(current); renderGrid(); renderLog(); renderPeopleChips();
       document.getElementById("dlg-once").close();
-      toast(`${who} · 扣 ${use} g`);
+      toast(`${who} · ${lot.label} 扣 ${use} g`);
+    };
+    document.getElementById("btn-people").onclick = () => {
+      renderPeopleRows();
+      document.getElementById("dlg-people").showModal();
+    };
+    document.getElementById("people-close").onclick = () => document.getElementById("dlg-people").close();
+    document.getElementById("people-add").onclick = () => {
+      const el = document.getElementById("people-new");
+      const n = el.value.trim();
+      if (!n) return;
+      if (!people.some((p) => p.name === n)) people.push({ name: n, on: true });
+      el.value = "";
+      renderPeopleRows(); renderPeopleChips();
+      toast(`已添加 ${n}`);
     };
     document.querySelectorAll("#beans .chip").forEach((el) => el.onclick = () => el.classList.toggle("on"));
 
@@ -929,6 +1097,9 @@
     drawRadar();
     openCard(0);
     buildStages();
+    renderLots();
+    renderPeopleChips();
+    renderLog();
     renderHeat(document.getElementById("heat"), false);
     renderHeat(document.getElementById("cal-full"), true);
   </script>
