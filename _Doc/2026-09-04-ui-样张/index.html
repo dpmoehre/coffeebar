@@ -174,6 +174,36 @@
     }
     .wide2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .wide3 { display: grid; grid-template-columns: 1.05fr 0.95fr 1.1fr; gap: 18px; }
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(6, minmax(0, 1fr));
+      gap: 14px;
+      margin-bottom: 18px;
+    }
+    .kpi {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 16px 18px 18px;
+    }
+    .kpi .lbl { color: var(--muted); font-size: 13px; }
+    .kpi .n {
+      font-family: var(--serif);
+      font-size: 30px;
+      line-height: 1.15;
+      margin: 8px 0 6px;
+      letter-spacing: -0.02em;
+    }
+    .kpi .n small { font-size: 16px; color: var(--amber); font-weight: 500; }
+    .kpi .hint { color: var(--muted); font-size: 12px; }
+    table.nums { width: 100%; border-collapse: collapse; font-size: 14px; margin-top: 10px; }
+    table.nums th, table.nums td {
+      text-align: left; padding: 8px 6px; border-bottom: 1px solid var(--line);
+    }
+    table.nums th { color: var(--muted); font-weight: 500; }
+    table.nums td.r, table.nums th.r { text-align: right; color: var(--amber); }
+    table.nums th.r { color: var(--muted); }
+    .kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .brew-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
     .brew-head label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
     .brew-head input, .brew-head select {
@@ -252,11 +282,12 @@
     @media (max-width: 1400px) {
       .grid4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .wide3 { grid-template-columns: 1fr 1fr; }
+      .kpis, .kpis.four { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
       nav { position: static; height: auto; }
-      .grid4, .wide2, .wide3 { grid-template-columns: 1fr; }
+      .grid4, .wide2, .wide3, .kpis, .kpis.four { grid-template-columns: 1fr 1fr; }
       main { padding: 20px; }
     }
   </style>
@@ -334,6 +365,12 @@
           <button class="chip">阿陈</button>
         </div>
         <p class="quote">小王偏爱浅烘高酸的埃塞水洗，常在上午冲，偶尔点一杯威士忌酸。</p>
+        <div class="kpis four">
+          <div class="kpi"><div class="lbl">这个人 · 豆</div><div class="n">312 <small>g</small></div><div class="hint">19 杯</div></div>
+          <div class="kpi"><div class="lbl">酒</div><div class="n">240 <small>ml</small></div><div class="hint">4 杯</div></div>
+          <div class="kpi"><div class="lbl">酒精约</div><div class="n">76 <small>g</small></div><div class="hint">按酒精度估算</div></div>
+          <div class="kpi"><div class="lbl">喝掉的钱</div><div class="n">¥148</div><div class="hint">按批次摊到已喝的</div></div>
+        </div>
         <div class="panel" style="margin-bottom:18px">
           <div class="pref"><label>酸味 <span>8.6</span></label><div class="bar"><i style="width:86%"></i></div></div>
           <div class="pref"><label>甜味 <span>5.4</span></label><div class="bar"><i style="width:54%"></i></div></div>
@@ -459,9 +496,19 @@
         <div class="top">
           <div>
             <h1>酒水</h1>
-            <p class="sub">酒单、酒瓶与配方。样张只列常喝的几条。</p>
+            <p class="sub">基酒行上看见酒名、买入价、风味类型和酒精度。</p>
           </div>
-          <button class="btn"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建酒单</button>
+          <div class="row" style="margin:0">
+            <button class="btn" id="btn-new-spirit"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建基酒</button>
+            <button class="btn ghost"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建酒单</button>
+          </div>
+        </div>
+        <div class="panel" style="margin-bottom:18px">
+          <div>基酒</div>
+          <p class="meta">买来的底酒。酒名、买入价、风味类型、酒精度列在边上。</p>
+          <div class="drink"><div class="ava wine"></div><div>布法罗水牛波本<div class="meta">威士忌 · 香草焦糖 · 40% vol · 700 ml · 剩 420 ml</div></div><span>买入 ¥268</span></div>
+          <div class="drink"><div class="ava wine"></div><div>Beefeater 伦敦干金<div class="meta">金酒 · 柑橘杜松 · 40% vol · 700 ml · 未开</div></div><span>买入 ¥198</span></div>
+          <div class="drink"><div class="ava wine"></div><div>拉弗格 10 年<div class="meta">威士忌 · 泥煤海藻 · 40% vol · 700 ml · 剩 510 ml</div></div><span>买入 ¥328</span></div>
         </div>
         <div class="wide2">
           <div class="panel">
@@ -470,17 +517,26 @@
             <div class="drink"><div class="ava wine"></div><div>波本纯饮</div><span>上架</span></div>
           </div>
           <div class="panel">
-            <div>酒瓶库存</div>
-            <div class="drink"><div class="ava wine"></div><div>波本<div class="bar"><i style="width:62%"></i></div></div><span>420 ml</span></div>
+            <div>自制基酒配方</div>
+            <div class="drink"><div class="ava wine"></div><div>咖啡冷萃利口</div><span>浸泡 5 日</span></div>
           </div>
         </div>
       </section>
 
       <section id="restock" class="page">
         <h1>补货</h1>
-        <p class="sub">账面见底或还能冲的天数不够，会出现在这里。</p>
+        <p class="sub">见底会出现在这里。每条都可以上传对照图（包装、货架、截图）。</p>
         <div class="panel">
-          <div class="drink"><div class="ava"></div><div>慧兰 · 还剩 18 g</div><span>建议补 1 袋</span></div>
+          <div class="drink">
+            <div class="ava"></div>
+            <div>慧兰 · 还剩 18 g<div class="meta">建议补 1 袋 · 上次 ¥98</div></div>
+            <label class="btn ghost" style="cursor:pointer">上传图片<input type="file" accept="image/*" hidden></label>
+          </div>
+          <div class="drink">
+            <div class="ava wine"></div>
+            <div>布法罗水牛波本 · 剩 420 ml<div class="meta">建议补 1 瓶 · 上次 ¥268</div></div>
+            <label class="btn ghost" style="cursor:pointer">上传图片<input type="file" accept="image/*" hidden></label>
+          </div>
         </div>
       </section>
 
@@ -502,9 +558,47 @@
         <div class="top">
           <div>
             <h1>统计</h1>
-            <p class="sub">消耗速度与谁喝了多少。</p>
+            <p class="sub">先看数字：消耗了多少豆、多少酒、花了多少钱。再看曲线和按人。</p>
           </div>
           <button class="btn ghost"><svg viewBox="0 0 24 24"><use href="#i-down"/></svg>出表 CSV</button>
+        </div>
+        <div class="row">
+          <button class="chip">本周</button>
+          <button class="chip on">本月</button>
+          <button class="chip">今年</button>
+          <button class="chip">全部</button>
+        </div>
+        <div class="kpis">
+          <div class="kpi">
+            <div class="lbl">咖啡豆</div>
+            <div class="n">1.86 <small>kg</small></div>
+            <div class="hint">1864 g · 124 杯</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">酒</div>
+            <div class="n">2.38 <small>L</small></div>
+            <div class="hint">2380 ml · 31 杯</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">酒精约</div>
+            <div class="n">186 <small>g</small></div>
+            <div class="hint">毫升 × 酒精度 × 0.789</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">喝掉的钱</div>
+            <div class="n">¥1,286</div>
+            <div class="hint">豆 ¥742 · 酒 ¥544</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">买进来的钱</div>
+            <div class="n">¥2,140</div>
+            <div class="hint">2 袋豆 · 1 瓶酒</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">还在库约</div>
+            <div class="n">¥3,620</div>
+            <div class="hint">账面按批次折算</div>
+          </div>
         </div>
         <div class="wide2">
           <div class="panel">
@@ -515,10 +609,31 @@
             </svg>
           </div>
           <div class="panel">
-            <div>本月</div>
-            <div class="drink"><div class="ava"></div><div>我 · 咖啡</div><span>18 杯</span></div>
-            <div class="drink"><div class="ava"></div><div>小王 · 咖啡</div><span>12 杯</span></div>
-            <div class="drink"><div class="ava wine"></div><div>阿陈 · 酒</div><span>4 杯</span></div>
+            <div>按人 · 本月</div>
+            <table class="nums">
+              <thead>
+                <tr><th>谁</th><th class="r">豆</th><th class="r">酒</th><th class="r">酒精</th><th class="r">钱</th></tr>
+              </thead>
+              <tbody>
+                <tr><td>我</td><td class="r">890 g</td><td class="r">620 ml</td><td class="r">48 g</td><td class="r">¥412</td></tr>
+                <tr><td>小王</td><td class="r">312 g</td><td class="r">240 ml</td><td class="r">76 g</td><td class="r">¥148</td></tr>
+                <tr><td>阿陈</td><td class="r">662 g</td><td class="r">1520 ml</td><td class="r">62 g</td><td class="r">¥726</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="wide2" style="margin-top:18px">
+          <div class="panel">
+            <div>喝得最多的豆</div>
+            <div class="drink"><div class="ava"></div><div>西达摩 水洗<div class="meta">42 杯</div></div><span>680 g · ¥218</span></div>
+            <div class="drink"><div class="ava"></div><div>慧兰<div class="meta">28 杯</div></div><span>448 g · ¥196</span></div>
+            <div class="drink"><div class="ava"></div><div>花魁 4.0<div class="meta">21 杯</div></div><span>336 g · ¥168</span></div>
+          </div>
+          <div class="panel">
+            <div>喝得最多的酒</div>
+            <div class="drink"><div class="ava wine"></div><div>布法罗水牛波本<div class="meta">香草焦糖 · 40% vol</div></div><span>980 ml · ¥196</span></div>
+            <div class="drink"><div class="ava wine"></div><div>威士忌酸<div class="meta">鸡尾酒</div></div><span>6 杯 · ¥126</span></div>
+            <div class="drink"><div class="ava wine"></div><div>四玫瑰单桶<div class="meta">香草橡木 · 50% vol</div></div><span>420 ml · ¥222</span></div>
           </div>
         </div>
       </section>
