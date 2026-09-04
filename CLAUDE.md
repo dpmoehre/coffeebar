@@ -10,8 +10,9 @@
 
 - **项目**：coffeebar。远程仓库：[github.com/dpmoehre/coffeebar](https://github.com/dpmoehre/coffeebar)。
 - **是什么**：公司咖啡吧里的**个人手冲 / 调酒工具**，第一期做豆子档案（豆卡、照片、克重流水、冲煮指导）。**不是点单点菜**。
-- **运行**：一台 Windows 11 小主机（16 GB，Ryzen 7 PRO 7850H + Radeon）既当服务器也当日常屏幕；内网访问，必要时临时用 cpolar。手机只用来拍豆卡照片。
-- **无多端竞争**：只有小主机本机（`localhost`）能改豆卡正文和库存；手机只能给已有豆卡补图；其他设备只读。不做多端同时可写或冲突合并。
+- **运行**：一台 Windows 11 小主机（16 GB，Ryzen 7 PRO 7850H + Radeon）既当服务器也当日常屏幕；内网访问，必要时临时用 cpolar。小主机 / 手机 / 其他电脑功能完整，只换布局。
+- **无多端竞争**：功能全端都有；同一条豆卡同时只允许一个写会话（写锁）。不做协同或冲突合并。冲煮播放不占锁。
+- **UI**：全站统一现代吧台风（深色 espresso + 琥珀点缀）+ 动效；冲煮指导用 [anime.js SVG](https://animejs.com/documentation/svg) 分步动画。
 - **当前阶段**：协作框架已落地；架构见 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md)；应用代码尚未开工。
 - **目标**：在本仓库内独立开发、测试、记录与验收，不把无关工程混入本仓。
 
@@ -22,12 +23,10 @@
 运行时（小主机单机，详见 [docs/002-🚧](docs/002-🚧-豆子档案与小主机架构.md)）：
 
 ```
-浏览器
-  本机 localhost = 唯一写主
-  手机 = 只补图
-  其他端 = 只读
-  → Caddy :80 → FastAPI（uv）+ Vite/React
+浏览器（全端同一套功能，只换布局）
+  → Caddy :80 → FastAPI（uv）+ Vite/React + Tailwind + anime.js
   → SQLite + data/photos/（均不入库）
+  → 写锁：同一豆卡同时一个写会话
 ```
 
 仓库目录：
@@ -51,7 +50,7 @@
 第一期已选定（版本号等脚手架落地后再写死）：
 
 - **后端**：Python + FastAPI，用 **uv**（`uv sync` / `uv run`），Python 版本锁定于 `.python-version`。
-- **前端**：Vite + React，用 **npm**；Node 版本范围在脚手架落地时写明。
+- **前端**：Vite + React + Tailwind + anime.js，用 **npm**；Node 版本范围在脚手架落地时写明。
 - **数据**：SQLite + 本地 `data/photos/`；小主机运行数据与 cpolar token、现场口令 **不入库**，用环境变量或本地忽略文件注入。
 - **部署**：Windows 11 本机进程 + Caddy，默认不用 Docker Desktop。
 - 密钥、本机 `Temp`、`data/` **不入库**。
