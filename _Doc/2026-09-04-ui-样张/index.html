@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>coffeebar 页面样张</title>
+  <style>
+    :root {
+      --bg: #16110d;
+      --panel: #221a14;
+      --line: #3a2e24;
+      --cream: #f3e8d8;
+      --muted: #b5a48c;
+      --amber: #d4a054;
+      --warn: #d46a4a;
+      --chip: #2c231b;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font: 15px/1.45 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+      background: var(--bg);
+      color: var(--cream);
+    }
+    .app {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      min-height: 100vh;
+    }
+    nav {
+      border-right: 1px solid var(--line);
+      padding: 28px 18px;
+    }
+    .brand {
+      font-size: 20px;
+      letter-spacing: 0.04em;
+      margin-bottom: 36px;
+    }
+    .brand span { color: var(--amber); }
+    nav button {
+      display: block;
+      width: 100%;
+      text-align: left;
+      background: none;
+      border: 0;
+      color: var(--muted);
+      font: inherit;
+      padding: 10px 8px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    nav button.on, nav button:hover { color: var(--cream); background: var(--chip); }
+    nav button.on { box-shadow: inset 3px 0 0 var(--amber); }
+    main { padding: 28px 36px 48px; }
+    h1 { font-size: 28px; font-weight: 560; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin-bottom: 22px; }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; align-items: center; }
+    .chip, .sort {
+      border: 1px solid var(--line);
+      background: var(--chip);
+      color: var(--cream);
+      border-radius: 999px;
+      padding: 6px 12px;
+      font: inherit;
+      cursor: pointer;
+    }
+    .chip.on { background: var(--amber); color: #1a120a; border-color: var(--amber); }
+    .sort { color: var(--muted); }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+      gap: 16px;
+    }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      overflow: hidden;
+      cursor: pointer;
+    }
+    .card:hover { border-color: var(--amber); }
+    .photo {
+      height: 120px;
+      background:
+        radial-gradient(circle at 30% 40%, #5a3d28, transparent 40%),
+        linear-gradient(135deg, #3a2618, #1a120e);
+    }
+    .body { padding: 14px 16px 16px; }
+    .name { font-size: 17px; margin-bottom: 4px; }
+    .meta { color: var(--muted); font-size: 13px; }
+    .bar { height: 6px; background: #3a2c22; border-radius: 99px; margin: 12px 0 8px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: var(--amber); border-radius: inherit; }
+    .bar.warn > i { background: var(--warn); }
+    .kg { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+    .tags { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
+    .tags b {
+      font-weight: 500;
+      font-size: 12px;
+      background: var(--chip);
+      border: 1px solid var(--line);
+      border-radius: 99px;
+      padding: 2px 8px;
+      color: var(--muted);
+    }
+    .page { display: none; }
+    .page.on { display: block; }
+    .hero {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 22px 24px;
+      margin-bottom: 18px;
+      font-size: 18px;
+    }
+    .prefs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      padding: 18px 20px;
+    }
+    .pref { margin: 14px 0; }
+    .pref label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
+    .list { margin: 0; padding: 0; list-style: none; }
+    .list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
+    .note { margin-top: 28px; color: var(--muted); font-size: 13px; }
+    @media (max-width: 800px) {
+      .app { grid-template-columns: 1fr; }
+      nav { display: flex; gap: 8px; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
+      nav .brand { width: 100%; margin-bottom: 8px; }
+      .prefs { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <nav>
+      <div class="brand">coffee<span>bar</span></div>
+      <button class="on" data-page="beans">豆库</button>
+      <button data-page="persona">画像</button>
+      <button data-page="card">豆卡</button>
+    </nav>
+    <main>
+      <section id="beans" class="page on">
+        <h1>豆库</h1>
+        <p class="sub">一眼看剩余。点标签筛选，点卡片进豆卡。这是静态样张，数据是假的。</p>
+        <div class="row">
+          <button class="chip">浅烘</button>
+          <button class="chip">中烘</button>
+          <button class="chip">深烘</button>
+          <button class="chip on">水洗</button>
+          <button class="chip">日晒</button>
+          <button class="chip">耶加</button>
+          <button class="sort">排序 · 剩余量</button>
+        </div>
+        <div class="grid">
+          <article class="card" data-page="card">
+            <div class="photo"></div>
+            <div class="body">
+              <div class="name">西达摩 水洗</div>
+              <div class="meta">埃塞俄比亚 · 浅烘 · 92 °C</div>
+              <div class="bar"><i style="width:71%"></i></div>
+              <div class="kg"><span>142 g</span><span>约 9 杯</span></div>
+              <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="photo"></div>
+            <div class="body">
+              <div class="name">花魁 4.0</div>
+              <div class="meta">埃塞俄比亚 · 浅烘 · 90 °C</div>
+              <div class="bar"><i style="width:48%"></i></div>
+              <div class="kg"><span>96 g</span><span>约 6 杯</span></div>
+              <div class="tags"><b>水洗</b><b>花香</b></div>
+            </div>
+          </article>
+          <article class="card">
+            <div class="photo"></div>
+            <div class="body">
+              <div class="name">慧兰</div>
+              <div class="meta">哥伦比亚 · 中烘 · 93 °C</div>
+              <div class="bar warn"><i style="width:12%"></i></div>
+              <div class="kg"><span>18 g</span><span>见底 · 约 1 杯</span></div>
+              <div class="tags"><b>水洗</b><b>巧克力</b></div>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="persona" class="page">
+        <h1>用户画像</h1>
+        <p class="sub">从「谁喝的」流水自动总结。点人名切换。</p>
+        <div class="row">
+          <button class="chip">我</button>
+          <button class="chip on">小王</button>
+          <button class="chip">阿陈</button>
+        </div>
+        <div class="hero">小王偏爱浅烘、高酸的埃塞水洗，上午冲得最多；酒只偶尔点一杯威士忌酸。</div>
+        <div class="prefs">
+          <div class="panel">
+            <div>口味倾向（按他喝过的豆的杯测）</div>
+            <div class="pref"><label>酸味 <span>8.6</span></label><div class="bar"><i style="width:86%"></i></div></div>
+            <div class="pref"><label>甜味 <span>5.4</span></label><div class="bar"><i style="width:54%"></i></div></div>
+            <div class="pref"><label>香味 <span>7.0</span></label><div class="bar"><i style="width:70%"></i></div></div>
+            <div class="tags"><b>浅烘</b><b>水洗</b><b>耶加</b><b>柑橘</b></div>
+          </div>
+          <div class="panel">
+            <div>常喝</div>
+            <ul class="list">
+              <li><span>西达摩 水洗</span><span>12 杯</span></li>
+              <li><span>花魁 4.0</span><span>7 杯</span></li>
+              <li><span>威士忌酸</span><span>2 杯</span></li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section id="card" class="page">
+        <h1>西达摩 水洗</h1>
+        <p class="sub">埃塞俄比亚 · 浅烘 · 开封 8 月 21 日 · 这杯约 ¥6.4</p>
+        <div class="prefs">
+          <div class="panel">
+            <div>账面 142 g / 标称 200 g / 开袋实称 198 g</div>
+            <div class="bar"><i style="width:71%"></i></div>
+            <div class="row" style="margin-top:14px">
+              <button class="chip">冲一次</button>
+              <button class="chip">这袋用完</button>
+              <button class="chip">播放冲煮</button>
+            </div>
+            <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
+          </div>
+          <div class="panel">
+            <div>最近杯测</div>
+            <div class="pref"><label>总体 <span>8.4</span></label><div class="bar"><i style="width:84%"></i></div></div>
+            <div class="pref"><label>酸质 <span>8.8</span></label><div class="bar"><i style="width:88%"></i></div></div>
+            <div class="pref"><label>甜感 <span>6.2</span></label><div class="bar"><i style="width:62%"></i></div></div>
+          </div>
+        </div>
+      </section>
+      <p class="note">样张只表现布局与气质，不是最终产品。静图见同目录「豆库.png / 画像.png」。</p>
+    </main>
+  </div>
+  <script>
+    const pages = document.querySelectorAll(".page");
+    document.querySelectorAll("[data-page]").forEach((el) => {
+      el.addEventListener("click", () => {
+        const id = el.getAttribute("data-page");
+        pages.forEach((p) => p.classList.toggle("on", p.id === id));
+        document.querySelectorAll("nav button").forEach((b) => {
+          b.classList.toggle("on", b.getAttribute("data-page") === id);
+        });
+      });
+    });
+    document.querySelectorAll("#beans .chip").forEach((el) => {
+      el.addEventListener("click", () => el.classList.toggle("on"));
+    });
+  </script>
+</body>
+</html>
