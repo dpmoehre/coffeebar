@@ -176,7 +176,7 @@
     .wide3 { display: grid; grid-template-columns: 1.05fr 0.95fr 1.1fr; gap: 18px; }
     .kpis {
       display: grid;
-      grid-template-columns: repeat(6, minmax(0, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 18px;
     }
@@ -203,7 +203,6 @@
     table.nums th { color: var(--muted); font-weight: 500; }
     table.nums td.r, table.nums th.r { text-align: right; color: var(--amber); }
     table.nums th.r { color: var(--muted); }
-    .kpis.four { grid-template-columns: repeat(4, minmax(0, 1fr)); }
     .lots { display: grid; gap: 8px; margin-top: 6px; }
     .lot {
       display: grid; grid-template-columns: 20px 1fr auto; gap: 10px; align-items: center;
@@ -309,12 +308,12 @@
     @media (max-width: 1400px) {
       .grid4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
       .wide3 { grid-template-columns: 1fr 1fr; }
-      .kpis, .kpis.four { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
     }
     @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
       nav { position: static; height: auto; }
-      .grid4, .wide2, .wide3, .kpis, .kpis.four { grid-template-columns: 1fr 1fr; }
+      .grid4, .wide2, .wide3, .kpis { grid-template-columns: 1fr 1fr; }
       main { padding: 20px; }
     }
   </style>
@@ -392,7 +391,7 @@
           <button class="chip">阿陈</button>
         </div>
         <p class="quote">小王偏爱浅烘高酸的埃塞水洗，常在上午冲，偶尔点一杯威士忌酸。</p>
-        <div class="kpis four">
+        <div class="kpis">
           <div class="kpi"><div class="lbl">这个人 · 豆</div><div class="n">312 <small>g</small></div><div class="hint">19 杯</div></div>
           <div class="kpi"><div class="lbl">酒</div><div class="n">240 <small>ml</small></div><div class="hint">4 杯</div></div>
           <div class="kpi"><div class="lbl">酒精约</div><div class="n">76 <small>g</small></div><div class="hint">按酒精度估算</div></div>
@@ -469,9 +468,10 @@
         <div class="wide2">
           <div class="panel">
             <div>库存 · 2 袋在库</div>
-            <p class="meta">在喝这袋：账面 <b id="stock-g">142</b> g / 标称 200 g / 开袋实称 198 g</p>
+            <p class="meta">在喝这袋：账面 <b id="stock-g">142</b> g / 标称 200 g（拆袋没称，按标称扣）</p>
             <div class="bar" id="stock-bar"><i style="width:71%"></i></div>
-            <p class="meta" style="margin-top:10px">另有 1 袋未开封（200 g · ¥128 · 9 月 1 日入）。冲的时候可以选用哪袋。</p>
+            <p class="meta" id="stock-cups" style="margin-top:8px"></p>
+            <p class="meta" style="margin-top:8px">另有 1 袋未开封（200 g · ¥128 · 9 月 1 日入）。冲的时候可以选用哪袋。</p>
             <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
           </div>
           <div class="panel">
@@ -564,7 +564,7 @@
         <div class="panel">
           <div class="drink">
             <div class="ava"></div>
-            <div>慧兰 · 还剩 18 g<div class="meta">建议补 1 袋 · 上次 ¥98</div></div>
+            <div>慧兰 · 还剩 12 g<div class="meta">不够一杯了 · 建议补 1 袋 · 上次 ¥98</div></div>
             <label class="btn ghost" style="cursor:pointer">上传图片<input type="file" accept="image/*" hidden></label>
           </div>
           <div class="drink">
@@ -608,6 +608,11 @@
             <div class="lbl">咖啡豆</div>
             <div class="n">1.86 <small>kg</small></div>
             <div class="hint">1864 g · 124 杯</div>
+          </div>
+          <div class="kpi">
+            <div class="lbl">平均每杯粉量</div>
+            <div class="n">15.6 <small>g</small></div>
+            <div class="hint">124 杯实际用量 · 14–17 g</div>
           </div>
           <div class="kpi">
             <div class="lbl">酒</div>
@@ -691,8 +696,8 @@
     <h2>冲一次</h2>
     <label>用哪一袋（默认上次那袋，可改）</label>
     <div id="once-lots" class="lots"></div>
-    <label>粉量（克）</label><input id="once-g" type="number" value="16" />
-    <p class="meta" id="once-check">这袋账面 142 g，够冲约 8 杯。</p>
+    <label>这次实际用了多少粉（克）</label><input id="once-g" type="number" value="16" />
+    <p class="meta" id="once-check">这袋账面 142 g。</p>
     <label>谁喝的</label>
     <div class="row" id="once-people" style="margin:6px 0 0"></div>
     <input id="once-who" placeholder="输入新名字即创建" value="我" />
@@ -717,14 +722,14 @@
     const beans = [
       { name: "西达摩 水洗", meta: "埃塞俄比亚 · 浅烘 · 92 °C", g: 142, max: 198, tags: ["水洗", "柑橘", "耶加"] },
       { name: "花魁 4.0", meta: "埃塞俄比亚 · 浅烘 · 90 °C", g: 96, max: 200, tags: ["水洗", "花香"] },
-      { name: "慧兰", meta: "哥伦比亚 · 中烘 · 93 °C", g: 18, max: 150, tags: ["水洗", "巧克力"] },
+      { name: "慧兰", meta: "哥伦比亚 · 中烘 · 93 °C", g: 12, max: 150, tags: ["水洗", "巧克力"] },
       { name: "曼特宁", meta: "印尼 · 深烘 · 94 °C", g: 210, max: 250, tags: ["草本"] }
     ];
     const heatMap = { 3: [1, 0], 6: [2, 1], 12: [1, 0], 18: [3, 0], 21: [0, 1], 27: [2, 0] };
 
     // 同一支豆的几袋：冲的时候由人选，不自动 FIFO
     const lots = [
-      { label: "在喝这袋", sub: "8 月 21 日开封 · 标称 200 / 实称 198", left: 142, usable: 198, price: 118 },
+      { label: "在喝这袋", sub: "8 月 21 日开封 · 标称 200（拆袋没称）", left: 142, usable: 200, price: 118 },
       { label: "未开封", sub: "9 月 1 日入 · 标称 200", left: 200, usable: 200, price: 128 }
     ];
     let lotSel = 0;
@@ -755,6 +760,22 @@
       setTimeout(() => { el.style.display = "none"; }, 2000);
     }
 
+    // 平均每杯粉量：从实际用量算，排除撤回的；没数据才兜底 15 g
+    function avgDose() {
+      const gs = log.filter((r) => !r.voided).map((r) => r.g);
+      if (!gs.length) return { avg: 15, lo: null, hi: null, none: true };
+      return {
+        avg: gs.reduce((a, b) => a + b, 0) / gs.length,
+        lo: Math.min(...gs), hi: Math.max(...gs), none: false
+      };
+    }
+    function avgDoseText() {
+      const a = avgDose();
+      return a.none ? "还没数据，暂按 15 g" : `${a.avg.toFixed(1)} g（${a.lo}–${a.hi}）`;
+    }
+    function cups(g) { return Math.floor(g / avgDose().avg); }
+    function cupsText(g) { return cups(g) < 1 ? "不够一杯了" : `约 ${cups(g)} 杯`; }
+
     function renderLots() {
       document.getElementById("once-lots").innerHTML = lots.map((l, i) => `
         <div class="lot${i === lotSel ? " on" : ""}" data-i="${i}">
@@ -776,7 +797,7 @@
         el.style.color = "var(--warn)";
       } else {
         const cup = (dose * lot.price) / lot.usable;
-        el.textContent = `这袋账面 ${lot.left} g，够冲约 ${Math.floor(lot.left / dose)} 杯 · 这杯约 ¥${cup.toFixed(1)}`;
+        el.textContent = `这袋账面 ${lot.left} g，按你平均 ${avgDose().avg.toFixed(1)} g 还能冲约 ${cups(lot.left)} 杯 · 这杯约 ¥${cup.toFixed(1)}`;
         el.style.color = "";
       }
     }
@@ -844,8 +865,8 @@
           <div class="body">
             <div class="name">${b.name}</div>
             <div class="meta">${b.meta}</div>
-            <div class="bar${b.g < 25 ? " warn" : ""}"><i style="width:${pct}%"></i></div>
-            <div class="kg"><span>${b.g} g</span><span>约 ${Math.max(1, Math.floor(b.g / 16))} 杯</span></div>
+            <div class="bar${b.g < avgDose().avg ? " warn" : ""}"><i style="width:${pct}%"></i></div>
+            <div class="kg"><span>${b.g} g</span><span>${cupsText(b.g)}</span></div>
             <div class="tags">${b.tags.map((t) => `<b>${t}</b>`).join("")}</div>
           </div></article>`;
       }).join("");
@@ -859,10 +880,14 @@
       current = i;
       const b = beans[i];
       document.getElementById("card-title").textContent = b.name;
-      document.getElementById("card-sub").textContent = b.meta + " · 这杯约 ¥6.4";
+      const cup = (avgDose().avg * lots[0].price) / lots[0].usable;
+      document.getElementById("card-sub").textContent = `${b.meta} · 这杯约 ¥${cup.toFixed(1)}`;
       document.getElementById("stock-g").textContent = b.g;
       document.querySelector("#stock-bar i").style.width = Math.round((b.g / b.max) * 100) + "%";
-      document.getElementById("stock-bar").classList.toggle("warn", b.g < 25);
+      // 见底判断也按平均一杯的量，不用写死的 25 g
+      document.getElementById("stock-bar").classList.toggle("warn", b.g < avgDose().avg);
+      document.getElementById("stock-cups").textContent =
+        `${cupsText(b.g)}（按你平均一杯 ${avgDoseText()}）`;
     }
 
     function drawRadar() {
