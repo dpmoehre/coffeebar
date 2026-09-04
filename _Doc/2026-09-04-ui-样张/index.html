@@ -26,7 +26,7 @@
       background: var(--bg);
       color: var(--cream);
     }
-    svg.sprite { position: absolute; width: 0; height: 0; }
+    svg.sprite { position: absolute; left: -9999px; width: 0; height: 0; overflow: hidden; }
     .app {
       display: grid;
       grid-template-columns: 252px 1fr;
@@ -47,21 +47,31 @@
       margin-bottom: 36px;
     }
     .logo .mark {
-      width: 42px; height: 42px;
+      width: 42px;
+      height: 42px;
+      flex: none;
       border: 1px solid var(--amber);
       border-radius: 12px;
-      display: grid; place-items: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       color: var(--amber);
     }
-    .logo .mark svg { width: 26px; height: 26px; }
+    .logo .mark svg {
+      display: block;
+      width: 22px;
+      height: 22px;
+    }
+    .logo .txt { display: flex; flex-direction: column; justify-content: center; min-height: 42px; }
     .logo strong {
       display: block;
-      font: 700 15px/1.2 var(--sans);
-      letter-spacing: 0.14em;
+      font: 700 15px/1.15 var(--sans);
+      letter-spacing: 0.12em;
     }
     .logo em {
       display: block;
-      font: 12px/1.4 var(--serif);
+      margin-top: 3px;
+      font: 12px/1.2 var(--serif);
       color: var(--muted);
       font-style: normal;
     }
@@ -79,7 +89,7 @@
       cursor: pointer;
       margin-bottom: 4px;
     }
-    nav button svg { width: 20px; height: 20px; flex: none; }
+    nav button svg { width: 20px; height: 20px; flex: none; display: block; }
     nav button.on {
       background: linear-gradient(90deg, #c88d44, #a86e2e);
       color: #1a120a;
@@ -240,8 +250,10 @@
 </head>
 <body>
   <svg class="sprite" aria-hidden="true">
-    <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
-      <path d="M5 9h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V9z"/><path d="M16 10h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 4c.4 1 .4 2 0 3M11 4c.4 1 .4 2 0 3"/>
+    <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round">
+      <path d="M6 10h10v4.2A4.2 4.2 0 0 1 11.8 18.4h-.6A4.2 4.2 0 0 1 7 14.2V10z"/>
+      <path d="M16 11.2h2.2a2 2 0 0 1 0 4H16"/>
+      <path d="M9 5.2c.3.8.3 1.6 0 2.4M12 5.2c.3.8.3 1.6 0 2.4"/>
     </symbol>
     <symbol id="i-bean" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
       <ellipse cx="12" cy="13" rx="6.5" ry="7"/><path d="M10 8c2 3 2 7 0 10"/>
@@ -275,19 +287,25 @@
   <div class="app">
     <nav>
       <div class="logo">
-        <div class="mark"><svg><use href="#i-cup"/></svg></div>
-        <div>
+        <div class="mark">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round" aria-hidden="true">
+            <path d="M6 10h10v4.2A4.2 4.2 0 0 1 11.8 18.4h-.6A4.2 4.2 0 0 1 7 14.2V10z"/>
+            <path d="M16 11.2h2.2a2 2 0 0 1 0 4H16"/>
+            <path d="M9 5.2c.3.8.3 1.6 0 2.4M12 5.2c.3.8.3 1.6 0 2.4"/>
+          </svg>
+        </div>
+        <div class="txt">
           <strong>COFFEEBAR</strong>
           <em>咖啡 · 记录 · 发现</em>
         </div>
       </div>
-      <button data-page="beans"><svg><use href="#i-bean"/></svg>豆子</button>
-      <button data-page="card"><svg><use href="#i-doc"/></svg>豆卡</button>
-      <button data-page="drinks"><svg><use href="#i-glass"/></svg>酒水</button>
-      <button class="on" data-page="persona"><svg><use href="#i-pie"/></svg>画像</button>
-      <button data-page="restock"><svg><use href="#i-box"/></svg>补货</button>
-      <button data-page="calendar"><svg><use href="#i-cal"/></svg>日历</button>
-      <button data-page="stats"><svg><use href="#i-chart"/></svg>统计</button>
+      <button data-page="beans"><svg viewBox="0 0 24 24"><use href="#i-bean"/></svg>豆子</button>
+      <button data-page="card"><svg viewBox="0 0 24 24"><use href="#i-doc"/></svg>豆卡</button>
+      <button data-page="drinks"><svg viewBox="0 0 24 24"><use href="#i-glass"/></svg>酒水</button>
+      <button class="on" data-page="persona"><svg viewBox="0 0 24 24"><use href="#i-pie"/></svg>画像</button>
+      <button data-page="restock"><svg viewBox="0 0 24 24"><use href="#i-box"/></svg>补货</button>
+      <button data-page="calendar"><svg viewBox="0 0 24 24"><use href="#i-cal"/></svg>日历</button>
+      <button data-page="stats"><svg viewBox="0 0 24 24"><use href="#i-chart"/></svg>统计</button>
     </nav>
 
     <main>
@@ -332,7 +350,7 @@
           <div class="weeks" id="heat"></div>
         </div>
         <div class="csv-wrap">
-          <button class="btn ghost" type="button"><svg><use href="#i-down"/></svg>出表 CSV</button>
+          <button class="btn ghost" type="button"><svg viewBox="0 0 24 24"><use href="#i-down"/></svg>出表 CSV</button>
         </div>
       </section>
 
@@ -342,7 +360,7 @@
             <h1>豆子</h1>
             <p class="sub">21 寸四列。点卡片进豆卡，右上角新建。</p>
           </div>
-          <button class="btn" id="btn-new"><svg><use href="#i-plus"/></svg>新建豆子</button>
+          <button class="btn" id="btn-new"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建豆子</button>
         </div>
         <div class="row">
           <button class="chip">浅烘</button>
@@ -403,7 +421,7 @@
             <h1>酒水</h1>
             <p class="sub">酒单、酒瓶与配方。样张只列常喝的几条。</p>
           </div>
-          <button class="btn"><svg><use href="#i-plus"/></svg>新建酒单</button>
+          <button class="btn"><svg viewBox="0 0 24 24"><use href="#i-plus"/></svg>新建酒单</button>
         </div>
         <div class="wide2">
           <div class="panel">
@@ -432,7 +450,7 @@
             <h1>日历</h1>
             <p class="sub">上点咖啡、下点酒。点日期看出当天。</p>
           </div>
-          <button class="btn ghost"><svg><use href="#i-down"/></svg>出表 CSV</button>
+          <button class="btn ghost"><svg viewBox="0 0 24 24"><use href="#i-down"/></svg>出表 CSV</button>
         </div>
         <div class="panel">
           <div class="weeks" id="cal-full"></div>
@@ -446,7 +464,7 @@
             <h1>统计</h1>
             <p class="sub">消耗速度与谁喝了多少。</p>
           </div>
-          <button class="btn ghost"><svg><use href="#i-down"/></svg>出表 CSV</button>
+          <button class="btn ghost"><svg viewBox="0 0 24 24"><use href="#i-down"/></svg>出表 CSV</button>
         </div>
         <div class="wide2">
           <div class="panel">
