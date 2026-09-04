@@ -134,3 +134,5 @@ export function Empty({ children }) {
 
 export const g = (n) => (n == null ? "—" : `${Math.round(n)} g`);
 export const money = (n) => (n == null ? "—" : `¥${Number(n).toFixed(n < 10 ? 1 : 0)}`);
+// 克价：0.26 / 0.45 / 0.76 这种，money() 对小于 10 只留一位会把 0.45 收成 0.5
+export const perG = (n) => (n == null ? null : `${Number(n).toFixed(2)} 元/g`);

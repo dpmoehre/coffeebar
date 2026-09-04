@@ -24,6 +24,47 @@ BALANCE = f"""
                 WHERE lot_id = l.id AND voided_at IS NULL), 0)
 """
 
+# 克价 = 买入价 ÷ 可用克重。豆库一张卡可能挂多袋，按还剩的克加权；
+# 在库空了（历史）就退回最近一袋买入时的克价，方便还按价钱翻旧豆。
+REMAINING_VALUE = f"""
+    (SELECT SUM(({BALANCE}) * (l.price / NULLIF({USABLE}, 0)))
+       FROM bean_lot l
+      WHERE l.bean_id = b.id AND l.closed_at IS NULL
+        AND l.price IS NOT NULL AND {USABLE} > 0 AND ({BALANCE}) > 0)
+"""
+PRICED_G = f"""
+    (SELECT SUM({BALANCE})
+       FROM bean_lot l
+      WHERE l.bean_id = b.id AND l.closed_at IS NULL
+        AND l.price IS NOT NULL AND {USABLE} > 0 AND ({BALANCE}) > 0)
+"""
+LAST_UNIT_COST = f"""
+    (SELECT l.price / NULLIF({USABLE}, 0)
+       FROM bean_lot l
+      WHERE l.bean_id = b.id AND l.price IS NOT NULL AND {USABLE} > 0
+      ORDER BY l.created_at DESC, l.id DESC LIMIT 1)
+"""
+
+
+def unit_cost_of(lots: list[dict]) -> float | None:
+    """一支豆的克价：在库按剩余加权，否则用最近一袋的买入克价。"""
+    open_priced = [
+        l for l in lots
+        if not l.get("closed_at")
+        and l.get("price")
+        and l.get("usable_g")
+        and (l.get("balance_g") or 0) > 0
+    ]
+    if open_priced:
+        grams = sum(l["balance_g"] for l in open_priced)
+        value = sum(l["balance_g"] * (l["price"] / l["usable_g"]) for l in open_priced)
+        return value / grams if grams else None
+    priced = [l for l in lots if l.get("price") and l.get("usable_g")]
+    if not priced:
+        return None
+    last = max(priced, key=lambda l: (l.get("created_at") or "", l["id"]))
+    return last["price"] / last["usable_g"]
+
 
 class Conflict(Exception):
     """业务上不该继续的情况，路由层转成 409。"""
@@ -134,7 +175,10 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
                COALESCE((SELECT SUM({BALANCE}) FROM bean_lot l
                           WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS balance_g,
                COALESCE((SELECT SUM({USABLE}) FROM bean_lot l
-                          WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS usable_g
+                          WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS usable_g,
+               {REMAINING_VALUE} AS remaining_value,
+               {PRICED_G} AS priced_g,
+               {LAST_UNIT_COST} AS last_unit_cost
         FROM bean b
         ORDER BY b.updated_at DESC
         """
@@ -148,6 +192,11 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
             continue
         if scope == "history" and (b["in_stock"] or b["pending"]):
             continue
+        if b["priced_g"]:
+            b["unit_cost"] = b["remaining_value"] / b["priced_g"]
+        else:
+            b["unit_cost"] = b["last_unit_cost"]
+        del b["remaining_value"], b["priced_g"], b["last_unit_cost"]
         b["tags"] = bean_tags(conn, b["id"])
         b["scores"] = latest_score(conn, b["id"])
         out.append(b)
@@ -163,6 +212,7 @@ def get_bean(conn: sqlite3.Connection, bean_id: int) -> dict | None:
     bean["balance_g"] = sum(l["balance_g"] for l in bean["lots"] if not l["closed_at"])
     bean["in_stock"] = any(not l["closed_at"] for l in bean["lots"])
     bean["pending"] = not bean["lots"]
+    bean["unit_cost"] = unit_cost_of(bean["lots"])
     bean["scores"] = latest_score(conn, bean_id)
     bean["brew"] = _row(
         conn.execute(

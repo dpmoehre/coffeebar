@@ -3,17 +3,27 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus } from "../icons.jsx";
-import { Bar, Btn, Chip, Empty, Field, Input, Modal, Select, g } from "../ui.jsx";
+import { Bar, Btn, Chip, Empty, Field, Input, Modal, Select, g, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近动过" },
   { key: "left", label: "剩得少" },
   { key: "left_desc", label: "剩得多" },
+  { key: "cost", label: "克价低" },
+  { key: "cost_desc", label: "克价高" },
   { key: "roast", label: "烘焙" },
   { key: "origin", label: "产地" },
   { key: "score", label: "评分" },
   { key: "opened", label: "开封日" },
 ];
+
+// 没填价钱的垫底，别因为 null 被当成最便宜或最贵
+function byCost(a, b, desc) {
+  if (a.unit_cost == null && b.unit_cost == null) return 0;
+  if (a.unit_cost == null) return 1;
+  if (b.unit_cost == null) return -1;
+  return desc ? b.unit_cost - a.unit_cost : a.unit_cost - b.unit_cost;
+}
 
 export default function Beans({ onOpen, toast, oops }) {
   const [data, setData] = useState(null);
@@ -46,6 +56,8 @@ export default function Beans({ onOpen, toast, oops }) {
       origin: (a, b) => (a.origin || "").localeCompare(b.origin || ""),
       score: (a, b) => (b.scores?.overall || 0) - (a.scores?.overall || 0),
       opened: (a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""),
+      cost: (a, b) => byCost(a, b, false),
+      cost_desc: (a, b) => byCost(a, b, true),
     };
     return list.sort(by[sort]);
   }, [data, picked, sort]);
@@ -191,6 +203,9 @@ function Card({ bean, onClick }) {
               </span>
               <span>{bean.cups_left < 1 ? "不够一杯了" : `约 ${bean.cups_left} 杯`}</span>
             </div>
+            {perG(bean.unit_cost) && (
+              <div className="mt-1 text-[13px] text-amber">{perG(bean.unit_cost)}</div>
+            )}
           </>
         )}
 

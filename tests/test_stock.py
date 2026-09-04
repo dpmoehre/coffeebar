@@ -167,6 +167,38 @@ def test_lots_numbered_by_purchase_order(conn):
     assert store.list_consumption(conn, limit=1)[0]["lot_seq"] == 2, "日志说得清是哪一袋"
 
 
+def test_library_unit_cost_is_price_over_usable(conn):
+    """豆库克价 = 买入价 ÷ 可用克重（没实称就用袋上印的）。"""
+    make_bean(conn, nominal=227, price=102.0)
+    card = store.list_beans(conn)[0]
+    assert card["unit_cost"] == pytest.approx(102 / 227)
+
+
+def test_library_unit_cost_weights_remaining_across_bags(conn):
+    """两袋价钱不一样，克价按还剩的克加权，不拿袋数平均。"""
+    bean_id, cheap = make_bean(conn, nominal=200, price=80.0)   # 0.40 元/g
+    store.add_lot(conn, bean_id, {"nominal_g": 200, "price": 160.0})  # 0.80
+    # 便宜那袋喝掉一半，贵的还满着：加权 = (100*0.4 + 200*0.8) / 300 = 0.666…
+    store.record_brew(conn, {"lot_id": cheap, "amount_g": 100})
+    card = store.list_beans(conn)[0]
+    assert card["unit_cost"] == pytest.approx((100 * 0.4 + 200 * 0.8) / 300)
+    assert store.get_bean(conn, bean_id)["unit_cost"] == pytest.approx(card["unit_cost"])
+
+
+def test_library_unit_cost_none_without_price(conn):
+    bean_id = store.create_bean(conn, {"name": "没标价"})
+    store.add_lot(conn, bean_id, {"nominal_g": 200})
+    assert store.list_beans(conn)[0]["unit_cost"] is None
+
+
+def test_history_keeps_last_bag_unit_cost(conn):
+    """喝完进历史也留着克价，排序还能按价钱翻旧豆。"""
+    bean_id, lot_id = make_bean(conn, nominal=200, price=128.0)
+    store.close_lot(conn, lot_id)
+    hist = store.list_beans(conn, scope="history")
+    assert hist[0]["unit_cost"] == pytest.approx(128 / 200)
+
+
 def test_first_brew_sets_opened_on(conn):
     _, lot_id = make_bean(conn)
     assert store.get_lot(conn, lot_id)["opened_on"] is None
