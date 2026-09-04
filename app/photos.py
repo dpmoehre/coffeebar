@@ -1,0 +1,131 @@
+"""豆卡照片：存盘、转码、缩略图。
+
+三种照片都可以缺（见 docs/002）：`pack` 包装袋、`tray` 豆盘、`card` 店家豆卡。
+没开封往往只有包装，开封后再补豆盘。豆卡是店家印的参数说明，拍下来留档，
+但它不适合当封面（缩略图里一片字），所以 `cover()` 不选它。
+手机直出多是 HEIC，浏览器认不了，一律转成 JPEG 存。原图不留——自用场景没必要
+占空间，也省得备份包变大。
+"""
+
+from __future__ import annotations
+
+import io
+import sqlite3
+import uuid
+from pathlib import Path
+
+from PIL import Image, ImageOps
+
+from . import db
+
+try:  # iPhone 直出的 HEIC
+    import pillow_heif
+
+    pillow_heif.register_heif_opener()
+    HEIC_OK = True
+except ImportError:  # 没装也能跑，只是传 HEIC 会被挡下
+    HEIC_OK = False
+
+MAX_EDGE = 1600      # 长边上限：吧台屏和手机都够看，不留原始大图
+THUMB_EDGE = 900     # 缩略图铺满整列，Retina 上放到 ~400 px 还得清楚
+QUALITY = 86
+MAX_BYTES = 25 * 1024 * 1024
+
+
+class BadPhoto(Exception):
+    pass
+
+
+def save(raw: bytes, filename: str = "") -> str:
+    """存一张图，返回 data/ 下的相对路径（形如 photos/ab12….jpg）。"""
+    if not raw:
+        raise BadPhoto("空文件")
+    if len(raw) > MAX_BYTES:
+        raise BadPhoto(f"图太大了（{len(raw) / 1024 / 1024:.0f} MB），限 25 MB")
+
+    try:
+        img = Image.open(io.BytesIO(raw))
+        img.load()
+    except Exception:
+        suffix = Path(filename).suffix.lower()
+        if suffix in {".heic", ".heif"} and not HEIC_OK:
+            raise BadPhoto("这是 HEIC，服务器还没装 pillow-heif。先在手机里存成 JPEG，或跑 uv sync")
+        raise BadPhoto("这个文件不像图片")
+
+    img = ImageOps.exif_transpose(img)  # 手机竖拍会带旋转信息，先摆正
+    if img.mode not in ("RGB", "L"):
+        img = img.convert("RGB")
+    img.thumbnail((MAX_EDGE, MAX_EDGE), Image.LANCZOS)
+
+    name = f"{uuid.uuid4().hex}.jpg"
+    db.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    img.save(db.PHOTO_DIR / name, "JPEG", quality=QUALITY, optimize=True)
+
+    thumb = img.copy()
+    thumb.thumbnail((THUMB_EDGE, THUMB_EDGE), Image.LANCZOS)
+    thumb.save(db.PHOTO_DIR / f"t_{name}", "JPEG", quality=80, optimize=True)
+
+    return f"photos/{name}"
+
+
+def remove(rel_path: str) -> None:
+    """删文件；缩略图跟着删。文件不在了也不报错。"""
+    name = Path(rel_path).name
+    for p in (db.PHOTO_DIR / name, db.PHOTO_DIR / f"t_{name}"):
+        p.unlink(missing_ok=True)
+
+
+def thumb_url(rel_path: str) -> str:
+    return f"/{Path(rel_path).parent}/t_{Path(rel_path).name}"
+
+
+def attach_bean_photo(conn: sqlite3.Connection, bean_id: int, kind: str, raw: bytes, filename: str) -> dict:
+    if kind not in ("pack", "tray", "card"):
+        raise BadPhoto("只能是 pack（包装）、tray（豆盘）或 card（豆卡）")
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO bean_photo (bean_id, kind, path, created_at) VALUES (?, ?, ?, ?)",
+        (bean_id, kind, rel, db.now()),
+    )
+    return {"id": int(cur.lastrowid), "kind": kind, "path": rel, "url": f"/{rel}",
+            "thumb": thumb_url(rel)}
+
+
+def list_bean_photos(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, kind, path, created_at FROM bean_photo WHERE bean_id = ? ORDER BY created_at",
+        (bean_id,),
+    ).fetchall()
+    return [
+        {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])} for r in rows
+    ]
+
+
+def cover(photos: list[dict]) -> dict | None:
+    """豆库缩略图优先豆盘，再包装；豆卡缩下去只剩一片字，只在都没有时才用。"""
+    if not photos:
+        return None
+    for kind in ("tray", "pack"):
+        hit = [p for p in photos if p["kind"] == kind]
+        if hit:
+            return hit[-1]
+    return photos[-1]
+
+
+def delete_bean_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute("SELECT path FROM bean_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM bean_photo WHERE id = ?", (photo_id,))
+
+
+def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,
+                         note: str | None = None) -> dict:
+    """补货条目的对照图：货架、截图、上次那袋都行。"""
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO restock_photo (bean_id, path, note, created_at) VALUES (?, ?, ?, ?)",
+        (bean_id, rel, note, db.now()),
+    )
+    return {"id": int(cur.lastrowid), "path": rel, "url": f"/{rel}", "thumb": thumb_url(rel)}

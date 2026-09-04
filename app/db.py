@@ -32,8 +32,55 @@ def connect() -> sqlite3.Connection:
     return conn
 
 
+# 给已经建好的库补列。CREATE TABLE IF NOT EXISTS 不会动已存在的表，
+# 所以加字段要在这里登记一条，老库下次启动自动补上。
+ADDED_COLUMNS = [
+    ("bean", "varietal", "TEXT"),
+    ("bean", "producer", "TEXT"),
+    ("bean", "altitude", "TEXT"),
+    ("brew_guide", "note", "TEXT"),
+]
+
+
+# 放宽 CHECK 用的：SQLite 改不了 CHECK，只能照 schema.sql 重建表再把数据搬过去。
+# key 是表名，值是「老库 DDL 里有这段就说明该重建了」。
+STALE_CHECKS = {
+    "bean_photo": "kind IN ('pack', 'tray')",
+}
+
+
+def _rebuild(conn: sqlite3.Connection, table: str) -> None:
+    """按 schema.sql 重建单表并搬数据（交集列）。"""
+    ddl = next(
+        s for s in SCHEMA.read_text(encoding="utf-8").split(";")
+        if f"CREATE TABLE IF NOT EXISTS {table}" in s
+    )
+    old = [r[1] for r in conn.execute(f"PRAGMA table_info({table})")]
+
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        conn.execute(f"ALTER TABLE {table} RENAME TO _old_{table}")
+        conn.executescript(ddl + ";")
+        keep = [c for c in (r[1] for r in conn.execute(f"PRAGMA table_info({table})")) if c in old]
+        cols = ", ".join(keep)
+        conn.execute(f"INSERT INTO {table} ({cols}) SELECT {cols} FROM _old_{table}")
+        conn.execute(f"DROP TABLE _old_{table}")
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA.read_text(encoding="utf-8"))
+    for table, column, decl in ADDED_COLUMNS:
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {decl}")
+    for table, stale in STALE_CHECKS.items():
+        row = conn.execute(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?", (table,)
+        ).fetchone()
+        if row and stale in row["sql"]:
+            _rebuild(conn, table)
 
 
 def now() -> str:

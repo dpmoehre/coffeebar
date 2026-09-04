@@ -386,11 +386,11 @@
       <section id="persona" class="page on">
         <div class="kicker">选择画像</div>
         <div class="row">
-          <button class="chip">我</button>
-          <button class="chip on">小王</button>
-          <button class="chip">阿陈</button>
+          <button class="chip">丁瀚舟</button>
+          <button class="chip on">戚浩辰</button>
+          <button class="chip">孙琦</button>
         </div>
-        <p class="quote">小王偏爱浅烘高酸的埃塞水洗，常在上午冲，偶尔点一杯威士忌酸。</p>
+        <p class="quote">戚浩辰偏爱浅烘高酸的埃塞水洗，常在上午冲，偶尔点一杯威士忌酸。</p>
         <div class="kpis">
           <div class="kpi"><div class="lbl">这个人 · 豆</div><div class="n">312 <small>g</small></div><div class="hint">19 杯</div></div>
           <div class="kpi"><div class="lbl">酒</div><div class="n">240 <small>ml</small></div><div class="hint">4 杯</div></div>
@@ -655,9 +655,9 @@
                 <tr><th>谁</th><th class="r">豆</th><th class="r">酒</th><th class="r">酒精</th><th class="r">钱</th></tr>
               </thead>
               <tbody>
-                <tr><td>我</td><td class="r">890 g</td><td class="r">620 ml</td><td class="r">48 g</td><td class="r">¥412</td></tr>
-                <tr><td>小王</td><td class="r">312 g</td><td class="r">240 ml</td><td class="r">76 g</td><td class="r">¥148</td></tr>
-                <tr><td>阿陈</td><td class="r">662 g</td><td class="r">1520 ml</td><td class="r">62 g</td><td class="r">¥726</td></tr>
+                <tr><td>丁瀚舟</td><td class="r">890 g</td><td class="r">620 ml</td><td class="r">48 g</td><td class="r">¥412</td></tr>
+                <tr><td>戚浩辰</td><td class="r">312 g</td><td class="r">240 ml</td><td class="r">76 g</td><td class="r">¥148</td></tr>
+                <tr><td>孙琦</td><td class="r">662 g</td><td class="r">1520 ml</td><td class="r">62 g</td><td class="r">¥726</td></tr>
               </tbody>
             </table>
           </div>
@@ -708,7 +708,7 @@
   </dialog>
   <dialog id="dlg-people">
     <h2>管理「谁喝的」</h2>
-    <p class="meta">改名只改一处，历史记录自动跟着变。停用的人不再出现在选人列表里，但他的记录还在。</p>
+    <p class="meta">改名只改一处，历史记录跟着变。停用只是从选人列表收起来；删除是真删，但他名下的流水会留下变「没记」，库存和统计总数不变。</p>
     <div id="people-rows"></div>
     <label>新增</label><input id="people-new" placeholder="打个名字就有这个人" />
     <menu>
@@ -733,13 +733,13 @@
       { label: "未开封", sub: "9 月 1 日入 · 标称 200", left: 200, usable: 200, price: 128 }
     ];
     let lotSel = 0;
-    // 谁喝的：可增、可改名、可停用；停用不删记录
-    const people = [{ name: "我", on: true }, { name: "小王", on: true }, { name: "阿陈", on: true }];
+    // 谁喝的：可增、可改名、可停用、可删除；删人后他的流水变「没记」，总数不变
+    const people = [{ name: "丁瀚舟", on: true }, { name: "戚浩辰", on: true }, { name: "孙琦", on: true }];
     // 消耗流水：撤回只划掉不物理删
     const log = [
-      { t: "今天 09:12", who: "我", g: 16, lot: "在喝这袋", cost: 9.5, voided: false },
-      { t: "今天 08:40", who: "小王", g: 15, lot: "在喝这袋", cost: 8.9, voided: false },
-      { t: "昨天 16:05", who: "阿陈", g: 16, lot: "在喝这袋", cost: 9.5, voided: true }
+      { t: "今天 09:12", who: "丁瀚舟", g: 16, lot: "在喝这袋", cost: 9.5, voided: false },
+      { t: "今天 08:40", who: "戚浩辰", g: 15, lot: "在喝这袋", cost: 8.9, voided: false },
+      { t: "昨天 16:05", who: "孙琦", g: 16, lot: "在喝这袋", cost: 9.5, voided: true }
     ];
 
     const pages = document.querySelectorAll(".page");
@@ -811,12 +811,16 @@
     }
 
     function renderPeopleRows() {
-      document.getElementById("people-rows").innerHTML = people.map((p, i) => `
+      document.getElementById("people-rows").innerHTML = people.map((p, i) => {
+        const n = log.filter((r) => r.who === p.name && !r.voided).length;
+        return `
         <div class="prow">
           <input value="${p.name}" data-name="${i}" />
-          <span class="meta">${p.on ? "" : "已停用"}</span>
+          <span class="meta">${n ? n + " 条记录" : "还没有记录"}${p.on ? "" : " · 已停用"}</span>
           <button class="undo" type="button" data-toggle="${i}">${p.on ? "停用" : "恢复"}</button>
-        </div>`).join("");
+          <button class="undo" type="button" data-del="${i}">删除</button>
+        </div>`;
+      }).join("");
       document.querySelectorAll("#people-rows [data-name]").forEach((el) => {
         el.onchange = () => {
           const i = +el.dataset.name, was = people[i].name, now = el.value.trim() || was;
@@ -831,7 +835,22 @@
           const p = people[+el.dataset.toggle];
           p.on = !p.on;
           renderPeopleRows(); renderPeopleChips();
-          toast(p.on ? `${p.name} 已恢复` : `${p.name} 已停用，记录保留`);
+          toast(p.on ? `${p.name} 已恢复` : `${p.name} 已收起，记录保留`);
+        };
+      });
+      // 删人是真删；他名下的流水留着变「没记」，库存和统计总数不动
+      document.querySelectorAll("#people-rows [data-del]").forEach((el) => {
+        el.onclick = () => {
+          const i = +el.dataset.del, p = people[i];
+          const n = log.filter((r) => r.who === p.name && !r.voided).length;
+          const warn = n
+            ? `删掉「${p.name}」？他名下 ${n} 条记录会变成「没记」——豆是真扣过的、钱也真花了，所以记录留下，库存和统计总数不变。`
+            : `删掉「${p.name}」？他还没有任何记录。`;
+          if (!confirm(warn)) return;
+          log.forEach((r) => { if (r.who === p.name) r.who = "没记"; });
+          people.splice(i, 1);
+          renderPeopleRows(); renderPeopleChips(); renderLog();
+          toast(n ? `${p.name} 已删除，${n} 条记录变成「没记」` : `${p.name} 已删除`);
         };
       });
     }

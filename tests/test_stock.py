@@ -151,6 +151,22 @@ def test_multiple_lots_are_chosen_explicitly(conn):
     assert row["unit_cost"] == pytest.approx(128 / 200), "钱按被选中那袋的单价算"
 
 
+def test_lots_numbered_by_purchase_order(conn):
+    """两袋规格价钱一样时要能分清谁是谁，编号按买入顺序且不随开封改变。"""
+    bean_id, _ = make_bean(conn, nominal=500, price=380.0)
+    second = store.add_lot(conn, bean_id, {"nominal_g": 500, "price": 380.0})
+
+    assert [l["seq"] for l in store.list_lots(conn, bean_id)] == [1, 2]
+
+    store.open_lot(conn, second)
+    lots = store.list_lots(conn, bean_id)
+    assert lots[0]["id"] == second, "在喝的那袋排前面"
+    assert lots[0]["seq"] == 2, "第 2 袋永远是第 2 袋，编号不跟显示顺序走"
+
+    store.record_brew(conn, {"lot_id": second, "amount_g": 16})
+    assert store.list_consumption(conn, limit=1)[0]["lot_seq"] == 2, "日志说得清是哪一袋"
+
+
 def test_first_brew_sets_opened_on(conn):
     _, lot_id = make_bean(conn)
     assert store.get_lot(conn, lot_id)["opened_on"] is None

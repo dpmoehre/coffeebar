@@ -9,7 +9,10 @@ PRAGMA foreign_keys = ON;
 CREATE TABLE IF NOT EXISTS bean (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
   name        TEXT    NOT NULL,
-  origin      TEXT,                      -- 产地
+  origin      TEXT,                      -- 产地 / 产区
+  varietal    TEXT,                      -- 豆种，包装上一般印 Varietal
+  producer    TEXT,                      -- 处理厂 / 庄园 / 水洗站
+  altitude    TEXT,                      -- 海拔，常是范围（1500-2200m），存文本
   process     TEXT,                      -- 处理法
   roast       TEXT,                      -- 浅烘 / 中烘 / 深烘
   water_temp  INTEGER,                   -- 建议水温 °C
@@ -116,7 +119,8 @@ CREATE TABLE IF NOT EXISTS brew_guide (
   bean_id INTEGER PRIMARY KEY REFERENCES bean(id) ON DELETE CASCADE,
   method  TEXT NOT NULL DEFAULT 'v60',
   dose_g  REAL NOT NULL DEFAULT 15,
-  ratio   REAL NOT NULL DEFAULT 16
+  ratio   REAL NOT NULL DEFAULT 16,
+  note    TEXT   -- 店家豆卡上的推荐：滤器、研磨刻度、水质、目标时长等
 );
 
 -- ── 照片与补货（表先建好，接口后做） ────────────────────────
@@ -124,7 +128,8 @@ CREATE TABLE IF NOT EXISTS brew_guide (
 CREATE TABLE IF NOT EXISTS bean_photo (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   bean_id    INTEGER NOT NULL REFERENCES bean(id) ON DELETE CASCADE,
-  kind       TEXT    NOT NULL CHECK (kind IN ('pack', 'tray')),  -- 包装 / 豆盘，都可缺
+  -- 包装 / 豆盘 / 店家豆卡，都可缺
+  kind       TEXT    NOT NULL CHECK (kind IN ('pack', 'tray', 'card')),
   path       TEXT    NOT NULL,                                   -- data/photos/ 下的相对路径
   created_at TEXT    NOT NULL
 );

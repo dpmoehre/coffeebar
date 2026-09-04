@@ -14,7 +14,8 @@ export default function People({ toast, oops }) {
   const loadPeople = () =>
     api.people(true).then((d) => {
       setPeople(d.people);
-      if (!pickedId && d.people.length) setPicked(d.people[0].id);
+      // 选中的人可能刚被删掉，落回第一个
+      setPicked((cur) => (d.people.some((p) => p.id === cur) ? cur : (d.people[0]?.id ?? null)));
     });
 
   useEffect(() => {
@@ -217,11 +218,13 @@ function Kpi({ label, value, unit, hint }) {
 function Manage({ open, onClose, people, reload, toast, oops }) {
   const [adding, setAdding] = useState("");
   const [edits, setEdits] = useState({});
+  const [confirm, setConfirm] = useState(null);
 
   useEffect(() => {
     if (open) {
       setAdding("");
       setEdits({});
+      setConfirm(null);
     }
   }, [open]);
 
@@ -242,7 +245,7 @@ function Manage({ open, onClose, people, reload, toast, oops }) {
       open={open}
       onClose={onClose}
       title="管理「谁喝的」"
-      sub="改名只改一处，历史记录自动跟着变。停用的人不再出现在选人列表里，但记录还在。"
+      sub="改名只改一处，历史记录跟着变。停用只是从选人列表里收起来；删除会把这个人彻底移走。"
       footer={
         <Btn variant="ghost" onClick={onClose}>
           关闭
@@ -251,31 +254,86 @@ function Manage({ open, onClose, people, reload, toast, oops }) {
     >
       <div>
         {people.map((p) => (
-          <div key={p.id} className="flex items-center gap-2 border-b border-line py-2 last:border-0">
-            <Input
-              value={edits[p.id] ?? p.name}
-              onChange={(e) => setEdits({ ...edits, [p.id]: e.target.value })}
-              onBlur={() => save(p)}
-              className={p.active ? "" : "opacity-50"}
-            />
-            {!p.active && <span className="shrink-0 text-xs text-muted">已停用</span>}
-            <button
-              className="shrink-0 text-xs text-muted underline hover:text-amber"
-              onClick={async () => {
-                await api.patchPerson(p.id, { active: !p.active });
-                toast(p.active ? `${p.name} 已停用，记录保留` : `${p.name} 已恢复`);
-                reload();
-              }}
-            >
-              {p.active ? "停用" : "恢复"}
-            </button>
+          <div key={p.id} className="border-b border-line py-2 last:border-0">
+            <div className="flex items-center gap-2">
+              <Input
+                value={edits[p.id] ?? p.name}
+                onChange={(e) => setEdits({ ...edits, [p.id]: e.target.value })}
+                onBlur={() => save(p)}
+                className={p.active ? "" : "opacity-50"}
+              />
+              <button
+                className="shrink-0 text-xs text-muted underline hover:text-amber"
+                onClick={async () => {
+                  await api.patchPerson(p.id, { active: !p.active });
+                  toast(p.active ? `${p.name} 已收起，记录保留` : `${p.name} 已恢复`);
+                  reload();
+                }}
+              >
+                {p.active ? "停用" : "恢复"}
+              </button>
+              <button
+                className="shrink-0 text-xs text-muted underline hover:text-warn"
+                onClick={() => setConfirm(p)}
+              >
+                删除
+              </button>
+            </div>
+            <div className="mt-1 text-xs text-muted">
+              {p.cups ? `${p.cups} 条记录` : "还没有记录"}
+              {!p.active && " · 已停用"}
+            </div>
           </div>
         ))}
       </div>
 
+      <Modal
+        open={!!confirm}
+        onClose={() => setConfirm(null)}
+        title={`删除「${confirm?.name}」？`}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setConfirm(null)}>
+              不删了
+            </Btn>
+            <Btn
+              variant="danger"
+              onClick={async () => {
+                const p = confirm;
+                setConfirm(null);
+                try {
+                  const out = await api.deletePerson(p.id);
+                  toast(
+                    out.orphaned
+                      ? `${out.name} 已删除，${out.orphaned} 条记录变成「没记」`
+                      : `${out.name} 已删除`
+                  );
+                  reload();
+                } catch (e) {
+                  oops(e.message);
+                }
+              }}
+            >
+              删除
+            </Btn>
+          </>
+        }
+      >
+        <p className="text-muted">
+          {confirm?.cups
+            ? `他名下有 ${confirm.cups} 条记录。这些豆是真扣过的、钱也真花了，所以记录会留下来，只是变成「没记」——库存和统计总数不变，只有按人拆分里少了他。`
+            : "他还没有任何记录，删掉不影响任何数字。"}
+        </p>
+        {confirm?.cups > 0 && (
+          <p className="text-muted">
+            想把这些记录留给别人，先在流水里逐条「改归属」挪走，再回来删。只是暂时不想看见他的话，用「停用」就行。
+          </p>
+        )}
+      </Modal>
+
       <Field label="新增" hint="打个名字就有这个人">
         <div className="flex gap-2">
-          <Input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="小王" />
+          <Input value={adding} onChange={(e) => setAdding(e.target.value)} placeholder="戚浩辰" />
           <Btn
             onClick={async () => {
               if (!adding.trim()) return;

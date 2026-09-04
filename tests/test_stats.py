@@ -83,8 +83,8 @@ def test_cups_left_uses_average_not_fifteen(conn):
 
 def test_summary_excludes_voided(conn):
     _, lot_id = make_bean(conn, nominal=500, price=250.0)
-    keep = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "我"})
-    drop = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "我"})
+    keep = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "丁瀚舟"})
+    drop = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "丁瀚舟"})
     store.void_consumption(conn, drop["id"])
 
     s = stats.summary(conn, "all")
@@ -108,8 +108,8 @@ def test_summary_separates_spent_from_bought(conn):
 def test_person_rename_keeps_history(conn):
     """改名只改一行，历史记录跟着变。"""
     _, lot_id = make_bean(conn)
-    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "小王"})
-    pid = store.ensure_person(conn, "小王")
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    pid = store.ensure_person(conn, "戚浩辰")
 
     store.rename_person(conn, pid, "王工")
 
@@ -118,31 +118,100 @@ def test_person_rename_keeps_history(conn):
     assert stats.person_profile(conn, pid)["cups"] == 1
 
 
-def test_deactivate_keeps_records(conn):
-    """停用不是删除。"""
+def test_deactivate_hides_but_keeps(conn):
+    """停用只是收起来，人和归属都还在。"""
     _, lot_id = make_bean(conn)
-    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "阿陈"})
-    pid = store.ensure_person(conn, "阿陈")
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "孙琦"})
+    pid = store.ensure_person(conn, "孙琦")
 
     store.set_person_active(conn, pid, False)
 
-    assert all(p["name"] != "阿陈" for p in store.list_people(conn))
-    assert any(p["name"] == "阿陈" for p in store.list_people(conn, include_inactive=True))
+    assert all(p["name"] != "孙琦" for p in store.list_people(conn))
+    assert any(p["name"] == "孙琦" for p in store.list_people(conn, include_inactive=True))
     assert stats.person_profile(conn, pid)["cups"] == 1
+
+
+def test_delete_person_orphans_rows_but_keeps_totals(conn):
+    """删人：人没了，流水留着变「没记」，库存和总数一动不动。"""
+    _, lot_id = make_bean(conn, nominal=200)
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "戚浩辰"})
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "丁瀚舟"})
+    pid = store.ensure_person(conn, "戚浩辰")
+
+    before = stats.summary(conn, "all")
+    balance_before = store.get_lot(conn, lot_id)["balance_g"]
+
+    out = store.delete_person(conn, pid)
+    assert out == {"name": "戚浩辰", "orphaned": 1}
+
+    assert all(p["name"] != "戚浩辰" for p in store.list_people(conn, include_inactive=True))
+
+    after = stats.summary(conn, "all")
+    assert after["cups"] == before["cups"] == 2, "流水没被删"
+    assert after["beans_g"] == before["beans_g"] == pytest.approx(31)
+    assert after["spent"] == pytest.approx(before["spent"]), "钱是真花过的，不能凭空消失"
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(balance_before)
+
+    names = {p["name"] for p in after["by_person"]}
+    assert names == {"丁瀚舟", "没记"}, "他那笔归到「没记」，不再算在任何人头上"
+
+
+def test_delete_person_without_records(conn):
+    pid = store.ensure_person(conn, "路人")
+    assert store.delete_person(conn, pid) == {"name": "路人", "orphaned": 0}
+    assert store.list_people(conn, include_inactive=True) == []
+
+
+def test_delete_person_leaves_audit_trail(conn):
+    """删人要留痕，否则没法回答「这笔以前是谁的」。"""
+    _, lot_id = make_bean(conn)
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "戚浩辰"})
+    store.delete_person(conn, store.ensure_person(conn, "戚浩辰"))
+
+    audit = conn.execute("SELECT field, old_value, new_value FROM consumption_audit").fetchone()
+    assert (audit[0], audit[1], audit[2]) == ("person", "戚浩辰", None)
+
+
+def test_delete_missing_person(conn):
+    with pytest.raises(store.Conflict, match="没有这个人"):
+        store.delete_person(conn, 999)
+
+
+def test_reassign_before_delete_keeps_attribution(conn):
+    """想把记录留给别人：先改归属再删，那笔就不会变成「没记」。"""
+    _, lot_id = make_bean(conn)
+    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "戚浩辰"})
+    store.reassign_person(conn, res["id"], "孙琦")
+
+    out = store.delete_person(conn, store.ensure_person(conn, "戚浩辰"))
+    assert out["orphaned"] == 0
+    assert store.list_consumption(conn, limit=1)[0]["person_name"] == "孙琦"
+
+
+def test_people_list_carries_record_count(conn):
+    """删之前要能告诉人「他名下有几条」。"""
+    _, lot_id = make_bean(conn)
+    for _ in range(3):
+        store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    bad = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    store.void_consumption(conn, bad["id"])
+
+    person = store.list_people(conn)[0]
+    assert person["cups"] == 3, "撤回的不算进条数"
 
 
 def test_reassign_person_keeps_stock(conn):
     """人选错了只改归属，克重和库存不动。"""
     _, lot_id = make_bean(conn, nominal=200)
-    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "小王"})
+    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "戚浩辰"})
     before = store.get_lot(conn, lot_id)["balance_g"]
 
-    store.reassign_person(conn, res["id"], "阿陈")
+    store.reassign_person(conn, res["id"], "孙琦")
 
     assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(before)
-    assert store.list_consumption(conn, limit=1)[0]["person_name"] == "阿陈"
+    assert store.list_consumption(conn, limit=1)[0]["person_name"] == "孙琦"
     audit = conn.execute("SELECT old_value, new_value FROM consumption_audit").fetchone()
-    assert (audit[0], audit[1]) == ("小王", "阿陈"), "改归属要留痕"
+    assert (audit[0], audit[1]) == ("戚浩辰", "孙琦"), "改归属要留痕"
 
 
 def test_restock_flags_not_enough_for_one_cup(conn):

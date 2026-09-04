@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import BrewPlan from "../components/BrewPlan.jsx";
+import OpenBag from "../components/OpenBag.jsx";
+import Photos from "../components/Photos.jsx";
 import Radar from "../components/Radar.jsx";
 import { Plus, Undo } from "../icons.jsx";
 import { Bar, Btn, Chip, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
@@ -13,6 +15,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   const [brewOpen, setBrewOpen] = useState(false);
   const [prefill, setPrefill] = useState(null);
   const [lotOpen, setLotOpen] = useState(false);
+  const [opening, setOpening] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
 
   const load = useCallback(
@@ -73,14 +76,22 @@ export default function BeanCard({ id, onBack, toast, oops }) {
           <p className="mt-2 mb-0 text-muted">
             {[
               bean.origin,
+              bean.varietal,
               bean.process,
               bean.roast,
-              current?.opened_on && `开封 ${current.opened_on}`,
+              bean.altitude,
+              bean.water_temp && `${bean.water_temp} °C`,
+              current?.opened_on ? `开封 ${current.opened_on}` : "未开封",
               current?.unit_cost && `这杯约 ${money(dose.avg_g * current.unit_cost)}`,
             ]
               .filter(Boolean)
               .join(" · ")}
           </p>
+          {(bean.producer || bean.note) && (
+            <p className="mt-1 mb-0 text-[13px] text-muted">
+              {[bean.producer, bean.note].filter(Boolean).join(" · ")}
+            </p>
+          )}
         </div>
         <div className="flex flex-wrap gap-2">
           <Btn
@@ -123,7 +134,15 @@ export default function BeanCard({ id, onBack, toast, oops }) {
 
           <div className="mt-4 space-y-3">
             {bean.lots.map((lot) => (
-              <LotRow key={lot.id} lot={lot} onDone={load} guarded={guarded} toast={toast} oops={oops} />
+              <LotRow
+                key={lot.id}
+                lot={lot}
+                onDone={load}
+                onOpenBag={() => setOpening(lot)}
+                guarded={guarded}
+                toast={toast}
+                oops={oops}
+              />
             ))}
           </div>
 
@@ -157,6 +176,14 @@ export default function BeanCard({ id, onBack, toast, oops }) {
         }}
       />
 
+      <Photos
+        beanId={bean.id}
+        photos={bean.photos || []}
+        onDone={load}
+        toast={toast}
+        oops={oops}
+      />
+
       <Panel className="mt-5">
         <div className="serif text-lg">最近消耗</div>
         <p className="mt-1 mb-3 text-[13px] text-muted">记错了可以撤回，撤回只划掉、不删记录。</p>
@@ -182,7 +209,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
                     </td>
                     <td className="border-b border-line px-2 py-2">{r.person_name || "没记"}</td>
                     <td className="border-b border-line px-2 py-2 text-muted whitespace-nowrap">
-                      {r.bought_on || `#${r.lot_id}`}
+                      第 {r.lot_seq} 袋
                       {r.lot_closed_at ? "（已关）" : ""}
                     </td>
                     <td className="border-b border-line px-2 py-2 text-amber whitespace-nowrap">
@@ -242,6 +269,18 @@ export default function BeanCard({ id, onBack, toast, oops }) {
         oops={oops}
       />
 
+      <OpenBag
+        open={!!opening}
+        lot={opening}
+        onClose={() => setOpening(null)}
+        onDone={(msg) => {
+          setOpening(null);
+          toast(msg);
+          load();
+        }}
+        oops={oops}
+      />
+
       <AddLot
         open={lotOpen}
         onClose={() => setLotOpen(false)}
@@ -286,7 +325,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   );
 }
 
-function LotRow({ lot, onDone, guarded, toast, oops }) {
+function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
   const [busy, setBusy] = useState(null);
   const pct = lot.usable_g ? (lot.balance_g / lot.usable_g) * 100 : 0;
 
@@ -314,7 +353,10 @@ function LotRow({ lot, onDone, guarded, toast, oops }) {
     <div className={`rounded-xl border border-line p-3 ${lot.closed_at ? "opacity-50" : ""}`}>
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <div>
-          {lot.closed_at ? "已关袋" : lot.opened_on ? "在喝这袋" : "未开封"}
+          <span className="text-muted">第 {lot.seq} 袋</span>
+          <span className="ml-2">
+            {lot.closed_at ? "已关袋" : lot.opened_on ? "在喝这袋" : "未开封"}
+          </span>
           <span className="ml-2 text-[13px] text-muted">
             标称 {lot.nominal_g}
             {lot.measured_g ? ` · 实称 ${lot.measured_g}` : "（没称）"}
@@ -329,7 +371,12 @@ function LotRow({ lot, onDone, guarded, toast, oops }) {
             <Bar pct={pct} warn={pct < 8} />
           </div>
           <div className="mt-2 flex flex-wrap gap-2 text-xs">
-            {!lot.measured_g && (
+            {!lot.opened_on && (
+              <button className="font-semibold text-amber underline" onClick={onOpenBag}>
+                开封
+              </button>
+            )}
+            {lot.opened_on && !lot.measured_g && (
               <button className="text-muted underline hover:text-amber" onClick={() => ask("measure")}>
                 补开袋实称
               </button>
@@ -439,7 +486,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
                 }`}
               />
               <span className="min-w-0 flex-1">
-                {l.opened_on ? "在喝这袋" : "未开封"}
+                第 {l.seq} 袋 · {l.opened_on ? "在喝这袋" : "未开封"}
                 <span className="text-muted">
                   {" · "}
                   {l.bought_on ? `${l.bought_on} 入 · ` : ""}标称 {l.nominal_g}
@@ -475,7 +522,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
       </p>
 
       <Field label="谁喝的" hint="打个新名字就有这个人；留空表示没记">
-        <Input value={who} onChange={(e) => setWho(e.target.value)} placeholder="我" />
+        <Input value={who} onChange={(e) => setWho(e.target.value)} placeholder="丁瀚舟" />
       </Field>
       {people.length > 0 && (
         <div className="flex flex-wrap gap-2">

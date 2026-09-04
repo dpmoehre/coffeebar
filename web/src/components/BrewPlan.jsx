@@ -95,7 +95,12 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
   return (
     <Panel className="mt-5">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="serif text-lg">冲煮指导</div>
+        <div>
+          <div className="serif text-lg">冲煮指导</div>
+          {bean.brew?.note && (
+            <p className="mt-1 mb-0 text-[13px] text-muted">店家推荐：{bean.brew.note}</p>
+          )}
+        </div>
         <div className="flex items-center gap-2">
           {playing ? (
             <Btn variant="ghost" onClick={stop}>
@@ -226,6 +231,8 @@ const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
 // anime.js SVG：按场景键切动画（bloom 打湿 / 螺旋 / 中心注 / 滴滤）
 function PourAnimation({ stage, target }) {
   const spiral = useRef(null);
+  const center = useRef(null);
+  const mound = useRef(null);
   const water = useRef(null);
   const drip = useRef(null);
 
@@ -233,6 +240,12 @@ function PourAnimation({ stage, target }) {
     if (!stage || !spiral.current) return;
     const tl = createTimeline({ defaults: { ease: "inOutSine" } });
     const level = Math.min(1, stage.target_g / target);
+    // 中心注水不该画螺旋：水柱咬住一点，粉层中间被顶起来（火山冲全程如此）
+    const isCenter = stage.scene === "center_pour";
+    const trace = isCenter ? center.current : spiral.current;
+
+    utils.set([spiral.current, center.current], { opacity: 0 });
+    utils.set(mound.current, { opacity: 0, scaleY: 0.2 });
 
     if (stage.scene === "drawdown") {
       tl.add(water.current, { opacity: 0.05, scaleY: 0.2, duration: 900 }).add(
@@ -241,13 +254,16 @@ function PourAnimation({ stage, target }) {
         0
       );
     } else {
-      utils.set(spiral.current, { strokeDashoffset: 140 });
-      tl.add(spiral.current, {
+      utils.set(trace, { opacity: 1, strokeDashoffset: 140 });
+      tl.add(trace, {
         strokeDashoffset: 0,
         duration: stage.scene === "bloom" ? 1400 : 1000,
       })
         .add(water.current, { opacity: 0.15 + level * 0.35, scaleY: 0.4 + level, duration: 900 }, 0)
         .add(drip.current, { opacity: stage.scene === "bloom" ? 0.25 : 0.6, duration: 700 }, 0);
+      if (isCenter) {
+        tl.add(mound.current, { opacity: 0.5, scaleY: 1, duration: 800 }, 0);
+      }
     }
     return () => tl.pause();
   }, [stage, target]);
@@ -265,6 +281,27 @@ function PourAnimation({ stage, target }) {
         strokeWidth="2"
         strokeDasharray="140"
         strokeDashoffset="140"
+      />
+      {/* 中心细水柱：一路咬住中心，不画圈 */}
+      <path
+        ref={center}
+        d="M120 50v26"
+        fill="none"
+        stroke="#f3e6d0"
+        strokeWidth="2.4"
+        strokeDasharray="140"
+        strokeDashoffset="140"
+        opacity="0"
+      />
+      {/* 火山口：中心被顶起来的粉丘 */}
+      <path
+        ref={mound}
+        d="M100 76q20-14 40 0"
+        fill="none"
+        stroke="#c88d44"
+        strokeWidth="2"
+        opacity="0"
+        style={{ transformOrigin: "120px 76px" }}
       />
       {/* 水位 */}
       <ellipse

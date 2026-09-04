@@ -34,7 +34,7 @@ def test_brew_flow_and_cups_left(client):
     lot = bean["lots"][0]["id"]
 
     for g in (16, 15, 17):
-        r = client.post("/api/brews", json={"lot_id": lot, "amount_g": g, "person": "我"})
+        r = client.post("/api/brews", json={"lot_id": lot, "amount_g": g, "person": "丁瀚舟"})
         assert r.status_code == 201, r.text
 
     detail = client.get(f"/api/beans/{bean['id']}").json()
@@ -70,16 +70,16 @@ def test_void_and_unvoid_via_api(client):
 def test_reassign_person_via_api(client):
     bean = new_bean(client)
     brew = client.post(
-        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16, "person": "小王"}
+        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16, "person": "戚浩辰"}
     ).json()
 
-    assert client.post(f"/api/consumption/{brew['id']}/person", json={"person": "阿陈"}).status_code == 200
-    assert client.get("/api/consumption").json()["rows"][0]["person_name"] == "阿陈"
+    assert client.post(f"/api/consumption/{brew['id']}/person", json={"person": "孙琦"}).status_code == 200
+    assert client.get("/api/consumption").json()["rows"][0]["person_name"] == "孙琦"
 
 
 def test_people_manage(client):
     bean = new_bean(client)
-    client.post("/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 15, "person": "小王"})
+    client.post("/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 15, "person": "戚浩辰"})
 
     people = client.get("/api/people").json()["people"]
     pid = people[0]["id"]
@@ -94,6 +94,34 @@ def test_people_manage(client):
     profile = client.get(f"/api/people/{pid}/profile").json()
     assert profile["cups"] == 1, "停用后画像还在"
     assert profile["enough_sample"] is False
+
+
+def test_delete_person_via_api(client):
+    """人能真删掉，但他喝掉的豆和花掉的钱留在总账里。"""
+    bean = new_bean(client, nominal=500, price=250.0)
+    lot = bean["lots"][0]["id"]
+    client.post("/api/brews", json={"lot_id": lot, "amount_g": 16, "person": "戚浩辰"})
+    client.post("/api/brews", json={"lot_id": lot, "amount_g": 15, "person": "丁瀚舟"})
+
+    people = {p["name"]: p for p in client.get("/api/people").json()["people"]}
+    assert people["戚浩辰"]["cups"] == 1, "列表要带条数，删之前得能提示影响面"
+
+    r = client.delete(f"/api/people/{people['戚浩辰']['id']}")
+    assert r.status_code == 200
+    assert r.json()["orphaned"] == 1
+    assert [p["name"] for p in r.json()["people"]] == ["丁瀚舟"]
+
+    s = client.get("/api/stats", params={"period": "all"}).json()
+    assert s["cups"] == 2 and s["beans_g"] == pytest.approx(31), "总数不受删人影响"
+    assert {p["name"] for p in s["by_person"]} == {"丁瀚舟", "没记"}
+
+    rows = client.get("/api/consumption").json()["rows"]
+    assert len(rows) == 2
+    assert any(r["person_name"] is None for r in rows), "那笔还在，只是没了归属"
+
+
+def test_delete_missing_person_via_api(client):
+    assert client.delete("/api/people/999").status_code == 409
 
 
 def test_add_second_lot_not_new_bean(client):
@@ -140,7 +168,7 @@ def test_brew_plan_endpoint(client):
 def test_stats_endpoint(client):
     bean = new_bean(client, nominal=500, price=250.0)
     lot = bean["lots"][0]["id"]
-    for g, who in [(16, "我"), (14, "小王"), (18, "我")]:
+    for g, who in [(16, "丁瀚舟"), (14, "戚浩辰"), (18, "丁瀚舟")]:
         client.post("/api/brews", json={"lot_id": lot, "amount_g": g, "person": who})
 
     s = client.get("/api/stats", params={"period": "all"}).json()
@@ -149,7 +177,7 @@ def test_stats_endpoint(client):
     assert s["avg_dose"]["avg_g"] == pytest.approx(16.0)
     assert s["spent"] == pytest.approx(48 * 250 / 500)
     assert s["bought"] == pytest.approx(250.0)
-    assert [p["name"] for p in s["by_person"]] == ["我", "小王"]
+    assert [p["name"] for p in s["by_person"]] == ["丁瀚舟", "戚浩辰"]
     assert s["by_person"][0]["beans_g"] == pytest.approx(34)
 
 

@@ -44,12 +44,15 @@ def _row(cur) -> dict | None:
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
     ts = db.now()
     cur = conn.execute(
-        """INSERT INTO bean (name, origin, process, roast, water_temp, note,
-                             created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO bean (name, origin, varietal, producer, altitude, process, roast,
+                             water_temp, note, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data["name"].strip(),
             data.get("origin"),
+            data.get("varietal"),
+            data.get("producer"),
+            data.get("altitude"),
             data.get("process"),
             data.get("roast"),
             data.get("water_temp"),
@@ -59,13 +62,26 @@ def create_bean(conn: sqlite3.Connection, data: dict) -> int:
         ),
     )
     bean_id = int(cur.lastrowid)
-    conn.execute("INSERT INTO brew_guide (bean_id) VALUES (?)", (bean_id,))
+    # 店家豆卡上有推荐参数就直接存成这支豆的默认，省得每次重填
+    conn.execute(
+        "INSERT INTO brew_guide (bean_id, method, dose_g, ratio, note) VALUES (?, ?, ?, ?, ?)",
+        (
+            bean_id,
+            data.get("brew_method") or "v60",
+            float(data.get("brew_dose_g") or 15),
+            float(data.get("brew_ratio") or 16),
+            data.get("brew_note"),
+        ),
+    )
     set_tags(conn, bean_id, data.get("tags") or [])
     return bean_id
 
 
 def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
-    fields = ["name", "origin", "process", "roast", "water_temp", "note"]
+    fields = [
+        "name", "origin", "varietal", "producer", "altitude",
+        "process", "roast", "water_temp", "note",
+    ]
     sets, vals = [], []
     for f in fields:
         if f in data:
@@ -104,7 +120,11 @@ def bean_tags(conn: sqlite3.Connection, bean_id: int) -> list[str]:
 
 
 def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
-    """scope: stock 在库 / history 历史（所有袋都关了）/ all 全部。"""
+    """scope: stock 在库（含只建了豆卡还没入袋的）/ history 历史（曾有袋且全关）/ all 全部。
+
+    只建豆卡没入袋的豆子一袋都没有，既不算在库也不算喝完了。它跟着「在库」出，
+    标成待入袋——否则刚建的豆卡会直接掉进历史里找不着。
+    """
     cur = conn.execute(
         f"""
         SELECT b.*,
@@ -123,9 +143,10 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
     out = []
     for b in beans:
         b["in_stock"] = b["open_lots"] > 0
-        if scope == "stock" and not b["in_stock"]:
+        b["pending"] = b["all_lots"] == 0  # 豆卡建好了，还没称重入袋
+        if scope == "stock" and not (b["in_stock"] or b["pending"]):
             continue
-        if scope == "history" and b["in_stock"]:
+        if scope == "history" and (b["in_stock"] or b["pending"]):
             continue
         b["tags"] = bean_tags(conn, b["id"])
         b["scores"] = latest_score(conn, b["id"])
@@ -141,10 +162,13 @@ def get_bean(conn: sqlite3.Connection, bean_id: int) -> dict | None:
     bean["lots"] = list_lots(conn, bean_id)
     bean["balance_g"] = sum(l["balance_g"] for l in bean["lots"] if not l["closed_at"])
     bean["in_stock"] = any(not l["closed_at"] for l in bean["lots"])
+    bean["pending"] = not bean["lots"]
     bean["scores"] = latest_score(conn, bean_id)
     bean["brew"] = _row(
-        conn.execute("SELECT method, dose_g, ratio FROM brew_guide WHERE bean_id = ?", (bean_id,))
-    ) or {"method": "v60", "dose_g": 15, "ratio": 16}
+        conn.execute(
+            "SELECT method, dose_g, ratio, note FROM brew_guide WHERE bean_id = ?", (bean_id,)
+        )
+    ) or {"method": "v60", "dose_g": 15, "ratio": 16, "note": None}
     return bean
 
 
@@ -167,12 +191,20 @@ def add_score(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
     return int(cur.lastrowid)
 
 
-def set_brew_default(conn: sqlite3.Connection, bean_id: int, method: str, dose_g: float, ratio: float) -> None:
+def set_brew_default(
+    conn: sqlite3.Connection,
+    bean_id: int,
+    method: str,
+    dose_g: float,
+    ratio: float,
+    note: str | None = None,
+) -> None:
     """只存默认值，方便下次不重填；方案本身每次按当场输入算。"""
     conn.execute(
-        """INSERT INTO brew_guide (bean_id, method, dose_g, ratio) VALUES (?, ?, ?, ?)
-           ON CONFLICT(bean_id) DO UPDATE SET method = ?, dose_g = ?, ratio = ?""",
-        (bean_id, method, dose_g, ratio, method, dose_g, ratio),
+        """INSERT INTO brew_guide (bean_id, method, dose_g, ratio, note) VALUES (?, ?, ?, ?, ?)
+           ON CONFLICT(bean_id) DO UPDATE
+             SET method = ?, dose_g = ?, ratio = ?, note = COALESCE(?, note)""",
+        (bean_id, method, dose_g, ratio, note, method, dose_g, ratio, note),
     )
 
 
@@ -180,8 +212,12 @@ def set_brew_default(conn: sqlite3.Connection, bean_id: int, method: str, dose_g
 
 
 def list_lots(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
+    # seq 按买入顺序编号（第 1 袋、第 2 袋）。同一支豆两袋规格价钱可能一模一样，
+    # 没有编号就分不清谁是谁。它不跟显示顺序走——开封会把袋子提到前面，
+    # 但「第 2 袋」得一直是第 2 袋。
     cur = conn.execute(
         f"""SELECT l.*, {USABLE} AS usable_g, {BALANCE} AS balance_g,
+                   ROW_NUMBER() OVER (ORDER BY l.created_at, l.id) AS seq,
                    (SELECT COALESCE(SUM(amount_g), 0) FROM consumption_event
                      WHERE lot_id = l.id AND voided_at IS NULL) AS used_g
             FROM bean_lot l WHERE l.bean_id = ?
@@ -237,6 +273,24 @@ def add_lot(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
     return lot_id
 
 
+def open_lot(conn: sqlite3.Connection, lot_id: int, on: str | None = None) -> dict:
+    """开封这一袋。只记日子，不动克数——撕开袋子并没有让豆子变少。
+
+    第一次冲煮时也会自动补上开封日，这里是显式的那条路（配开封动画）。
+    """
+    lot = get_lot(conn, lot_id)
+    if not lot:
+        raise Conflict("没有这一袋")
+    if lot["closed_at"]:
+        raise Conflict("这袋已经关了")
+    if lot["opened_on"]:
+        raise Conflict(f"这袋 {lot['opened_on']} 就开过了")
+    day = on or db.now()[:10]
+    conn.execute("UPDATE bean_lot SET opened_on = ? WHERE id = ?", (day, lot_id))
+    conn.execute("UPDATE bean SET updated_at = ? WHERE id = ?", (db.now(), lot["bean_id"]))
+    return get_lot(conn, lot_id)
+
+
 def set_measured(conn: sqlite3.Connection, lot_id: int, measured_g: float) -> None:
     """开袋实称（可选）。改的是「这袋原本有多少」，中途盘点请用 adjust。"""
     lot = get_lot(conn, lot_id)
@@ -288,10 +342,16 @@ def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) ->
 
 
 def list_people(conn: sqlite3.Connection, include_inactive: bool = False) -> list[dict]:
-    sql = "SELECT * FROM person"
-    if not include_inactive:
-        sql += " WHERE active = 1"
-    return _rows(conn.execute(sql + " ORDER BY active DESC, name"))
+    """带上每人的记录条数，删人前要拿它提示影响面。"""
+    where = "" if include_inactive else " WHERE p.active = 1"
+    return _rows(
+        conn.execute(
+            f"""SELECT p.*,
+                       (SELECT COUNT(*) FROM consumption_event c
+                         WHERE c.person_id = p.id AND c.voided_at IS NULL) AS cups
+                FROM person p{where} ORDER BY p.active DESC, p.name"""
+        )
+    )
 
 
 def ensure_person(conn: sqlite3.Connection, name: str | None) -> int | None:
@@ -320,8 +380,42 @@ def rename_person(conn: sqlite3.Connection, person_id: int, name: str) -> None:
 
 
 def set_person_active(conn: sqlite3.Connection, person_id: int, active: bool) -> None:
-    """停用不是删除：选人列表里不再出现，历史记录仍完整。"""
+    """停用是轻量选项：选人列表里不再出现，名字和归属都还在。"""
     conn.execute("UPDATE person SET active = ? WHERE id = ?", (1 if active else 0, person_id))
+
+
+def delete_person(conn: sqlite3.Connection, person_id: int) -> dict:
+    """真删掉这个人。
+
+    他名下的流水**不删**，只是失去归属变成「没记」——那些克重是真扣过的，
+    钱也真花了，删人不该让库存账和统计总数跟着变。想把记录留给别人，先用
+    「改归属」挪走再删。
+    """
+    row = _row(conn.execute("SELECT * FROM person WHERE id = ?", (person_id,)))
+    if not row:
+        raise Conflict("没有这个人")
+
+    affected = conn.execute(
+        "SELECT COUNT(*) FROM consumption_event WHERE person_id = ?", (person_id,)
+    ).fetchone()[0]
+
+    ts = db.now()
+    if affected:
+        conn.executemany(
+            """INSERT INTO consumption_audit (cons_id, field, old_value, new_value, at)
+               VALUES (?, 'person', ?, NULL, ?)""",
+            [
+                (r[0], row["name"], ts)
+                for r in conn.execute(
+                    "SELECT id FROM consumption_event WHERE person_id = ?", (person_id,)
+                ).fetchall()
+            ],
+        )
+        conn.execute(
+            "UPDATE consumption_event SET person_id = NULL WHERE person_id = ?", (person_id,)
+        )
+    conn.execute("DELETE FROM person WHERE id = ?", (person_id,))
+    return {"name": row["name"], "orphaned": affected}
 
 
 # ── 冲一次 / 撤回 ───────────────────────────────────────────
@@ -463,12 +557,16 @@ def list_consumption(
         args.append(person_id)
     cur = conn.execute(
         f"""SELECT c.*, b.name AS bean_name, p.name AS person_name,
-                   l.nominal_g, l.bought_on, l.closed_at AS lot_closed_at,
+                   l.nominal_g, l.bought_on, l.closed_at AS lot_closed_at, s.seq AS lot_seq,
                    (c.amount_g * COALESCE(c.unit_cost, 0)) AS cost
             FROM consumption_event c
             JOIN bean_lot l ON l.id = c.lot_id
             JOIN bean b ON b.id = l.bean_id
             LEFT JOIN person p ON p.id = c.person_id
+            -- 和 list_lots 一样按买入顺序编号，日志里才说得清是哪一袋
+            LEFT JOIN (SELECT id, ROW_NUMBER() OVER
+                                (PARTITION BY bean_id ORDER BY created_at, id) AS seq
+                         FROM bean_lot) s ON s.id = l.id
             WHERE {' AND '.join(where)}
             ORDER BY c.at DESC, c.id DESC LIMIT ?""",
         (*args, limit),

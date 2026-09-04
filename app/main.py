@@ -6,12 +6,12 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import brew as brew_mod
-from . import db, locks, stats, store
+from . import db, locks, photos, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -45,6 +45,11 @@ async def _locked(request: Request, exc: locks.Locked):
     return JSONResponse(status_code=423, content=exc.detail())
 
 
+@app.exception_handler(photos.BadPhoto)
+async def _bad_photo(request: Request, exc: photos.BadPhoto):
+    return JSONResponse(status_code=400, content={"error": "bad_photo", "message": str(exc)})
+
+
 # ── 豆子 ────────────────────────────────────────────────────
 
 
@@ -56,6 +61,7 @@ def api_beans(scope: str = "stock", conn: sqlite3.Connection = Depends(get_conn)
         b["avg_dose"] = dose
         b["cups_left"] = stats.cups_left(b["balance_g"], dose["avg_g"])
         b["near_empty"] = b["in_stock"] and b["balance_g"] < dose["avg_g"]
+        b["cover"] = photos.cover(photos.list_bean_photos(conn, b["id"]))
     return {"beans": beans, "avg_dose": stats.average_dose(conn)}
 
 
@@ -74,6 +80,7 @@ def api_bean(bean_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     bean = store.get_bean(conn, bean_id)
     if not bean:
         raise HTTPException(404, "没有这支豆")
+    bean["photos"] = photos.list_bean_photos(conn, bean_id)
     dose = stats.average_dose(conn, bean_id)
     bean["avg_dose"] = dose
     bean["cups_left"] = stats.cups_left(bean["balance_g"], dose["avg_g"])
@@ -97,6 +104,38 @@ def api_update_bean(
     return store.get_bean(conn, bean_id)
 
 
+@app.post("/api/beans/{bean_id}/photos", status_code=201)
+async def api_add_photo(
+    bean_id: int,
+    file: UploadFile = File(...),
+    kind: str = Form("pack"),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """挂一张照片。pack 包装 / tray 豆盘，都可以缺。HEIC 会转成 JPEG。"""
+    if not store.get_bean(conn, bean_id):
+        raise HTTPException(404, "没有这支豆")
+    return photos.attach_bean_photo(conn, bean_id, kind, await file.read(), file.filename or "")
+
+
+@app.delete("/api/photos/{photo_id}")
+def api_del_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    photos.delete_bean_photo(conn, photo_id)
+    return {"ok": True}
+
+
+@app.post("/api/beans/{bean_id}/restock-photos", status_code=201)
+async def api_add_restock_photo(
+    bean_id: int,
+    file: UploadFile = File(...),
+    note: str = Form(""),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """补货条目的对照图：货架、淘宝截图、上次那袋都行。"""
+    if not store.get_bean(conn, bean_id):
+        raise HTTPException(404, "没有这支豆")
+    return photos.attach_restock_photo(conn, bean_id, await file.read(), file.filename or "", note or None)
+
+
 @app.post("/api/beans/{bean_id}/scores", status_code=201)
 def api_add_score(bean_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
     store.add_score(conn, bean_id, payload)
@@ -113,6 +152,12 @@ def api_add_lot(bean_id: int, payload: dict, conn: sqlite3.Connection = Depends(
         raise HTTPException(404, "没有这支豆")
     lot_id = store.add_lot(conn, bean_id, payload)
     return store.get_lot(conn, lot_id)
+
+
+@app.post("/api/lots/{lot_id}/open")
+def api_open_lot(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+    """开封：只记日子，不动克数。"""
+    return store.open_lot(conn, lot_id, (payload or {}).get("on"))
 
 
 @app.post("/api/lots/{lot_id}/measure")
@@ -159,6 +204,7 @@ def api_brew_default(bean_id: int, payload: dict, conn: sqlite3.Connection = Dep
     store.set_brew_default(
         conn, bean_id, payload.get("method", "v60"),
         float(payload.get("dose_g", 15)), float(payload.get("ratio", 16)),
+        payload.get("note"),
     )
     return store.get_bean(conn, bean_id)
 
@@ -235,6 +281,13 @@ def api_patch_person(person_id: int, payload: dict, conn: sqlite3.Connection = D
     return {"people": store.list_people(conn, include_inactive=True)}
 
 
+@app.delete("/api/people/{person_id}")
+def api_delete_person(person_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    """删掉这个人。他名下的流水留着，只是变成「没记」。"""
+    out = store.delete_person(conn, person_id)
+    return {**out, "people": store.list_people(conn, include_inactive=True)}
+
+
 @app.get("/api/people/{person_id}/profile")
 def api_profile(person_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     profile = stats.person_profile(conn, person_id)
@@ -305,7 +358,10 @@ def api_health(conn: sqlite3.Connection = Depends(get_conn)):
     return {"ok": True, "beans": beans, "db": str(db.db_path())}
 
 
-# ── 前端构建产物（放最后，别盖住 /api） ─────────────────────
+# ── 照片与前端构建产物（放最后，别盖住 /api） ───────────────
+
+db.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+app.mount("/photos", StaticFiles(directory=db.PHOTO_DIR), name="photos")
 
 if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")

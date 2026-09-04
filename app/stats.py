@@ -213,6 +213,7 @@ def restock_list(conn: sqlite3.Connection) -> list[dict]:
                               WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS balance_g,
                    (SELECT COUNT(*) FROM bean_lot l
                      WHERE l.bean_id = b.id AND l.closed_at IS NULL) AS open_lots,
+                   (SELECT COUNT(*) FROM bean_lot l WHERE l.bean_id = b.id) AS all_lots,
                    COALESCE(r.min_g, 0)    AS min_g,
                    COALESCE(r.min_days, 3) AS min_days,
                    (SELECT price FROM bean_lot l WHERE l.bean_id = b.id
@@ -227,6 +228,9 @@ def restock_list(conn: sqlite3.Connection) -> list[dict]:
         rate = daily_rate(conn, d["id"])
         days = (d["balance_g"] / rate) if rate > 0 else None
         reasons = []
+        if d["all_lots"] == 0:
+            # 只建了豆卡还没入袋：豆子在手上，缺的是称重录入，不是缺货
+            continue
         if d["open_lots"] == 0:
             reasons.append("在库没有了")
         else:

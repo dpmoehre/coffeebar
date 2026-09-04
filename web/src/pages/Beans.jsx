@@ -150,31 +150,49 @@ function Card({ bean, onClick }) {
       className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
         bg-panel transition hover:border-amber"
     >
-      <div
-        className="h-28"
-        style={{
-          background:
-            "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
-        }}
-      />
+      {/* 缩略图优先豆盘，没有就用包装，都没有才用底纹 */}
+      {bean.cover ? (
+        <img src={bean.cover.thumb} alt="" className="h-48 w-full object-cover" />
+      ) : (
+        <div
+          className="h-48"
+          style={{
+            background:
+              "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
+          }}
+        />
+      )}
       <div className="p-5">
         <div className="flex items-baseline justify-between gap-2">
           <div className="serif truncate text-lg">{bean.name}</div>
-          {!bean.in_stock && <span className="shrink-0 text-xs text-muted">历史</span>}
+          {bean.pending ? (
+            <span className="shrink-0 text-xs text-amber">待入袋</span>
+          ) : (
+            !bean.in_stock && <span className="shrink-0 text-xs text-muted">历史</span>
+          )}
         </div>
         <div className="mt-1 truncate text-[13px] text-muted">
-          {[bean.origin, bean.roast, bean.water_temp && `${bean.water_temp} °C`]
-            .filter(Boolean)
-            .join(" · ") || "还没填产地"}
+          {[bean.origin, bean.varietal, bean.roast].filter(Boolean).join(" · ") || "还没填产地"}
         </div>
 
-        <div className="mt-3">
-          <Bar pct={pct} warn={bean.near_empty} />
-        </div>
-        <div className="mt-2 flex justify-between text-[13px] text-muted">
-          <span className={bean.near_empty ? "text-warn" : ""}>{g(bean.balance_g)}</span>
-          <span>{bean.cups_left < 1 ? "不够一杯了" : `约 ${bean.cups_left} 杯`}</span>
-        </div>
+        {/* 还没入袋就没有克重可言，别拿 0 g 的空进度条糊弄 */}
+        {bean.pending ? (
+          <div className="mt-3 text-[13px] text-muted">称一下净含量就能开始扣豆</div>
+        ) : (
+          <>
+            <div className="mt-3">
+              <Bar pct={pct} warn={bean.near_empty} />
+            </div>
+            <div className="mt-2 flex justify-between text-[13px] text-muted">
+              <span className={bean.near_empty ? "text-warn" : ""}>
+                {g(bean.balance_g)}
+                {/* 一支豆多袋只出一张卡，袋数在这儿点一下，明细在豆卡页 */}
+                {bean.open_lots > 1 && <span className="ml-1.5">共 {bean.open_lots} 袋</span>}
+              </span>
+              <span>{bean.cups_left < 1 ? "不够一杯了" : `约 ${bean.cups_left} 杯`}</span>
+            </div>
+          </>
+        )}
 
         {bean.tags.length > 0 && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -208,6 +226,7 @@ function NewBean({ open, onClose, onDone, oops }) {
         nominal_g: Number(f.nominal_g) || undefined,
         price: f.price ? Number(f.price) : undefined,
         water_temp: f.water_temp ? Number(f.water_temp) : undefined,
+        bought_on: f.bought_on || undefined,
         tags: (f.tags || "").split(/[,，\s]+/).filter(Boolean),
       });
       onDone(bean);
@@ -240,32 +259,58 @@ function NewBean({ open, onClose, onDone, oops }) {
         <Field label="产地">
           <Input value={f.origin || ""} onChange={set("origin")} placeholder="肯尼亚" />
         </Field>
-        <Field label="处理法">
-          <Input value={f.process || ""} onChange={set("process")} placeholder="水洗" />
+        <Field label="豆种" hint="包装上的 Varietal">
+          <Input value={f.varietal || ""} onChange={set("varietal")} placeholder="黄波旁" />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="烘焙">
-          <Select value={f.roast || "浅烘"} onChange={set("roast")} className="w-full">
-            {["浅烘", "中烘", "深烘"].map((r) => (
-              <option key={r}>{r}</option>
-            ))}
-          </Select>
+        <Field label="处理厂 / 庄园">
+          <Input value={f.producer || ""} onChange={set("producer")} placeholder="Matyazo CWS 处理厂" />
+        </Field>
+        <Field label="海拔">
+          <Input value={f.altitude || ""} onChange={set("altitude")} placeholder="1500-2200m" />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="处理法">
+          <Input value={f.process || ""} onChange={set("process")} placeholder="水洗" />
         </Field>
         <Field label="建议水温 °C">
           <Input type="number" value={f.water_temp || ""} onChange={set("water_temp")} placeholder="92" />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
+        <Field label="烘焙">
+          <Select value={f.roast || "浅烘"} onChange={set("roast")} className="w-full">
+            {["浅烘", "中烘", "中深烘", "深烘"].map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </Select>
+        </Field>
         <Field label="袋上印的克重" hint="刚拆袋不用称，先按这个扣">
           <Input type="number" value={f.nominal_g ?? ""} onChange={set("nominal_g")} />
         </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
         <Field label="这袋多少钱">
           <Input type="number" value={f.price || ""} onChange={set("price")} placeholder="128" />
+        </Field>
+        <Field label="购入日" hint="不填按今天">
+          <Input type="date" value={f.bought_on || ""} onChange={set("bought_on")} />
         </Field>
       </div>
       <Field label="标签" hint="空格或逗号分开，输入即创建">
         <Input value={f.tags || ""} onChange={set("tags")} placeholder="水洗 柑橘 耶加" />
+      </Field>
+      <Field label="备注" hint="品牌、坐标这类写这里">
+        <Input value={f.note || ""} onChange={set("note")} placeholder='61" coffee · 7°N 40°W' />
+      </Field>
+      <Field label="店家推荐冲法" hint="豆卡上印的滤器、研磨、水质、目标时长">
+        <Input
+          value={f.brew_note || ""}
+          onChange={set("brew_note")}
+          placeholder="KONO 法兰绒 · 富士 #7 · TDS 10-15 · 2'15&quot;"
+        />
       </Field>
     </Modal>
   );

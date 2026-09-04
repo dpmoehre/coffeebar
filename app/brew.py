@@ -17,6 +17,7 @@ METHODS = {
     "hoffmann": "Hoffmann 一杯",
     "kasuya": "4:6 粕谷",
     "kalita": "Kalita",
+    "volcano": "多段式火山冲",
 }
 
 
@@ -82,6 +83,23 @@ def plan(method: str, dose_g: float, ratio: float) -> dict:
             (back[2], 30, "收回中心后停手", "注完总水", "收尾、定杯量", "center_pour"),
             (0, 45, "等滴完", "滤干", "看时间判研磨", "drawdown"),
         ]
+    elif method == "volcano":
+        # 多段式火山冲：细水流一直咬住中心，把粉层顶成火山口，靠翻涌带出萃取。
+        # 段数与秒数照店家豆卡那套（总时长 2'15"），比例按当场输入算。
+        pours = _split(total - bloom, [0.25, 0.25, 0.25, 0.25])
+        raw = [
+            (bloom, 30, "细水流点中心，让粉层整体吃透", "中心微微鼓起",
+             "先把气排干净，后面才顶得起来", "bloom"),
+        ]
+        for i, add in enumerate(pours, start=1):
+            raw.append((
+                add, 20,
+                "细水流咬住中心一点，别绕大圈",
+                f"第 {i} 次顶起火山口" if i < 4 else "最后一次顶起，收水",
+                "中心持续翻涌把细粉带上来，边缘少扰动" if i < 3 else "补甜与厚度，别冲塌粉墙",
+                "center_pour",
+            ))
+        raw.append((0, 25, "停手，等粉墙塌下去", "滤干", "总时间偏长就调粗研磨", "drawdown"))
     else:  # kalita
         pours = _split(total - bloom, [1 / 3, 1 / 3, 1 / 3])
         raw = [
@@ -131,4 +149,6 @@ def _stage_name(method: str, index: int, add: int) -> str:
         return "闷蒸"
     if method == "kasuya":
         return f"前段 {index}" if index <= 2 else f"后段 {index - 2}"
+    if method == "volcano":
+        return f"火山 {index}"
     return f"第 {index} 注"
