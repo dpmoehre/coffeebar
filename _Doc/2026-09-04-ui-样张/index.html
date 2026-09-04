@@ -3,148 +3,347 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>coffeebar 页面样张</title>
+  <title>coffeebar 样张 · 参考画像.png</title>
   <style>
     :root {
-      --bg: #16110d;
-      --panel: #221a14;
-      --line: #3a2e24;
-      --cream: #f3e8d8;
-      --muted: #b5a48c;
-      --amber: #d4a054;
-      --warn: #d46a4a;
-      --chip: #2c231b;
+      --bg: #12100e;
+      --panel: #1c1814;
+      --line: #3a3228;
+      --cream: #f3e6d0;
+      --muted: #9c8b74;
+      --amber: #c88d44;
+      --amber-2: #e0a85a;
+      --warn: #c45c3e;
+      --chip: #2a231c;
+      --serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+      --sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
     }
     * { box-sizing: border-box; }
     body {
       margin: 0;
       min-height: 100vh;
-      font: 15px/1.45 "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+      font: 15px/1.5 var(--sans);
       background: var(--bg);
       color: var(--cream);
     }
+    svg.sprite { position: absolute; width: 0; height: 0; }
     .app {
       display: grid;
-      grid-template-columns: 200px 1fr;
+      grid-template-columns: 252px 1fr;
       min-height: 100vh;
     }
     nav {
+      background: #100e0c;
       border-right: 1px solid var(--line);
-      padding: 28px 18px;
+      padding: 28px 20px;
+      position: sticky;
+      top: 0;
+      height: 100vh;
     }
-    .brand {
-      font-size: 20px;
-      letter-spacing: 0.04em;
+    .logo {
+      display: flex;
+      gap: 12px;
+      align-items: center;
       margin-bottom: 36px;
     }
-    .brand span { color: var(--amber); }
-    nav button {
-      display: block;
-      width: 100%;
-      text-align: left;
-      background: none;
-      border: 0;
-      color: var(--muted);
-      font: inherit;
-      padding: 10px 8px;
-      border-radius: 8px;
-      cursor: pointer;
+    .logo .mark {
+      width: 42px; height: 42px;
+      border: 1px solid var(--amber);
+      border-radius: 12px;
+      display: grid; place-items: center;
+      color: var(--amber);
     }
-    nav button.on, nav button:hover { color: var(--cream); background: var(--chip); }
-    nav button.on { box-shadow: inset 3px 0 0 var(--amber); }
-    main { padding: 28px 36px 48px; }
-    h1 { font-size: 28px; font-weight: 560; margin: 0 0 8px; }
-    .sub { color: var(--muted); margin-bottom: 22px; }
-    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; align-items: center; }
-    .chip, .sort {
+    .logo .mark svg { width: 26px; height: 26px; }
+    .logo strong {
+      display: block;
+      font: 700 15px/1.2 var(--sans);
+      letter-spacing: 0.14em;
+    }
+    .logo em {
+      display: block;
+      font: 12px/1.4 var(--serif);
+      color: var(--muted);
+      font-style: normal;
+    }
+    nav button {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      width: 100%;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font: 15px/1 var(--sans);
+      padding: 12px 14px;
+      border-radius: 12px;
+      cursor: pointer;
+      margin-bottom: 4px;
+    }
+    nav button svg { width: 20px; height: 20px; flex: none; }
+    nav button.on {
+      background: linear-gradient(90deg, #c88d44, #a86e2e);
+      color: #1a120a;
+      font-weight: 600;
+    }
+    nav button:hover:not(.on) { color: var(--cream); background: var(--chip); }
+    main { padding: 36px 48px 48px; min-width: 0; max-width: 1480px; }
+    .page { display: none; }
+    .page.on { display: block; }
+    .kicker { color: var(--muted); font-size: 13px; margin-bottom: 10px; }
+    h1, .quote { font-family: var(--serif); }
+    h1 { font-size: 28px; font-weight: 600; margin: 0 0 8px; }
+    .sub { color: var(--muted); margin: 0 0 22px; }
+    .top { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+    .btn {
+      border: 0;
+      background: var(--amber);
+      color: #1a120a;
+      border-radius: 999px;
+      padding: 9px 16px;
+      font: 600 14px var(--sans);
+      cursor: pointer;
+      display: inline-flex; align-items: center; gap: 8px;
+    }
+    .btn svg { width: 16px; height: 16px; }
+    .btn.ghost {
+      background: transparent;
+      color: var(--cream);
       border: 1px solid var(--line);
-      background: var(--chip);
+      font-weight: 500;
+    }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; align-items: center; }
+    .chip {
+      border: 1px solid #6b5438;
+      background: transparent;
       color: var(--cream);
       border-radius: 999px;
-      padding: 6px 12px;
+      padding: 6px 14px;
       font: inherit;
       cursor: pointer;
     }
     .chip.on { background: var(--amber); color: #1a120a; border-color: var(--amber); }
-    .sort { color: var(--muted); }
-    .grid {
+    .grid4 {
       display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
-      gap: 16px;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 18px;
     }
     .card {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 16px;
+      border-radius: 18px;
       overflow: hidden;
       cursor: pointer;
     }
     .card:hover { border-color: var(--amber); }
     .photo {
-      height: 120px;
-      background:
-        radial-gradient(circle at 30% 40%, #5a3d28, transparent 40%),
-        linear-gradient(135deg, #3a2618, #1a120e);
+      height: 118px;
+      background: radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e);
     }
-    .body { padding: 14px 16px 16px; }
+    .body { padding: 16px 18px 18px; }
     .name { font-size: 17px; margin-bottom: 4px; }
     .meta { color: var(--muted); font-size: 13px; }
-    .bar { height: 6px; background: #3a2c22; border-radius: 99px; margin: 12px 0 8px; overflow: hidden; }
-    .bar > i { display: block; height: 100%; background: var(--amber); border-radius: inherit; }
+    .bar { height: 7px; background: #3a3228; border-radius: 99px; margin: 12px 0 8px; overflow: hidden; }
+    .bar > i { display: block; height: 100%; background: linear-gradient(90deg, var(--amber), var(--amber-2)); }
     .bar.warn > i { background: var(--warn); }
     .kg { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
     .tags { margin-top: 10px; display: flex; gap: 6px; flex-wrap: wrap; }
     .tags b {
-      font-weight: 500;
-      font-size: 12px;
-      background: var(--chip);
-      border: 1px solid var(--line);
-      border-radius: 99px;
-      padding: 2px 8px;
-      color: var(--muted);
+      font-weight: 500; font-size: 12px; color: var(--muted);
+      border: 1px solid var(--line); border-radius: 99px; padding: 2px 8px;
     }
-    .page { display: none; }
-    .page.on { display: block; }
-    .hero {
-      background: var(--panel);
-      border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 22px 24px;
-      margin-bottom: 18px;
-      font-size: 18px;
+    .quote {
+      font-size: 26px;
+      line-height: 1.45;
+      margin: 8px 0 28px;
+      max-width: 52ch;
     }
-    .prefs { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
     .panel {
       background: var(--panel);
       border: 1px solid var(--line);
-      border-radius: 16px;
-      padding: 18px 20px;
+      border-radius: 18px;
+      padding: 22px 24px;
     }
-    .pref { margin: 14px 0; }
+    .wide2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+    .wide3 { display: grid; grid-template-columns: 1.05fr 0.95fr 1.1fr; gap: 18px; }
+    .pref { margin: 16px 0; }
     .pref label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
-    .list { margin: 0; padding: 0; list-style: none; }
-    .list li { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); }
-    .note { margin-top: 28px; color: var(--muted); font-size: 13px; }
-    @media (max-width: 800px) {
+    .drink {
+      display: grid;
+      grid-template-columns: 44px 1fr auto;
+      gap: 12px;
+      align-items: center;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .ava {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: radial-gradient(circle at 35% 35%, #7a5333, #2a1c14);
+    }
+    .ava.wine { background: radial-gradient(circle at 35% 35%, #8a6a3a, #24180f); }
+    .more {
+      display: inline-block;
+      margin-top: 14px;
+      color: var(--amber);
+      cursor: pointer;
+      background: none; border: 0; font: inherit;
+    }
+    .heat { margin-top: 22px; }
+    .heat-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+    .legend { display: flex; gap: 14px; color: var(--muted); font-size: 12px; }
+    .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 4px; }
+    .weeks { display: grid; gap: 10px; }
+    .week { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; text-align: center; }
+    .week .hd { color: var(--muted); font-size: 12px; }
+    .cell { color: var(--muted); font-size: 13px; }
+    .cell strong { display: block; color: var(--cream); margin-bottom: 6px; font-weight: 500; }
+    .duo { display: flex; justify-content: center; gap: 5px; }
+    .duo b { width: 8px; height: 8px; border-radius: 50%; display: block; background: #3a3228; }
+    .duo b.c1 { background: #c9a06a; }
+    .duo b.c2 { background: #c88d44; }
+    .duo b.c3 { background: #e0a85a; }
+    .duo b.w1 { background: #7a64c8; }
+    .csv-wrap { text-align: center; margin-top: 28px; }
+    .brew-stage { font-family: var(--serif); font-size: 22px; margin: 10px 0 6px; }
+    .toast {
+      position: fixed; right: 28px; bottom: 28px;
+      background: var(--amber); color: #1a120a;
+      padding: 10px 16px; border-radius: 12px;
+      display: none; font-weight: 600;
+    }
+    dialog {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      color: var(--cream);
+      border-radius: 18px;
+      width: min(460px, 92vw);
+      padding: 22px;
+    }
+    dialog::backdrop { background: rgba(0,0,0,.55); }
+    dialog h2 { font-family: var(--serif); margin: 0 0 12px; font-size: 22px; }
+    dialog label { display: block; font-size: 13px; color: var(--muted); margin: 10px 0 4px; }
+    dialog input, dialog select {
+      width: 100%; background: var(--bg); border: 1px solid var(--line);
+      color: var(--cream); border-radius: 10px; padding: 8px 10px; font: inherit;
+    }
+    dialog menu { display: flex; justify-content: flex-end; gap: 8px; padding: 16px 0 0; margin: 0; }
+    @media (max-width: 1400px) {
+      .grid4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .wide3 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 900px) {
       .app { grid-template-columns: 1fr; }
-      nav { display: flex; gap: 8px; flex-wrap: wrap; border-right: 0; border-bottom: 1px solid var(--line); padding: 16px; }
-      nav .brand { width: 100%; margin-bottom: 8px; }
-      .prefs { grid-template-columns: 1fr; }
+      nav { position: static; height: auto; }
+      .grid4, .wide2, .wide3 { grid-template-columns: 1fr; }
+      main { padding: 20px; }
     }
   </style>
 </head>
 <body>
+  <svg class="sprite" aria-hidden="true">
+    <symbol id="i-cup" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M5 9h11v5a5 5 0 0 1-5 5H10a5 5 0 0 1-5-5V9z"/><path d="M16 10h2.5a2.5 2.5 0 0 1 0 5H16"/><path d="M8 4c.4 1 .4 2 0 3M11 4c.4 1 .4 2 0 3"/>
+    </symbol>
+    <symbol id="i-bean" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <ellipse cx="12" cy="13" rx="6.5" ry="7"/><path d="M10 8c2 3 2 7 0 10"/>
+    </symbol>
+    <symbol id="i-doc" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <rect x="5" y="4" width="14" height="16" rx="2"/><path d="M8 9h8M8 13h5"/>
+    </symbol>
+    <symbol id="i-glass" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M7 4h10l-2.2 8.2A4.2 4.2 0 0 1 10.7 15H9.3A4.2 4.2 0 0 1 6.2 12.2L4 4"/><path d="M12 15v5M8 20h8"/>
+    </symbol>
+    <symbol id="i-pie" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M12 4a8 8 0 1 0 8 8h-8V4z"/><path d="M12 4a8 8 0 0 1 8 8"/>
+    </symbol>
+    <symbol id="i-cal" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>
+    </symbol>
+    <symbol id="i-chart" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M4 19V5M4 19h16"/><path d="M8 15v-4M12 15V8M16 15v-7"/>
+    </symbol>
+    <symbol id="i-box" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M3 8l9-4 9 4-9 4-9-4z"/><path d="M3 8v8l9 4 9-4V8M12 12v8"/>
+    </symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M12 5v14M5 12h14"/>
+    </symbol>
+    <symbol id="i-down" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7">
+      <path d="M12 4v12M7 12l5 5 5-5M5 20h14"/>
+    </symbol>
+  </svg>
+
   <div class="app">
     <nav>
-      <div class="brand">coffee<span>bar</span></div>
-      <button class="on" data-page="beans">豆库</button>
-      <button data-page="persona">画像</button>
-      <button data-page="card">豆卡</button>
+      <div class="logo">
+        <div class="mark"><svg><use href="#i-cup"/></svg></div>
+        <div>
+          <strong>COFFEEBAR</strong>
+          <em>咖啡 · 记录 · 发现</em>
+        </div>
+      </div>
+      <button data-page="beans"><svg><use href="#i-bean"/></svg>豆子</button>
+      <button data-page="card"><svg><use href="#i-doc"/></svg>豆卡</button>
+      <button data-page="drinks"><svg><use href="#i-glass"/></svg>酒水</button>
+      <button class="on" data-page="persona"><svg><use href="#i-pie"/></svg>画像</button>
+      <button data-page="restock"><svg><use href="#i-box"/></svg>补货</button>
+      <button data-page="calendar"><svg><use href="#i-cal"/></svg>日历</button>
+      <button data-page="stats"><svg><use href="#i-chart"/></svg>统计</button>
     </nav>
+
     <main>
-      <section id="beans" class="page on">
-        <h1>豆库</h1>
-        <p class="sub">一眼看剩余。点标签筛选，点卡片进豆卡。这是静态样张，数据是假的。</p>
+      <section id="persona" class="page on">
+        <div class="kicker">选择画像</div>
+        <div class="row">
+          <button class="chip">我</button>
+          <button class="chip on">小王</button>
+          <button class="chip">阿陈</button>
+        </div>
+        <p class="quote">小王偏爱浅烘高酸的埃塞水洗，常在上午冲，偶尔点一杯威士忌酸。</p>
+        <div class="panel" style="margin-bottom:18px">
+          <div class="pref"><label>酸味 <span>8.6</span></label><div class="bar"><i style="width:86%"></i></div></div>
+          <div class="pref"><label>甜味 <span>5.4</span></label><div class="bar"><i style="width:54%"></i></div></div>
+          <div class="pref"><label>香味 <span>7.0</span></label><div class="bar"><i style="width:70%"></i></div></div>
+          <div class="tags"><b>浅烘</b><b>水洗</b><b>耶加</b><b>柑橘</b></div>
+        </div>
+        <div class="wide2">
+          <div class="panel">
+            <div>常喝的豆子</div>
+            <div class="drink"><div class="ava"></div><div>西达摩 水洗<div class="bar"><i style="width:80%"></i></div></div><span>12杯</span></div>
+            <div class="drink"><div class="ava"></div><div>花魁 4.0<div class="bar"><i style="width:48%"></i></div></div><span>7杯</span></div>
+            <button class="more" data-page="beans">查看全部豆子 ›</button>
+          </div>
+          <div class="panel">
+            <div>也喝酒</div>
+            <div class="drink"><div class="ava wine"></div><div>威士忌酸</div><span>2杯</span></div>
+            <div class="drink"><div class="ava wine"></div><div>波本</div><span>2杯</span></div>
+            <button class="more" data-page="drinks">查看全部酒水 ›</button>
+          </div>
+        </div>
+        <div class="heat panel" style="margin-top:18px">
+          <div class="heat-top">
+            <div>2026年9月</div>
+            <div class="legend">
+              <span><i style="background:#3a3228"></i>无</span>
+              <span><i style="background:#c9a06a"></i>1杯</span>
+              <span><i style="background:#c88d44"></i>2杯</span>
+              <span><i style="background:#e0a85a"></i>3杯+</span>
+            </div>
+          </div>
+          <div class="weeks" id="heat"></div>
+        </div>
+        <div class="csv-wrap">
+          <button class="btn ghost" type="button"><svg><use href="#i-down"/></svg>出表 CSV</button>
+        </div>
+      </section>
+
+      <section id="beans" class="page">
+        <div class="top">
+          <div>
+            <h1>豆子</h1>
+            <p class="sub">21 寸四列。点卡片进豆卡，右上角新建。</p>
+          </div>
+          <button class="btn" id="btn-new"><svg><use href="#i-plus"/></svg>新建豆子</button>
+        </div>
         <div class="row">
           <button class="chip">浅烘</button>
           <button class="chip">中烘</button>
@@ -152,109 +351,318 @@
           <button class="chip on">水洗</button>
           <button class="chip">日晒</button>
           <button class="chip">耶加</button>
-          <button class="sort">排序 · 剩余量</button>
         </div>
-        <div class="grid">
-          <article class="card" data-page="card">
-            <div class="photo"></div>
-            <div class="body">
-              <div class="name">西达摩 水洗</div>
-              <div class="meta">埃塞俄比亚 · 浅烘 · 92 °C</div>
-              <div class="bar"><i style="width:71%"></i></div>
-              <div class="kg"><span>142 g</span><span>约 9 杯</span></div>
-              <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
-            </div>
-          </article>
-          <article class="card">
-            <div class="photo"></div>
-            <div class="body">
-              <div class="name">花魁 4.0</div>
-              <div class="meta">埃塞俄比亚 · 浅烘 · 90 °C</div>
-              <div class="bar"><i style="width:48%"></i></div>
-              <div class="kg"><span>96 g</span><span>约 6 杯</span></div>
-              <div class="tags"><b>水洗</b><b>花香</b></div>
-            </div>
-          </article>
-          <article class="card">
-            <div class="photo"></div>
-            <div class="body">
-              <div class="name">慧兰</div>
-              <div class="meta">哥伦比亚 · 中烘 · 93 °C</div>
-              <div class="bar warn"><i style="width:12%"></i></div>
-              <div class="kg"><span>18 g</span><span>见底 · 约 1 杯</span></div>
-              <div class="tags"><b>水洗</b><b>巧克力</b></div>
-            </div>
-          </article>
-        </div>
-      </section>
-
-      <section id="persona" class="page">
-        <h1>用户画像</h1>
-        <p class="sub">从「谁喝的」流水自动总结。点人名切换。</p>
-        <div class="row">
-          <button class="chip">我</button>
-          <button class="chip on">小王</button>
-          <button class="chip">阿陈</button>
-        </div>
-        <div class="hero">小王偏爱浅烘、高酸的埃塞水洗，上午冲得最多；酒只偶尔点一杯威士忌酸。</div>
-        <div class="prefs">
-          <div class="panel">
-            <div>口味倾向（按他喝过的豆的杯测）</div>
-            <div class="pref"><label>酸味 <span>8.6</span></label><div class="bar"><i style="width:86%"></i></div></div>
-            <div class="pref"><label>甜味 <span>5.4</span></label><div class="bar"><i style="width:54%"></i></div></div>
-            <div class="pref"><label>香味 <span>7.0</span></label><div class="bar"><i style="width:70%"></i></div></div>
-            <div class="tags"><b>浅烘</b><b>水洗</b><b>耶加</b><b>柑橘</b></div>
-          </div>
-          <div class="panel">
-            <div>常喝</div>
-            <ul class="list">
-              <li><span>西达摩 水洗</span><span>12 杯</span></li>
-              <li><span>花魁 4.0</span><span>7 杯</span></li>
-              <li><span>威士忌酸</span><span>2 杯</span></li>
-            </ul>
-          </div>
-        </div>
+        <div class="grid4" id="bean-grid"></div>
       </section>
 
       <section id="card" class="page">
-        <h1>西达摩 水洗</h1>
-        <p class="sub">埃塞俄比亚 · 浅烘 · 开封 8 月 21 日 · 这杯约 ¥6.4</p>
-        <div class="prefs">
+        <div class="top">
+          <div>
+            <h1 id="card-title">西达摩 水洗</h1>
+            <p class="sub" id="card-sub">埃塞俄比亚 · 浅烘 · 开封 8 月 21 日 · 这杯约 ¥6.4</p>
+          </div>
+          <div class="row" style="margin:0">
+            <button class="btn" id="btn-brew-once">冲一次</button>
+            <button class="btn ghost" id="btn-play">播放冲煮</button>
+            <button class="btn ghost" id="btn-empty">这袋用完</button>
+          </div>
+        </div>
+        <div class="wide3">
           <div class="panel">
-            <div>账面 142 g / 标称 200 g / 开袋实称 198 g</div>
-            <div class="bar"><i style="width:71%"></i></div>
-            <div class="row" style="margin-top:14px">
-              <button class="chip">冲一次</button>
-              <button class="chip">这袋用完</button>
-              <button class="chip">播放冲煮</button>
-            </div>
+            <div>库存</div>
+            <p class="meta">账面 <b id="stock-g">142</b> g / 标称 200 g / 开袋实称 198 g</p>
+            <div class="bar" id="stock-bar"><i style="width:71%"></i></div>
             <div class="tags"><b>水洗</b><b>柑橘</b><b>耶加</b></div>
           </div>
           <div class="panel">
-            <div>最近杯测</div>
-            <div class="pref"><label>总体 <span>8.4</span></label><div class="bar"><i style="width:84%"></i></div></div>
-            <div class="pref"><label>酸质 <span>8.8</span></label><div class="bar"><i style="width:88%"></i></div></div>
-            <div class="pref"><label>甜感 <span>6.2</span></label><div class="bar"><i style="width:62%"></i></div></div>
+            <div>杯测雷达</div>
+            <svg id="radar" viewBox="0 0 220 220" width="100%" height="240"></svg>
+          </div>
+          <div class="panel">
+            <div>冲煮指导</div>
+            <div class="brew-stage" id="brew-stage">未播放</div>
+            <p class="meta" id="brew-tip">播放后按闷蒸 → 绕圈 → 滴滤走。</p>
+            <svg viewBox="0 0 240 180" width="100%" height="200">
+              <path d="M70 40h100l12 28H58z" fill="none" stroke="#c88d44" stroke-width="2"/>
+              <path id="spiral" d="M120 52c18 8 28 20 18 32s-32 10-36 0 8-18 20-16" fill="none" stroke="#f3e6d0" stroke-width="2" stroke-dasharray="120" stroke-dashoffset="120"/>
+              <path id="drip" d="M120 88v36" stroke="#c88d44" stroke-width="2" stroke-dasharray="6 6" opacity="0.2"/>
+              <rect x="88" y="128" width="64" height="28" rx="6" fill="none" stroke="#9c8b74"/>
+              <ellipse id="water" cx="120" cy="70" rx="22" ry="6" fill="#c88d44" opacity="0.15"/>
+            </svg>
+            <div class="row">
+              <button class="chip" id="btn-pause">暂停</button>
+              <button class="chip" id="btn-restart">重来</button>
+            </div>
           </div>
         </div>
       </section>
-      <p class="note">样张只表现布局与气质，不是最终产品。静图见同目录「豆库.png / 画像.png」。</p>
+
+      <section id="drinks" class="page">
+        <div class="top">
+          <div>
+            <h1>酒水</h1>
+            <p class="sub">酒单、酒瓶与配方。样张只列常喝的几条。</p>
+          </div>
+          <button class="btn"><svg><use href="#i-plus"/></svg>新建酒单</button>
+        </div>
+        <div class="wide2">
+          <div class="panel">
+            <div>推荐酒单</div>
+            <div class="drink"><div class="ava wine"></div><div>威士忌酸</div><span>上架</span></div>
+            <div class="drink"><div class="ava wine"></div><div>波本纯饮</div><span>上架</span></div>
+          </div>
+          <div class="panel">
+            <div>酒瓶库存</div>
+            <div class="drink"><div class="ava wine"></div><div>波本<div class="bar"><i style="width:62%"></i></div></div><span>420 ml</span></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="restock" class="page">
+        <h1>补货</h1>
+        <p class="sub">账面见底或还能冲的天数不够，会出现在这里。</p>
+        <div class="panel">
+          <div class="drink"><div class="ava"></div><div>慧兰 · 还剩 18 g</div><span>建议补 1 袋</span></div>
+        </div>
+      </section>
+
+      <section id="calendar" class="page">
+        <div class="top">
+          <div>
+            <h1>日历</h1>
+            <p class="sub">上点咖啡、下点酒。点日期看出当天。</p>
+          </div>
+          <button class="btn ghost"><svg><use href="#i-down"/></svg>出表 CSV</button>
+        </div>
+        <div class="panel">
+          <div class="weeks" id="cal-full"></div>
+          <p class="meta" id="cal-detail" style="margin-top:16px">点有颜色的日子查看明细。</p>
+        </div>
+      </section>
+
+      <section id="stats" class="page">
+        <div class="top">
+          <div>
+            <h1>统计</h1>
+            <p class="sub">消耗速度与谁喝了多少。</p>
+          </div>
+          <button class="btn ghost"><svg><use href="#i-down"/></svg>出表 CSV</button>
+        </div>
+        <div class="wide2">
+          <div class="panel">
+            <div>豆子消耗（克 / 日）</div>
+            <svg viewBox="0 0 360 160" width="100%" height="180">
+              <path d="M10 140h340M10 20v120" stroke="#3a3228" fill="none"/>
+              <path d="M20 120 C60 110, 90 70, 130 80 S190 40, 230 55 300 90, 340 36" fill="none" stroke="#c88d44" stroke-width="2.5"/>
+            </svg>
+          </div>
+          <div class="panel">
+            <div>本月</div>
+            <div class="drink"><div class="ava"></div><div>我 · 咖啡</div><span>18 杯</span></div>
+            <div class="drink"><div class="ava"></div><div>小王 · 咖啡</div><span>12 杯</span></div>
+            <div class="drink"><div class="ava wine"></div><div>阿陈 · 酒</div><span>4 杯</span></div>
+          </div>
+        </div>
+      </section>
     </main>
   </div>
+
+  <dialog id="dlg-new">
+    <h2>新建豆子</h2>
+    <label>名字</label><input id="new-name" placeholder="肯尼亚 AA" />
+    <label>产地</label><input id="new-origin" placeholder="肯尼亚" />
+    <label>烘焙</label>
+    <select id="new-roast"><option>浅烘</option><option>中烘</option><option>深烘</option></select>
+    <label>包装标称克重</label><input id="new-g" type="number" value="200" />
+    <menu>
+      <button class="btn ghost" id="new-cancel">取消</button>
+      <button class="btn" id="new-ok">加入豆库</button>
+    </menu>
+  </dialog>
+  <dialog id="dlg-once">
+    <h2>冲一次</h2>
+    <label>粉量（克）</label><input id="once-g" type="number" value="16" />
+    <label>谁喝的</label><input id="once-who" value="我" />
+    <menu>
+      <button class="btn ghost" id="once-cancel">取消</button>
+      <button class="btn" id="once-ok">记下并扣库存</button>
+    </menu>
+  </dialog>
+  <div class="toast" id="toast"></div>
+
   <script>
+    const beans = [
+      { name: "西达摩 水洗", meta: "埃塞俄比亚 · 浅烘 · 92 °C", g: 142, max: 198, tags: ["水洗", "柑橘", "耶加"] },
+      { name: "花魁 4.0", meta: "埃塞俄比亚 · 浅烘 · 90 °C", g: 96, max: 200, tags: ["水洗", "花香"] },
+      { name: "慧兰", meta: "哥伦比亚 · 中烘 · 93 °C", g: 18, max: 150, tags: ["水洗", "巧克力"] },
+      { name: "曼特宁", meta: "印尼 · 深烘 · 94 °C", g: 210, max: 250, tags: ["草本"] }
+    ];
+    const heatMap = { 3: [1, 0], 6: [2, 1], 12: [1, 0], 18: [3, 0], 21: [0, 1], 27: [2, 0] };
+
     const pages = document.querySelectorAll(".page");
-    document.querySelectorAll("[data-page]").forEach((el) => {
-      el.addEventListener("click", () => {
-        const id = el.getAttribute("data-page");
-        pages.forEach((p) => p.classList.toggle("on", p.id === id));
-        document.querySelectorAll("nav button").forEach((b) => {
-          b.classList.toggle("on", b.getAttribute("data-page") === id);
-        });
+    function go(id) {
+      pages.forEach((p) => p.classList.toggle("on", p.id === id));
+      document.querySelectorAll("nav button").forEach((b) => {
+        b.classList.toggle("on", b.getAttribute("data-page") === id);
       });
+    }
+    document.querySelectorAll("[data-page]").forEach((el) => {
+      el.addEventListener("click", () => go(el.getAttribute("data-page")));
     });
-    document.querySelectorAll("#beans .chip").forEach((el) => {
-      el.addEventListener("click", () => el.classList.toggle("on"));
-    });
+
+    function toast(t) {
+      const el = document.getElementById("toast");
+      el.textContent = t;
+      el.style.display = "block";
+      setTimeout(() => { el.style.display = "none"; }, 2000);
+    }
+
+    function renderGrid() {
+      const grid = document.getElementById("bean-grid");
+      grid.innerHTML = beans.map((b, i) => {
+        const pct = Math.round((b.g / b.max) * 100);
+        return `<article class="card" data-i="${i}">
+          <div class="photo"></div>
+          <div class="body">
+            <div class="name">${b.name}</div>
+            <div class="meta">${b.meta}</div>
+            <div class="bar${b.g < 25 ? " warn" : ""}"><i style="width:${pct}%"></i></div>
+            <div class="kg"><span>${b.g} g</span><span>约 ${Math.max(1, Math.floor(b.g / 16))} 杯</span></div>
+            <div class="tags">${b.tags.map((t) => `<b>${t}</b>`).join("")}</div>
+          </div></article>`;
+      }).join("");
+      grid.querySelectorAll(".card").forEach((el) => {
+        el.addEventListener("click", () => { openCard(+el.dataset.i); go("card"); });
+      });
+    }
+
+    let current = 0;
+    function openCard(i) {
+      current = i;
+      const b = beans[i];
+      document.getElementById("card-title").textContent = b.name;
+      document.getElementById("card-sub").textContent = b.meta + " · 这杯约 ¥6.4";
+      document.getElementById("stock-g").textContent = b.g;
+      document.querySelector("#stock-bar i").style.width = Math.round((b.g / b.max) * 100) + "%";
+      document.getElementById("stock-bar").classList.toggle("warn", b.g < 25);
+    }
+
+    function drawRadar() {
+      const scores = [7.6, 8.2, 7.4, 8.8, 6.2, 6.8, 7.9, 8.4];
+      const labels = ["干香", "风味", "余韵", "酸质", "甜感", "醇厚", "平衡", "总体"];
+      const n = scores.length, cx = 110, cy = 110, r = 78;
+      let html = "";
+      for (let ring = 1; ring <= 4; ring++) {
+        const p = [];
+        for (let i = 0; i < n; i++) {
+          const a = (Math.PI * 2 * i) / n - Math.PI / 2;
+          p.push(`${cx + r * ring / 4 * Math.cos(a)},${cy + r * ring / 4 * Math.sin(a)}`);
+        }
+        html += `<polygon points="${p.join(" ")}" fill="none" stroke="#3a3228"/>`;
+      }
+      const pts = [];
+      scores.forEach((s, i) => {
+        const a = (Math.PI * 2 * i) / n - Math.PI / 2;
+        pts.push(`${cx + r * s / 10 * Math.cos(a)},${cy + r * s / 10 * Math.sin(a)}`);
+        html += `<line x1="${cx}" y1="${cy}" x2="${cx + r * Math.cos(a)}" y2="${cy + r * Math.sin(a)}" stroke="#3a3228"/>`;
+        html += `<text x="${cx + (r + 18) * Math.cos(a)}" y="${cy + (r + 18) * Math.sin(a)}" fill="#9c8b74" font-size="11" text-anchor="middle">${labels[i]}</text>`;
+      });
+      document.getElementById("radar").innerHTML = html +
+        `<polygon points="${pts.join(" ")}" fill="rgba(200,141,68,.28)" stroke="#c88d44" stroke-width="2"/>`;
+    }
+
+    const stages = [
+      { t: "闷蒸 · 注到 30 g", offset: 80, drip: 0.2, water: 0.25 },
+      { t: "绕圈注水 · 注到 150 g", offset: 20, drip: 0.7, water: 0.55 },
+      { t: "中心注水 · 注到 250 g", offset: 0, drip: 1, water: 0.8 },
+      { t: "滴滤 · 停手等待", offset: 0, drip: 1, water: 0.35 }
+    ];
+    let brewTimer = null, brewI = 0;
+    function showStage(i) {
+      const s = stages[i];
+      document.getElementById("brew-stage").textContent = s.t;
+      document.getElementById("brew-tip").textContent = `第 ${i + 1} / ${stages.length} 步`;
+      document.getElementById("spiral").style.strokeDashoffset = s.offset;
+      document.getElementById("drip").style.opacity = s.drip;
+      document.getElementById("water").style.opacity = s.water;
+    }
+    function playBrew() {
+      go("card");
+      if (brewTimer) clearInterval(brewTimer);
+      brewI = 0; showStage(0);
+      brewTimer = setInterval(() => {
+        brewI += 1;
+        if (brewI >= stages.length) {
+          clearInterval(brewTimer); brewTimer = null;
+          document.getElementById("brew-tip").textContent = "播完了，可以冲一次记消耗。";
+          toast("冲煮播放结束");
+          return;
+        }
+        showStage(brewI);
+      }, 1600);
+    }
+
+    function renderHeat(el, clickable) {
+      const week = ["一", "二", "三", "四", "五", "六", "日"];
+      let html = `<div class="week">${week.map((w) => `<div class="hd">${w}</div>`).join("")}</div>`;
+      let row = "";
+      for (let d = 1; d <= 30; d++) {
+        const [c, w] = heatMap[d] || [0, 0];
+        row += `<div class="cell" data-d="${d}"><strong>${d}</strong><div class="duo"><b class="${c ? "c" + Math.min(c, 3) : ""}"></b><b class="${w ? "w1" : ""}"></b></div></div>`;
+        if (d % 7 === 0 || d === 30) {
+          html += `<div class="week">${row}</div>`;
+          row = "";
+        }
+      }
+      el.innerHTML = html;
+      if (clickable) {
+        el.querySelectorAll(".cell").forEach((cell) => {
+          cell.style.cursor = "pointer";
+          cell.onclick = () => {
+            const d = cell.dataset.d;
+            const ev = heatMap[d];
+            document.getElementById("cal-detail").textContent = ev
+              ? `9 月 ${d} 日：咖啡 ${ev[0]} 杯，酒 ${ev[1]} 杯`
+              : `9 月 ${d} 日没有记录。`;
+          };
+        });
+      }
+    }
+
+    document.getElementById("btn-play").onclick = playBrew;
+    document.getElementById("btn-pause").onclick = () => { if (brewTimer) { clearInterval(brewTimer); brewTimer = null; toast("已暂停"); } };
+    document.getElementById("btn-restart").onclick = playBrew;
+    document.getElementById("btn-empty").onclick = () => {
+      beans[current].g = 0; openCard(current); renderGrid(); toast("这袋已标记用完");
+    };
+    document.getElementById("btn-new").onclick = () => document.getElementById("dlg-new").showModal();
+    document.getElementById("new-cancel").onclick = () => document.getElementById("dlg-new").close();
+    document.getElementById("new-ok").onclick = () => {
+      const name = document.getElementById("new-name").value.trim() || "新豆子";
+      const origin = document.getElementById("new-origin").value.trim() || "未填产地";
+      const roast = document.getElementById("new-roast").value;
+      const g = Number(document.getElementById("new-g").value) || 200;
+      beans.unshift({ name, meta: `${origin} · ${roast}`, g, max: g, tags: ["新入"] });
+      document.getElementById("dlg-new").close();
+      renderGrid(); toast("已加入豆库（仅样张）");
+    };
+    document.getElementById("btn-brew-once").onclick = () => document.getElementById("dlg-once").showModal();
+    document.getElementById("once-cancel").onclick = () => document.getElementById("dlg-once").close();
+    document.getElementById("once-ok").onclick = () => {
+      const use = Number(document.getElementById("once-g").value) || 16;
+      const who = document.getElementById("once-who").value || "我";
+      beans[current].g = Math.max(0, beans[current].g - use);
+      openCard(current); renderGrid();
+      document.getElementById("dlg-once").close();
+      toast(`${who} · 扣 ${use} g`);
+    };
+    document.querySelectorAll("#beans .chip").forEach((el) => el.onclick = () => el.classList.toggle("on"));
+
+    renderGrid();
+    drawRadar();
+    openCard(0);
+    renderHeat(document.getElementById("heat"), false);
+    renderHeat(document.getElementById("cal-full"), true);
   </script>
 </body>
 </html>
