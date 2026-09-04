@@ -174,6 +174,20 @@
     }
     .wide2 { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
     .wide3 { display: grid; grid-template-columns: 1.05fr 0.95fr 1.1fr; gap: 18px; }
+    .brew-head { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 8px 0 14px; }
+    .brew-head label { color: var(--muted); font-size: 13px; display: flex; align-items: center; gap: 6px; }
+    .brew-head input, .brew-head select {
+      background: var(--bg); border: 1px solid var(--line); color: var(--cream);
+      border-radius: 8px; padding: 5px 8px; font: inherit; width: 72px;
+    }
+    .brew-head select { width: auto; }
+    table.stages { width: 100%; border-collapse: collapse; font-size: 13px; }
+    table.stages th, table.stages td {
+      text-align: left; padding: 8px 8px; border-bottom: 1px solid var(--line); vertical-align: top;
+    }
+    table.stages th { color: var(--muted); font-weight: 500; }
+    table.stages tr.on td { background: rgba(200,141,68,.12); color: var(--cream); }
+    table.stages .num { white-space: nowrap; color: var(--amber); }
     .pref { margin: 16px 0; }
     .pref label { display: flex; justify-content: space-between; font-size: 13px; color: var(--muted); }
     .drink {
@@ -388,7 +402,7 @@
             <button class="btn ghost" id="btn-empty">这袋用完</button>
           </div>
         </div>
-        <div class="wide3">
+        <div class="wide2">
           <div class="panel">
             <div>库存</div>
             <p class="meta">账面 <b id="stock-g">142</b> g / 标称 200 g / 开袋实称 198 g</p>
@@ -397,13 +411,36 @@
           </div>
           <div class="panel">
             <div>杯测雷达</div>
-            <svg id="radar" viewBox="0 0 220 220" width="100%" height="240"></svg>
+            <svg id="radar" viewBox="0 0 220 220" width="100%" height="220"></svg>
+          </div>
+        </div>
+        <div class="wide2" style="margin-top:18px">
+          <div class="panel">
+            <div>冲煮指导 · 按方式计算各段</div>
+            <div class="brew-head">
+              <label>方式
+                <select id="brew-method">
+                  <option value="v60">V60 四段</option>
+                  <option value="hoffmann">Hoffmann 一杯</option>
+                  <option value="kasuya">4:6 粕谷</option>
+                  <option value="kalita">Kalita</option>
+                </select>
+              </label>
+              <label>粉 <input id="brew-dose" type="number" value="15" /> g</label>
+              <label>比例 1 : <input id="brew-ratio" type="number" value="16" step="0.5" /></label>
+              <span class="meta" id="brew-total">总水 240 g</span>
+            </div>
+            <table class="stages">
+              <thead>
+                <tr><th>段</th><th>本段</th><th>秤到</th><th>方式</th><th>目标</th><th>功能</th></tr>
+              </thead>
+              <tbody id="brew-rows"></tbody>
+            </table>
           </div>
           <div class="panel">
-            <div>冲煮指导</div>
             <div class="brew-stage" id="brew-stage">未播放</div>
-            <p class="meta" id="brew-tip">播放后按闷蒸 → 绕圈 → 滴滤走。</p>
-            <svg viewBox="0 0 240 180" width="100%" height="200">
+            <p class="meta" id="brew-tip">选方式后看表格；播放时当前段会高亮。</p>
+            <svg viewBox="0 0 240 180" width="100%" height="180">
               <path d="M70 40h100l12 28H58z" fill="none" stroke="#c88d44" stroke-width="2"/>
               <path id="spiral" d="M120 52c18 8 28 20 18 32s-32 10-36 0 8-18 20-16" fill="none" stroke="#f3e6d0" stroke-width="2" stroke-dasharray="120" stroke-dashoffset="120"/>
               <path id="drip" d="M120 88v36" stroke="#c88d44" stroke-width="2" stroke-dasharray="6 6" opacity="0.2"/>
@@ -592,23 +629,113 @@
         `<polygon points="${pts.join(" ")}" fill="rgba(200,141,68,.28)" stroke="#c88d44" stroke-width="2"/>`;
     }
 
-    const stages = [
-      { t: "闷蒸 · 注到 30 g", offset: 80, drip: 0.2, water: 0.25 },
-      { t: "绕圈注水 · 注到 150 g", offset: 20, drip: 0.7, water: 0.55 },
-      { t: "中心注水 · 注到 250 g", offset: 0, drip: 1, water: 0.8 },
-      { t: "滴滤 · 停手等待", offset: 0, drip: 1, water: 0.35 }
-    ];
+    const anim = {
+      bloom: { offset: 80, drip: 0.2, water: 0.25 },
+      spiral: { offset: 20, drip: 0.7, water: 0.55 },
+      center: { offset: 0, drip: 1, water: 0.8 },
+      draw: { offset: 0, drip: 1, water: 0.35 }
+    };
+    function split(total, parts) {
+      const n = parts.length;
+      const raw = parts.map((p) => Math.round(total * p));
+      raw[n - 1] = total - raw.slice(0, -1).reduce((a, b) => a + b, 0);
+      return raw;
+    }
+    const recipes = {
+      v60: (dose, total) => {
+        const bloom = Math.min(Math.round(dose * 2), total);
+        const rest = total - bloom;
+        const [p1, p2] = split(rest, [0.45, 0.55]);
+        return [
+          { name: "闷蒸", add: bloom, how: "绕圈湿润粉床", goal: "粉全部湿透、排气", fn: "排出二氧化碳，后续萃取更匀", scene: "bloom" },
+          { name: "一注", add: p1, how: "中心向外慢速螺旋", goal: "建立主萃取", fn: "溶出酸质与甜感", scene: "spiral" },
+          { name: "二注", add: p2, how: "继续螺旋，末段收回中心", goal: "补满总水量", fn: "提高浓度、补厚度", scene: "center" },
+          { name: "滴滤", add: 0, how: "停手，等液面下降", goal: "完成过滤", fn: "用总时间判断研磨粗细", scene: "draw" }
+        ];
+      },
+      hoffmann: (dose, total) => {
+        const bloom = Math.min(Math.round(dose * 2), total);
+        const pours = split(total - bloom, [0.25, 0.25, 0.25, 0.25]);
+        return [
+          { name: "闷蒸", add: bloom, how: "绕圈湿润，轻摇杯", goal: "均匀湿润", fn: "排气、避免干岛", scene: "bloom" },
+          ...pours.map((add, i) => ({
+            name: `第 ${i + 1} 注`, add,
+            how: "中心开始，向外画圈再收回",
+            goal: `均匀加上第 ${i + 1} 份水`,
+            fn: "复制性好，通道少",
+            scene: i % 2 ? "center" : "spiral"
+          })),
+          { name: "滴滤", add: 0, how: "停手等待", goal: "滤完", fn: "看总时间调研磨", scene: "draw" }
+        ];
+      },
+      kasuya: (dose, total) => {
+        const front = split(Math.round(total * 0.4), [0.5, 0.5]);
+        const back = split(total - front[0] - front[1], [1 / 3, 1 / 3, 1 / 3]);
+        return [
+          { name: "前段 1", add: front[0], how: "中心小圈", goal: "先打湿并定酸", fn: "前段偏多则更甜，偏少则更亮酸", scene: "bloom" },
+          { name: "前段 2", add: front[1], how: "略放大螺旋", goal: "完成 40% 水量", fn: "决定酸/甜平衡", scene: "spiral" },
+          { name: "后段 1", add: back[0], how: "稳定螺旋", goal: "开始加浓度", fn: "后 60% 管浓度", scene: "spiral" },
+          { name: "后段 2", add: back[1], how: "稳定螺旋", goal: "继续加浓度", fn: "保持液位，少搅动", scene: "center" },
+          { name: "后段 3", add: back[2], how: "收回中心后停手", goal: "注完总水", fn: "收尾、定杯量", scene: "center" },
+          { name: "滴滤", add: 0, how: "等待滴完", goal: "滤完", fn: "看时间判研磨", scene: "draw" }
+        ];
+      },
+      kalita: (dose, total) => {
+        const bloom = Math.min(Math.round(dose * 2), total);
+        const pours = split(total - bloom, [1 / 3, 1 / 3, 1 / 3]);
+        return [
+          { name: "闷蒸", add: bloom, how: "中心小圈，少冲壁", goal: "湿润平底粉床", fn: "排气，Kalita 怕冲出细粉沟", scene: "bloom" },
+          { name: "一注", add: pours[0], how: "中心为主，轻画小圈", goal: "维持液位", fn: "均匀过水，少通道", scene: "center" },
+          { name: "二注", add: pours[1], how: "中心小圈", goal: "继续均匀萃取", fn: "补甜和厚度", scene: "center" },
+          { name: "三注", add: pours[2], how: "中心收尾", goal: "注满总水", fn: "定浓度", scene: "spiral" },
+          { name: "滴滤", add: 0, how: "停手", goal: "滤完", fn: "看总时间", scene: "draw" }
+        ];
+      }
+    };
+
+    let stages = [];
     let brewTimer = null, brewI = 0;
+
+    function buildStages() {
+      const dose = Number(document.getElementById("brew-dose").value) || 15;
+      const ratio = Number(document.getElementById("brew-ratio").value) || 16;
+      const total = Math.round(dose * ratio);
+      const key = document.getElementById("brew-method").value;
+      let acc = 0;
+      stages = recipes[key](dose, total).map((s) => {
+        acc += s.add;
+        return { ...s, target: acc, t: s.add ? `${s.name} · 本段 +${s.add} g · 秤到 ${acc} g` : `${s.name} · 停手` };
+      });
+      document.getElementById("brew-total").textContent = `总水 ${total} g`;
+      document.getElementById("once-g").value = dose;
+      renderStageRows(-1);
+    }
+
+    function renderStageRows(active) {
+      document.getElementById("brew-rows").innerHTML = stages.map((s, i) => `
+        <tr class="${i === active ? "on" : ""}">
+          <td>${s.name}</td>
+          <td class="num">${s.add ? "+" + s.add + " g" : "—"}</td>
+          <td class="num">${s.target} g</td>
+          <td>${s.how}</td>
+          <td>${s.goal}</td>
+          <td>${s.fn}</td>
+        </tr>`).join("");
+    }
+
     function showStage(i) {
       const s = stages[i];
+      const a = anim[s.scene] || anim.spiral;
       document.getElementById("brew-stage").textContent = s.t;
-      document.getElementById("brew-tip").textContent = `第 ${i + 1} / ${stages.length} 步`;
-      document.getElementById("spiral").style.strokeDashoffset = s.offset;
-      document.getElementById("drip").style.opacity = s.drip;
-      document.getElementById("water").style.opacity = s.water;
+      document.getElementById("brew-tip").textContent = `${s.how} · ${s.goal} · ${s.fn}`;
+      document.getElementById("spiral").style.strokeDashoffset = a.offset;
+      document.getElementById("drip").style.opacity = a.drip;
+      document.getElementById("water").style.opacity = a.water;
+      renderStageRows(i);
     }
     function playBrew() {
       go("card");
+      buildStages();
       if (brewTimer) clearInterval(brewTimer);
       brewI = 0; showStage(0);
       brewTimer = setInterval(() => {
@@ -620,7 +747,7 @@
           return;
         }
         showStage(brewI);
-      }, 1600);
+      }, 1800);
     }
 
     function renderHeat(el, clickable) {
@@ -679,9 +806,14 @@
     };
     document.querySelectorAll("#beans .chip").forEach((el) => el.onclick = () => el.classList.toggle("on"));
 
+    ["brew-method", "brew-dose", "brew-ratio"].forEach((id) => {
+      document.getElementById(id).addEventListener("input", buildStages);
+      document.getElementById(id).addEventListener("change", buildStages);
+    });
     renderGrid();
     drawRadar();
     openCard(0);
+    buildStages();
     renderHeat(document.getElementById("heat"), false);
     renderHeat(document.getElementById("cal-full"), true);
   </script>
