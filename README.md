@@ -1,8 +1,10 @@
 # coffeebar
 
-绿场仓库。远程：[github.com/dpmoehre/coffeebar](https://github.com/dpmoehre/coffeebar)。
+公司咖啡吧里的个人手冲 / 调酒工具。远程：[github.com/dpmoehre/coffeebar](https://github.com/dpmoehre/coffeebar)。
 
-当前已落地 **Agent 协作框架**（工作牌 / AGENTS / CLAUDE / todo）。产品功能与技术栈待 `_Doc/` 需求补齐后写入本页。
+**不是点单点菜系统。** 第一期做豆子档案：豆卡（产地、风味、克重）、消耗流水、冲煮指导、拍照上传。日常在小主机自带屏幕上用键鼠操作；手机只用来拍豆子照片。运行在一台 Windows 11 小主机上，公司内网访问，必要时临时走 cpolar。
+
+架构与运行环境见 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md)。应用代码尚未落地。
 
 ---
 
