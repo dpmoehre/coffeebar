@@ -1,0 +1,48 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+
+# 编辑器 / 本地
+.obsidian/
+.trash
+.vscode/
+.idea/
+*~
+~*
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+
+# Node
+node_modules/
+dist/
+dist-electron/
+
+# 环境与密钥
+.env
+.env.local
+*.pem
+*.key
+
+# 日志与本机临时
+*.log
+log/
+logs/
+Temp/
+tmp/
+
+# 备份与压缩（按需再放宽）
+backup/
+backups/
+*.zip
+*.rar
+*.7z

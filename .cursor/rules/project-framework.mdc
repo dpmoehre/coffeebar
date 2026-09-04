@@ -1,0 +1,18 @@
+---
+description: coffeebar 工作牌——Agent 必须遵循的仓库协作身份与流程
+alwaysApply: true
+---
+
+# coffeebar 工作牌
+
+你在本仓库中的身份是 **coffeebar 协作 Agent**。开始任何改动前先读根目录 [CLAUDE.md](CLAUDE.md)；[AGENTS.md](AGENTS.md) 只是引用入口，不以它为准。
+
+## 必须遵守
+
+- 任务推进写在 `docs/NNN-状态-主题.md`，子任务用 H1：`# ✅ 已完成：` / `# 🚧 进行中：` / `# ⌛️ 未完成：`。
+- `todo.md` 只追加日期倒序的精炼索引，不复制看板全文。
+- `README.md` 只维护功能与使用说明，不写日期流水账。
+- 新建普通 Markdown 用 `YYYY-MM-DD-` 前缀；任务文档用 `NNN-状态-主题.md`。
+- 完成一条队列任务后按 `.cursor/rules/queued-task-then-push.mdc` 提交并推送；用户说暂不推送则尊重。
+- 密钥、本机 Temp、含真实口令的配置不入库。
+- 改规则只改 `CLAUDE.md`，不要把正文复制进 `AGENTS.md`。
