@@ -27,7 +27,7 @@ export default function Stats() {
       <header>
         <h1 className="serif m-0 text-3xl font-semibold">统计</h1>
         <p className="mt-2 mb-0 text-muted">
-          先看数字：消耗了多少豆、平均一杯多少粉、花了多少钱。
+          先看数字：消耗了多少豆、多少酒、花了多少钱。
         </p>
       </header>
 
@@ -41,8 +41,8 @@ export default function Stats() {
 
       {!s ? (
         <p className="mt-6 text-muted">读取中…</p>
-      ) : s.cups === 0 ? (
-        <Empty>这段时间还没冲过。记一次「冲一次」，这里就有数字了。</Empty>
+      ) : s.cups === 0 && s.drink_cups === 0 && s.bought === 0 ? (
+        <Empty>这段时间还没冲过、也没买过。记一次消耗或入库，这里就有数字了。</Empty>
       ) : (
         <>
           <div className="mt-5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
@@ -72,7 +72,27 @@ export default function Stats() {
               label="买进来的钱"
               value={money(s.bought).replace("¥", "")}
               unit="¥"
-              hint="期间新入袋的买入价"
+              hint="期间新入袋、新入瓶的买入价"
+            />
+          </div>
+          <div className="mt-3.5 grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+            <Kpi
+              label="酒"
+              value={s.drinks_ml >= 1000 ? (s.drinks_ml / 1000).toFixed(2) : Math.round(s.drinks_ml)}
+              unit={s.drinks_ml >= 1000 ? "L" : "ml"}
+              hint={`${s.drink_cups} 杯`}
+            />
+            <Kpi
+              label="酒精约"
+              value={s.alcohol_g}
+              unit="g"
+              hint="毫升 × 酒精度 × 0.789"
+            />
+            <Kpi
+              label="在库还值"
+              value={money(s.on_hand).replace("¥", "")}
+              unit="¥"
+              hint="未关袋/未关瓶的账面 × 单价"
             />
           </div>
 

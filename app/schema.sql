@@ -59,26 +59,82 @@ CREATE TABLE IF NOT EXISTS person (
   created_at TEXT    NOT NULL
 );
 
--- 喝掉一次。第一期只有 coffee，酒（drink）留位不实现。
-CREATE TABLE IF NOT EXISTS consumption_event (
-  id           INTEGER PRIMARY KEY AUTOINCREMENT,
-  kind         TEXT    NOT NULL DEFAULT 'coffee' CHECK (kind IN ('coffee', 'drink')),
-  lot_id       INTEGER NOT NULL REFERENCES bean_lot(id) ON DELETE CASCADE,
-  person_id    INTEGER REFERENCES person(id),          -- 可空：没记是谁
-  amount_g     REAL    NOT NULL,                       -- 当次实际粉量，不是固定 15 g
-  unit_cost    REAL,                                   -- 当时每克单价快照，历史不回溯改写
-  brew_method  TEXT,
-  brew_ratio   REAL,
-  brew_total_s INTEGER,                                -- 本次实际总秒数
-  brew_stages  TEXT,                                   -- JSON：各段实际秒数
-  note         TEXT,
-  at           TEXT    NOT NULL,
-  voided_at    TEXT,                                   -- 撤回：只划掉不物理删
-  void_reason  TEXT
+-- 基酒：卡是酒名，瓶子是批次。同样的酒再买一瓶只加批次。
+CREATE TABLE IF NOT EXISTS bottle (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  name       TEXT    NOT NULL,
+  category   TEXT,                      -- 单一麦芽 / 波本 / 金酒 …
+  origin     TEXT,                      -- 产地，如苏格兰高地
+  abv        REAL,                      -- 酒精度 % vol
+  flavor     TEXT,                      -- 风味类型：柑橘甜、泥煤、香草焦糖
+  note       TEXT,
+  created_at TEXT    NOT NULL,
+  updated_at TEXT    NOT NULL
 );
-CREATE INDEX IF NOT EXISTS idx_cons_lot   ON consumption_event(lot_id);
-CREATE INDEX IF NOT EXISTS idx_cons_at    ON consumption_event(at);
-CREATE INDEX IF NOT EXISTS idx_cons_void  ON consumption_event(voided_at);
+
+CREATE TABLE IF NOT EXISTS bottle_lot (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  bottle_id   INTEGER NOT NULL REFERENCES bottle(id) ON DELETE CASCADE,
+  nominal_ml  REAL    NOT NULL,          -- 标称容量，入库必填
+  price       REAL,                      -- 这瓶买入价
+  bought_on   TEXT,
+  opened_on   TEXT,
+  closed_at   TEXT,                      -- 非空 = 这瓶倒完了
+  note        TEXT,
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_blot_bottle ON bottle_lot(bottle_id);
+
+CREATE TABLE IF NOT EXISTS bottle_stock_event (
+  id       INTEGER PRIMARY KEY AUTOINCREMENT,
+  lot_id   INTEGER NOT NULL REFERENCES bottle_lot(id) ON DELETE CASCADE,
+  kind     TEXT    NOT NULL CHECK (kind IN ('intake', 'adjust', 'close_lot')),
+  delta_ml REAL    NOT NULL DEFAULT 0,
+  note     TEXT,
+  at       TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_bstock_lot ON bottle_stock_event(lot_id);
+
+CREATE TABLE IF NOT EXISTS bottle_tag (
+  bottle_id INTEGER NOT NULL REFERENCES bottle(id) ON DELETE CASCADE,
+  tag_id    INTEGER NOT NULL REFERENCES tag(id)    ON DELETE CASCADE,
+  PRIMARY KEY (bottle_id, tag_id)
+);
+
+CREATE TABLE IF NOT EXISTS bottle_photo (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  bottle_id  INTEGER NOT NULL REFERENCES bottle(id) ON DELETE CASCADE,
+  kind       TEXT    NOT NULL CHECK (kind IN ('pack', 'label')),  -- 瓶+盒 / 酒标
+  path       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL
+);
+
+-- 喝掉一次。咖啡扣 bean_lot，酒扣 bottle_lot，同一张表避免双记。
+CREATE TABLE IF NOT EXISTS consumption_event (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  kind          TEXT    NOT NULL DEFAULT 'coffee' CHECK (kind IN ('coffee', 'drink')),
+  lot_id        INTEGER REFERENCES bean_lot(id) ON DELETE CASCADE,
+  bottle_lot_id INTEGER REFERENCES bottle_lot(id) ON DELETE CASCADE,
+  person_id     INTEGER REFERENCES person(id),          -- 可空：没记是谁
+  amount_g      REAL,                                   -- 咖啡：当次实际粉量
+  amount_ml     REAL,                                   -- 酒：当次倒了多少毫升
+  unit_cost     REAL,                                   -- 当时单价快照（元/克 或 元/毫升）
+  brew_method   TEXT,
+  brew_ratio    REAL,
+  brew_total_s  INTEGER,
+  brew_stages   TEXT,
+  note          TEXT,
+  at            TEXT    NOT NULL,
+  voided_at     TEXT,
+  void_reason   TEXT,
+  CHECK (
+    (kind = 'coffee' AND lot_id IS NOT NULL AND amount_g IS NOT NULL)
+    OR (kind = 'drink' AND bottle_lot_id IS NOT NULL AND amount_ml IS NOT NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS idx_cons_lot    ON consumption_event(lot_id);
+CREATE INDEX IF NOT EXISTS idx_cons_at     ON consumption_event(at);
+CREATE INDEX IF NOT EXISTS idx_cons_void   ON consumption_event(voided_at);
 
 -- 改归属人留痕
 CREATE TABLE IF NOT EXISTS consumption_audit (

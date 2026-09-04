@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import brew as brew_mod
-from . import db, locks, photos, stats, store
+from . import db, locks, photos, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -119,7 +119,10 @@ async def api_add_photo(
 
 @app.delete("/api/photos/{photo_id}")
 def api_del_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    photos.delete_bean_photo(conn, photo_id)
+    try:
+        photos.delete_bean_photo(conn, photo_id)
+    except photos.BadPhoto:
+        photos.delete_bottle_photo(conn, photo_id)
     return {"ok": True}
 
 
@@ -234,7 +237,7 @@ def api_consumption(
     limit: int = 50,
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    return {"rows": store.list_consumption(conn, bean_id, person_id, limit)}
+    return {"rows": store.list_consumption(conn, bean_id=bean_id, person_id=person_id, limit=limit)}
 
 
 @app.post("/api/consumption/{cons_id}/void")
@@ -254,6 +257,98 @@ def api_reassign(cons_id: int, payload: dict, conn: sqlite3.Connection = Depends
     """人选错了：只改归属，库存不动。"""
     store.reassign_person(conn, cons_id, payload.get("person"))
     return {"ok": True}
+
+
+# ── 基酒 ────────────────────────────────────────────────────
+
+
+@app.get("/api/spirits")
+def api_spirits(scope: str = "stock", conn: sqlite3.Connection = Depends(get_conn)):
+    items = spirits.list_spirits(conn, scope)
+    for s in items:
+        s["cover"] = photos.cover(photos.list_bottle_photos(conn, s["id"]))
+    return {"spirits": items}
+
+
+@app.post("/api/spirits", status_code=201)
+def api_create_spirit(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+    if not payload.get("name", "").strip():
+        raise store.Conflict("酒得有个名字")
+    bottle_id = spirits.create_spirit(conn, payload)
+    if payload.get("nominal_ml"):
+        spirits.add_lot(conn, bottle_id, payload)
+    return spirits.get_spirit(conn, bottle_id)
+
+
+@app.get("/api/spirits/{bottle_id}")
+def api_spirit(bottle_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    bottle = spirits.get_spirit(conn, bottle_id)
+    if not bottle:
+        raise HTTPException(404, "没有这支酒")
+    bottle["photos"] = photos.list_bottle_photos(conn, bottle_id)
+    bottle["log"] = store.list_consumption(conn, bottle_id=bottle_id, limit=30)
+    bottle["lock"] = locks.status(conn, f"bottle:{bottle_id}")
+    return bottle
+
+
+@app.patch("/api/spirits/{bottle_id}")
+def api_update_spirit(
+    bottle_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bottle:{bottle_id}", x_session, x_source)
+    spirits.update_spirit(conn, bottle_id, payload)
+    return spirits.get_spirit(conn, bottle_id)
+
+
+@app.post("/api/spirits/{bottle_id}/lots", status_code=201)
+def api_add_bottle_lot(
+    bottle_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bottle:{bottle_id}", x_session, x_source)
+    spirits.add_lot(conn, bottle_id, payload)
+    return spirits.get_spirit(conn, bottle_id)
+
+
+@app.post("/api/spirits/{bottle_id}/photos", status_code=201)
+async def api_add_bottle_photo(
+    bottle_id: int,
+    file: UploadFile = File(...),
+    kind: str = Form("pack"),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    if not spirits.get_spirit(conn, bottle_id):
+        raise HTTPException(404, "没有这支酒")
+    return photos.attach_bottle_photo(conn, bottle_id, kind, await file.read(), file.filename or "")
+
+
+@app.post("/api/bottle-lots/{lot_id}/open")
+def api_open_bottle(lot_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    spirits.open_lot(conn, lot_id)
+    return spirits.get_lot(conn, lot_id)
+
+
+@app.post("/api/bottle-lots/{lot_id}/adjust")
+def api_adjust_bottle(lot_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+    return spirits.adjust_lot(conn, lot_id, float(payload["actual_ml"]), payload.get("note"))
+
+
+@app.post("/api/bottle-lots/{lot_id}/close")
+def api_close_bottle(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+    body = payload or {}
+    return spirits.close_lot(conn, lot_id, body.get("note"))
+
+
+@app.post("/api/drinks", status_code=201)
+def api_record_drink(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+    return spirits.record_drink(conn, payload)
 
 
 # ── 人 ──────────────────────────────────────────────────────
@@ -355,7 +450,8 @@ def api_unlock(
 @app.get("/api/health")
 def api_health(conn: sqlite3.Connection = Depends(get_conn)):
     beans = conn.execute("SELECT COUNT(*) FROM bean").fetchone()[0]
-    return {"ok": True, "beans": beans, "db": str(db.db_path())}
+    bottles = conn.execute("SELECT COUNT(*) FROM bottle").fetchone()[0]
+    return {"ok": True, "beans": beans, "spirits": bottles, "db": str(db.db_path())}
 
 
 # ── 照片与前端构建产物（放最后，别盖住 /api） ───────────────

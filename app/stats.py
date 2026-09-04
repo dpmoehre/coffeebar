@@ -110,17 +110,50 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
     if start:
         bought_where = "created_at >= ?"
         bought_args = (start,)
-    bought = conn.execute(
+    bought_beans = conn.execute(
         f"SELECT COALESCE(SUM(price), 0) FROM bean_lot WHERE {bought_where}", bought_args
     ).fetchone()[0]
+    bought_bottles = conn.execute(
+        f"SELECT COALESCE(SUM(price), 0) FROM bottle_lot WHERE {bought_where}", bought_args
+    ).fetchone()[0]
+    bought = bought_beans + bought_bottles
 
-    # 还在库约多少钱：未关袋批次的账面 × 单价
-    on_hand = conn.execute(
+    # 还在库约多少钱：未关袋/未关瓶的账面 × 单价
+    on_hand_beans = conn.execute(
         f"""SELECT COALESCE(SUM(
                 ({BALANCE_EXPR}) * (l.price / NULLIF(COALESCE(l.measured_g, l.nominal_g), 0))
             ), 0)
             FROM bean_lot l WHERE l.closed_at IS NULL AND l.price IS NOT NULL"""
     ).fetchone()[0]
+    on_hand_bottles = conn.execute(
+        """SELECT COALESCE(SUM(
+                (l.nominal_ml
+                 + COALESCE((SELECT SUM(delta_ml) FROM bottle_stock_event WHERE lot_id = l.id), 0)
+                 - COALESCE((SELECT SUM(amount_ml) FROM consumption_event
+                             WHERE bottle_lot_id = l.id AND voided_at IS NULL), 0)
+                ) * (l.price / NULLIF(l.nominal_ml, 0))
+            ), 0)
+            FROM bottle_lot l WHERE l.closed_at IS NULL AND l.price IS NOT NULL"""
+    ).fetchone()[0]
+    on_hand = on_hand_beans + on_hand_bottles
+
+    drink_where = "c.voided_at IS NULL AND c.kind = 'drink'"
+    drink_args: tuple = ()
+    if start:
+        drink_where += " AND c.at >= ?"
+        drink_args = (start,)
+    drink = conn.execute(
+        f"""SELECT COALESCE(SUM(c.amount_ml), 0),
+                   COUNT(*),
+                   COALESCE(SUM(c.amount_ml * COALESCE(c.unit_cost, 0)), 0),
+                   COALESCE(SUM(c.amount_ml * (COALESCE(b.abv, 0) / 100.0) * 0.789), 0)
+            FROM consumption_event c
+            LEFT JOIN bottle_lot l ON l.id = c.bottle_lot_id
+            LEFT JOIN bottle b ON b.id = l.bottle_id
+            WHERE {drink_where}""",
+        drink_args,
+    ).fetchone()
+    drinks_ml, drink_cups, drink_spent, alcohol_g = drink
 
     dose = average_dose(conn)
     if cups:
@@ -142,7 +175,10 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
         "beans_g": round(beans_g, 1),
         "cups": cups,
         "avg_dose": dose,
-        "spent": round(spent, 2),
+        "drinks_ml": round(drinks_ml, 1),
+        "drink_cups": drink_cups,
+        "alcohol_g": round(alcohol_g, 1),
+        "spent": round(spent + drink_spent, 2),
         "bought": round(bought, 2),
         "on_hand": round(on_hand, 2),
         "by_person": by_person(conn, where, args),

@@ -96,6 +96,23 @@ export const api = {
   deletePerson: (id) => req("DELETE", `/api/people/${id}`),
   profile: (id) => req("GET", `/api/people/${id}/profile`),
 
+  spirits: (scope = "stock") => req("GET", `/api/spirits?scope=${scope}`),
+  spirit: (id) => req("GET", `/api/spirits/${id}`),
+  createSpirit: (data) => req("POST", "/api/spirits", data),
+  updateSpirit: (id, data) => req("PATCH", `/api/spirits/${id}`, data),
+  addBottleLot: (id, data) => req("POST", `/api/spirits/${id}/lots`, data),
+  addBottlePhoto: (id, file, kind = "pack") => {
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("kind", kind);
+    return upload(`/api/spirits/${id}/photos`, fd);
+  },
+  openBottle: (lotId) => req("POST", `/api/bottle-lots/${lotId}/open`, {}),
+  adjustBottle: (lotId, ml, note) =>
+    req("POST", `/api/bottle-lots/${lotId}/adjust`, { actual_ml: ml, note }),
+  closeBottle: (lotId, note) => req("POST", `/api/bottle-lots/${lotId}/close`, { note }),
+  recordDrink: (data) => req("POST", "/api/drinks", data),
+
   stats: (period = "month") => req("GET", `/api/stats?period=${period}`),
   restock: () => req("GET", "/api/restock"),
 

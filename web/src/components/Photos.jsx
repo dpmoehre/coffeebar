@@ -12,9 +12,17 @@ const KINDS = [
   ["card", "豆卡"],
 ];
 
-const LABEL = Object.fromEntries(KINDS);
-
-export default function Photos({ beanId, photos, onDone, toast, oops }) {
+export default function Photos({
+  beanId,
+  photos,
+  onDone,
+  toast,
+  oops,
+  kinds = KINDS,
+  upload,
+}) {
+  const LABEL = Object.fromEntries(kinds);
+  const add = upload || ((file, kind) => api.addPhoto(beanId, file, kind));
   const [busy, setBusy] = useState(null);
   const [zoom, setZoom] = useState(null);
   const inputs = useRef({});
@@ -23,7 +31,7 @@ export default function Photos({ beanId, photos, onDone, toast, oops }) {
     if (!files?.length) return;
     setBusy(kind);
     try {
-      for (const f of files) await api.addPhoto(beanId, f, kind);
+      for (const f of files) await add(f, kind);
       toast(files.length > 1 ? `加了 ${files.length} 张` : "照片挂上了");
       onDone();
     } catch (e) {
@@ -39,7 +47,7 @@ export default function Photos({ beanId, photos, onDone, toast, oops }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="serif text-lg">照片</div>
         <div className="flex gap-2">
-          {KINDS.map(([kind, label]) => (
+          {kinds.map(([kind, label]) => (
             <label
               key={kind}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border

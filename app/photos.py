@@ -120,6 +120,36 @@ def delete_bean_photo(conn: sqlite3.Connection, photo_id: int) -> None:
     conn.execute("DELETE FROM bean_photo WHERE id = ?", (photo_id,))
 
 
+def attach_bottle_photo(conn: sqlite3.Connection, bottle_id: int, kind: str, raw: bytes, filename: str) -> dict:
+    if kind not in ("pack", "label"):
+        raise BadPhoto("只能是 pack（瓶盒）或 label（酒标）")
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO bottle_photo (bottle_id, kind, path, created_at) VALUES (?, ?, ?, ?)",
+        (bottle_id, kind, rel, db.now()),
+    )
+    return {"id": int(cur.lastrowid), "kind": kind, "path": rel, "url": f"/{rel}",
+            "thumb": thumb_url(rel)}
+
+
+def list_bottle_photos(conn: sqlite3.Connection, bottle_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, kind, path, created_at FROM bottle_photo WHERE bottle_id = ? ORDER BY created_at",
+        (bottle_id,),
+    ).fetchall()
+    return [
+        {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])} for r in rows
+    ]
+
+
+def delete_bottle_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute("SELECT path FROM bottle_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM bottle_photo WHERE id = ?", (photo_id,))
+
+
 def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,
                          note: str | None = None) -> dict:
     """补货条目的对照图：货架、截图、上次那袋都行。"""

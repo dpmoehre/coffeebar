@@ -46,6 +46,8 @@ ADDED_COLUMNS = [
 # key 是表名，值是「老库 DDL 里有这段就说明该重建了」。
 STALE_CHECKS = {
     "bean_photo": "kind IN ('pack', 'tray')",
+    # 老库 lot_id 非空且只指向 bean_lot，酒进同一张消耗表得放宽
+    "consumption_event": "lot_id       INTEGER NOT NULL REFERENCES bean_lot",
 }
 
 
@@ -81,6 +83,14 @@ def init_db(conn: sqlite3.Connection) -> None:
         ).fetchone()
         if row and stale in row["sql"]:
             _rebuild(conn, table)
+    # 重建表会带走旧索引；schema 再跑一遍把 IF NOT EXISTS 的索引补上
+    conn.executescript(SCHEMA.read_text(encoding="utf-8"))
+    # 新列上的索引不能写进 schema.sql 的第一遍执行——老库还没重建时列不存在
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(consumption_event)")}
+    if "bottle_lot_id" in cols:
+        conn.execute(
+            "CREATE INDEX IF NOT EXISTS idx_cons_blot ON consumption_event(bottle_lot_id)"
+        )
 
 
 def now() -> str:

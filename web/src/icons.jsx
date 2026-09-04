@@ -39,6 +39,13 @@ export const Cart = ({ className = "" }) => (
   </svg>
 );
 
+export const Glass = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M8 4h8l-1.2 7.2A3.8 3.8 0 0 1 11 15h0a3.8 3.8 0 0 1-3.8-3.8L8 4z" />
+    <path d="M12 15v4M9 20h6" />
+  </svg>
+);
+
 export const People = ({ className = "" }) => (
   <svg {...base} className={className}>
     <circle cx="9.5" cy="8.5" r="3.2" />

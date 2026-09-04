@@ -544,15 +544,20 @@ def void_consumption(conn: sqlite3.Connection, cons_id: int, reason: str | None 
         (ts, reason, cons_id),
     )
 
-    lot = get_lot(conn, row["lot_id"])
     compensated = False
-    if lot and lot["closed_at"]:
-        # 那袋已经结清过偏差，别去改过去；差额落在今天
-        conn.execute(
-            "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'adjust', ?, ?, ?)",
-            (lot["id"], -row["amount_g"], f"撤回已关袋的一笔 {row['amount_g']:g} g", ts),
-        )
-        compensated = True
+    if row["kind"] == "drink":
+        from . import spirits as spirits_mod
+
+        compensated = spirits_mod.void_drink_if_needed(conn, row, ts)
+    else:
+        lot = get_lot(conn, row["lot_id"])
+        if lot and lot["closed_at"]:
+            # 那袋已经结清过偏差，别去改过去；差额落在今天
+            conn.execute(
+                "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'adjust', ?, ?, ?)",
+                (lot["id"], -row["amount_g"], f"撤回已关袋的一笔 {row['amount_g']:g} g", ts),
+            )
+            compensated = True
 
     return {"id": cons_id, "voided_at": ts, "closed_lot_adjusted": compensated}
 
@@ -564,9 +569,16 @@ def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
         raise Conflict("没有这条记录")
     if not row["voided_at"]:
         raise Conflict("这条没有被撤回")
-    lot = get_lot(conn, row["lot_id"])
-    if lot and not lot["closed_at"] and row["amount_g"] > lot["balance_g"]:
-        raise Conflict("恢复后账面会变成负数，先盘点补重")
+    if row["kind"] == "drink":
+        from . import spirits as spirits_mod
+
+        lot = spirits_mod.get_lot(conn, row["bottle_lot_id"])
+        if lot and not lot["closed_at"] and row["amount_ml"] > lot["balance_ml"]:
+            raise Conflict("恢复后账面会变成负数，先盘点")
+    else:
+        lot = get_lot(conn, row["lot_id"])
+        if lot and not lot["closed_at"] and row["amount_g"] > lot["balance_g"]:
+            raise Conflict("恢复后账面会变成负数，先盘点补重")
     conn.execute(
         "UPDATE consumption_event SET voided_at = NULL, void_reason = NULL WHERE id = ?",
         (cons_id,),
@@ -594,6 +606,7 @@ def reassign_person(conn: sqlite3.Connection, cons_id: int, person: str | None) 
 def list_consumption(
     conn: sqlite3.Connection,
     bean_id: int | None = None,
+    bottle_id: int | None = None,
     person_id: int | None = None,
     limit: int = 50,
 ) -> list[dict]:
@@ -602,16 +615,25 @@ def list_consumption(
     if bean_id:
         where.append("l.bean_id = ?")
         args.append(bean_id)
+    if bottle_id:
+        where.append("bl.bottle_id = ?")
+        args.append(bottle_id)
     if person_id:
         where.append("c.person_id = ?")
         args.append(person_id)
     cur = conn.execute(
         f"""SELECT c.*, b.name AS bean_name, p.name AS person_name,
                    l.nominal_g, l.bought_on, l.closed_at AS lot_closed_at, s.seq AS lot_seq,
-                   (c.amount_g * COALESCE(c.unit_cost, 0)) AS cost
+                   sp.name AS spirit_name, bl.nominal_ml, bl.closed_at AS bottle_closed_at,
+                   CASE c.kind
+                     WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0))
+                     ELSE (c.amount_g * COALESCE(c.unit_cost, 0))
+                   END AS cost
             FROM consumption_event c
-            JOIN bean_lot l ON l.id = c.lot_id
-            JOIN bean b ON b.id = l.bean_id
+            LEFT JOIN bean_lot l ON l.id = c.lot_id
+            LEFT JOIN bean b ON b.id = l.bean_id
+            LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
+            LEFT JOIN bottle sp ON sp.id = bl.bottle_id
             LEFT JOIN person p ON p.id = c.person_id
             -- 和 list_lots 一样按买入顺序编号，日志里才说得清是哪一袋
             LEFT JOIN (SELECT id, ROW_NUMBER() OVER

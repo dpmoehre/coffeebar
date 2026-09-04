@@ -32,9 +32,11 @@ def client(monkeypatch):
     from app import db as db_mod
 
     importlib.reload(db_mod)
-    from app import store, stats, locks, main as main_mod
+    from app import store, stats, locks, photos, spirits, main as main_mod
 
+    importlib.reload(photos)
     importlib.reload(store)
+    importlib.reload(spirits)
     importlib.reload(stats)
     importlib.reload(locks)
     importlib.reload(main_mod)

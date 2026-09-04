@@ -2,17 +2,20 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Cart, Chart, CupMark, People } from "./icons.jsx";
+import { Bean, Cart, Chart, CupMark, Glass, People } from "./icons.jsx";
 import { useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
 import Beans from "./pages/Beans.jsx";
 import PeoplePage from "./pages/People.jsx";
 import Restock from "./pages/Restock.jsx";
+import SpiritCard from "./pages/SpiritCard.jsx";
+import Spirits from "./pages/Spirits.jsx";
 import Stats from "./pages/Stats.jsx";
 
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
+  { key: "spirits", label: "酒水", Icon: Glass },
   { key: "restock", label: "补货", Icon: Cart },
   { key: "stats", label: "统计", Icon: Chart },
   { key: "people", label: "画像", Icon: People },
@@ -21,6 +24,7 @@ const NAV = [
 export default function App() {
   const [page, setPage] = useState("beans");
   const [beanId, setBeanId] = useState(null);
+  const [spiritId, setSpiritId] = useState(null);
   const { toast, oops, node } = useToast();
   const [health, setHealth] = useState(null);
 
@@ -33,13 +37,24 @@ export default function App() {
 
   const openBean = useCallback((id) => {
     setBeanId(id);
+    setSpiritId(null);
     setPage("bean");
+  }, []);
+
+  const openSpirit = useCallback((id) => {
+    setSpiritId(id);
+    setBeanId(null);
+    setPage("spirit");
   }, []);
 
   const go = (key) => {
     setBeanId(null);
+    setSpiritId(null);
     setPage(key);
   };
+
+  const navOn = (key) =>
+    page === key || (key === "beans" && page === "bean") || (key === "spirits" && page === "spirit");
 
   if (health === "down") {
     return (
@@ -77,7 +92,7 @@ export default function App() {
                 key={key}
                 onClick={() => go(key)}
                 className={`rounded-xl p-2 ${
-                  page === key || (key === "beans" && page === "bean")
+                  navOn(key)
                     ? "bg-amber text-[#1a120a]"
                     : "text-muted"
                 }`}
@@ -90,7 +105,7 @@ export default function App() {
 
         <div className="hidden md:block">
           {NAV.map(({ key, label, Icon }) => {
-            const on = page === key || (key === "beans" && page === "bean");
+            const on = navOn(key);
             return (
               <button
                 key={key}
@@ -114,6 +129,10 @@ export default function App() {
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
         {page === "bean" && (
           <BeanCard id={beanId} onBack={() => go("beans")} toast={toast} oops={oops} />
+        )}
+        {page === "spirits" && <Spirits onOpen={openSpirit} toast={toast} oops={oops} />}
+        {page === "spirit" && (
+          <SpiritCard id={spiritId} onBack={() => go("spirits")} toast={toast} oops={oops} />
         )}
         {page === "restock" && <Restock onOpen={openBean} />}
         {page === "stats" && <Stats onOpenPerson={() => go("people")} />}
