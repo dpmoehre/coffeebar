@@ -2,11 +2,31 @@
 // 不要写 git / pytest / 文件名。日期倒序。
 // 注意：不要放进任何叫 data/ 的目录，仓库会忽略运行库。
 
+export function groupByDate(entries = CHANGELOG) {
+  const groups = [];
+  const seen = new Map();
+  for (const entry of entries) {
+    let g = seen.get(entry.date);
+    if (!g) {
+      g = { date: entry.date, items: [] };
+      seen.set(entry.date, g);
+      groups.push(g);
+    }
+    g.items.push(entry);
+  }
+  return groups;
+}
+
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "同一天的更新收进一张卡片",
+    notes: ["更新改回一列铺满。同一天的几条写在同一张卡片里。"],
+  },
+  {
+    date: "2026-09-06",
     title: "更新页铺满窗口",
-    notes: ["侧栏右边不再空一截，拉开窗口条目会跟着变宽；够宽时两列并排。"],
+    notes: ["侧栏右边不再空一截，拉开窗口条目会跟着变宽。"],
   },
   {
     date: "2026-09-06",
