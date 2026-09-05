@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, brew as brew_mod
-from . import db, locks, photos, spirits, stats, store
+from . import db, locks, photos, ratelimit, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -58,19 +58,51 @@ async def _bad_photo(request: Request, exc: photos.BadPhoto):
 # ── 账号 ────────────────────────────────────────────────────
 
 
+def _mail_or_url(to: str, subject: str, url: str, out: dict, key: str) -> None:
+    sent = auth.maybe_send(to, subject, f"点开这个链接（{auth.TOKEN_HOURS} 小时内有效）：\n{url}")
+    if not sent:
+        out[key] = url
+
+
 @app.post("/api/auth/register", status_code=201)
-def api_register(payload: dict, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+def api_register(
+    payload: dict,
+    request: Request,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    ratelimit.check(request, "register", 5)
     account = auth.register(conn, payload.get("email") or "", payload.get("password") or "")
     token = auth.issue_session(conn, account["id"])
-    auth.set_cookie(response, token)
-    return {"id": account["id"], "email": account["email"], "claimed": account["claimed"]}
+    auth.set_cookie(response, token, request)
+    out = {
+        "id": account["id"],
+        "email": account["email"],
+        "claimed": account["claimed"],
+        "email_verified": account["email_verified"],
+    }
+    if account.get("verify_token"):
+        _mail_or_url(
+            account["email"],
+            "验证 coffeebar 邮箱",
+            auth.link_for(request, "verify", account["verify_token"]),
+            out,
+            "verify_url",
+        )
+    return out
 
 
 @app.post("/api/auth/login")
-def api_login(payload: dict, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+def api_login(
+    payload: dict,
+    request: Request,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    ratelimit.check(request, "login", 5)
     account = auth.login(conn, payload.get("email") or "", payload.get("password") or "")
     token = auth.issue_session(conn, account["id"])
-    auth.set_cookie(response, token)
+    auth.set_cookie(response, token, request)
     return account
 
 
@@ -81,9 +113,67 @@ def api_logout(request: Request, response: Response, conn: sqlite3.Connection = 
     return {"ok": True}
 
 
+@app.post("/api/auth/forgot")
+def api_forgot(payload: dict, request: Request, conn: sqlite3.Connection = Depends(get_conn)):
+    ratelimit.check(request, "forgot", 5)
+    email = payload.get("email") or ""
+    reset_token = auth.request_reset(conn, email)
+    out = {"ok": True}
+    if reset_token:
+        _mail_or_url(
+            auth.normalize_email(email),
+            "重设 coffeebar 密码",
+            auth.link_for(request, "reset", reset_token),
+            out,
+            "reset_url",
+        )
+    return out
+
+
+@app.post("/api/auth/reset")
+def api_reset(payload: dict, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+    auth.reset_password(conn, payload.get("token") or "", payload.get("password") or "")
+    auth.clear_cookie(response)
+    return {"ok": True}
+
+
+@app.post("/api/auth/verify")
+def api_verify(
+    payload: dict,
+    request: Request,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    account = auth.verify_email(conn, payload.get("token") or "")
+    token = auth.issue_session(conn, account["id"])
+    auth.set_cookie(response, token, request)
+    return account
+
+
+@app.post("/api/auth/resend-verify")
+def api_resend_verify(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    ratelimit.check(request, "forgot", 5)
+    if account.get("email_verified"):
+        return {"ok": True, "email_verified": True}
+    verify_token = auth.issue_token(conn, account["id"], "verify")
+    out = {"ok": True, "email_verified": False}
+    _mail_or_url(
+        account["email"],
+        "验证 coffeebar 邮箱",
+        auth.link_for(request, "verify", verify_token),
+        out,
+        "verify_url",
+    )
+    return out
+
+
 @app.get("/api/me")
 def api_me(account: dict = Depends(current_account)):
-    return {"id": account["id"], "email": account["email"]}
+    return auth.public_account(account)
 
 
 # ── 豆子 ────────────────────────────────────────────────────

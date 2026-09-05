@@ -44,6 +44,8 @@ ADDED_COLUMNS = [
     ("bean", "owner_id", "INTEGER"),
     ("bottle", "owner_id", "INTEGER"),
     ("person", "owner_id", "INTEGER"),
+    # 老账号补列当已验证，免得小主机升级后全员变成「没验证」
+    ("account", "email_verified", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

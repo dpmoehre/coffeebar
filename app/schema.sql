@@ -7,11 +7,12 @@ PRAGMA foreign_keys = ON;
 -- ── 账号：每人一份私库。公共豆种以后另表，这一期先把归属立住 ──
 
 CREATE TABLE IF NOT EXISTS account (
-  id            INTEGER PRIMARY KEY AUTOINCREMENT,
-  email         TEXT    NOT NULL UNIQUE,
-  password_hash TEXT    NOT NULL,
-  created_at    TEXT    NOT NULL,
-  status        TEXT    NOT NULL DEFAULT 'active'
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  email          TEXT    NOT NULL UNIQUE,
+  password_hash  TEXT    NOT NULL,
+  email_verified INTEGER NOT NULL DEFAULT 0,
+  created_at     TEXT    NOT NULL,
+  status         TEXT    NOT NULL DEFAULT 'active'
 );
 
 CREATE TABLE IF NOT EXISTS auth_session (
@@ -21,6 +22,16 @@ CREATE TABLE IF NOT EXISTS auth_session (
   expires_at TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_session_account ON auth_session(account_id);
+
+CREATE TABLE IF NOT EXISTS auth_token (
+  token      TEXT    PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  purpose    TEXT    NOT NULL CHECK (purpose IN ('verify', 'reset')),
+  created_at TEXT    NOT NULL,
+  expires_at TEXT    NOT NULL,
+  used_at    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_token_account ON auth_token(account_id);
 
 -- ── 豆子：卡是品种，袋子是批次 ────────────────────────────────
 

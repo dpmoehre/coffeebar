@@ -1,11 +1,16 @@
 """账号与归属：A 看不到 B 的豆、酒、钱。"""
 
+import hashlib
+import secrets
+import tempfile
+
 from app import auth, spirits, store
 
 
 def test_register_and_me(client):
     me = client.get("/api/me").json()
     assert me["email"] == "test@coffeebar.local"
+    assert me["email_verified"] is True
 
 
 def test_beans_require_login(client):
@@ -60,3 +65,122 @@ def test_first_account_claims_orphans(conn):
     other = auth.register(conn, "other@coffeebar.local", "testpass1")
     assert other["claimed"] is False
     assert store.list_beans(conn, owner_id=other["id"]) == []
+
+
+def test_password_is_argon2(conn):
+    out = auth.register(conn, "hash@coffeebar.local", "testpass1")
+    row = conn.execute("SELECT password_hash FROM account WHERE id = ?", (out["id"],)).fetchone()
+    assert row["password_hash"].startswith("$argon2")
+
+
+def test_login_upgrades_pbkdf2(conn):
+    email = "old@coffeebar.local"
+    password = "testpass1"
+    salt = secrets.token_hex(16)
+    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), 200_000)
+    stored = f"pbkdf2_sha256$200000${salt}${dk.hex()}"
+    conn.execute(
+        "INSERT INTO account (email, password_hash, email_verified, created_at) VALUES (?, ?, 1, ?)",
+        (email, stored, "2026-01-01 00:00:00"),
+    )
+    auth.login(conn, email, password)
+    row = conn.execute("SELECT password_hash FROM account WHERE email = ?", (email,)).fetchone()
+    assert row["password_hash"].startswith("$argon2")
+    assert auth.check_password(password, row["password_hash"])
+
+
+def test_forgot_and_reset(client):
+    r = client.post("/api/auth/forgot", json={"email": "test@coffeebar.local"})
+    assert r.status_code == 200
+    url = r.json()["reset_url"]
+    token = url.split("reset=", 1)[1]
+    assert client.post("/api/auth/reset", json={"token": token, "password": "newpass12"}).status_code == 200
+    assert client.get("/api/me").status_code == 401
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "test@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "test@coffeebar.local", "password": "newpass12"},
+        ).status_code
+        == 200
+    )
+    reused = client.post("/api/auth/reset", json={"token": token, "password": "another99"})
+    assert reused.status_code == 400
+
+
+def test_forgot_unknown_email(client):
+    r = client.post("/api/auth/forgot", json={"email": "nobody@coffeebar.local"})
+    assert r.status_code == 200
+    assert r.json() == {"ok": True}
+
+
+def test_verify_email(client, monkeypatch):
+    monkeypatch.setattr("app.mail.configured", lambda: True)
+    monkeypatch.setattr("app.mail.send", lambda *a, **k: False)
+    client.post("/api/auth/logout")
+    r = client.post(
+        "/api/auth/register",
+        json={"email": "v@coffeebar.local", "password": "testpass1"},
+    )
+    assert r.status_code == 201
+    body = r.json()
+    assert body["email_verified"] is False
+    token = body["verify_url"].split("verify=", 1)[1]
+    v = client.post("/api/auth/verify", json={"token": token})
+    assert v.status_code == 200
+    assert v.json()["email_verified"] is True
+    assert client.get("/api/me").json()["email_verified"] is True
+    assert client.post("/api/auth/verify", json={"token": token}).status_code == 400
+
+
+def test_login_rate_limit(monkeypatch):
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    from app import db as db_mod
+    from app import main as main_mod
+    from app import ratelimit
+
+    tmp = tempfile.mkdtemp(prefix="coffeebar-rl-")
+    monkeypatch.setenv("COFFEEBAR_DATA", tmp)
+    monkeypatch.setenv("COFFEEBAR_RATE_LIMIT", "1")
+    importlib.reload(db_mod)
+    ratelimit._hits.clear()
+    importlib.reload(main_mod)
+
+    with TestClient(main_mod.app) as c:
+        assert (
+            c.post(
+                "/api/auth/register",
+                json={"email": "rl@coffeebar.local", "password": "testpass1"},
+            ).status_code
+            == 201
+        )
+        for i in range(5):
+            r = c.post(
+                "/api/auth/login",
+                json={"email": "rl@coffeebar.local", "password": "wrongwrong"},
+            )
+            assert r.status_code == 401, i
+        blocked = c.post(
+            "/api/auth/login",
+            json={"email": "rl@coffeebar.local", "password": "wrongwrong"},
+        )
+        assert blocked.status_code == 429
+
+
+def test_cookie_secure_when_forced(client, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_COOKIE_SECURE", "1")
+    r = client.post(
+        "/api/auth/login",
+        json={"email": "test@coffeebar.local", "password": "testpass1"},
+    )
+    assert r.status_code == 200
+    assert "secure" in r.headers.get("set-cookie", "").lower()

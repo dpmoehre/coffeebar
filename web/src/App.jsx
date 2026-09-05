@@ -68,17 +68,19 @@ export default function App() {
   const navOn = (key) =>
     page === key || (key === "beans" && page === "bean") || (key === "spirits" && page === "spirit");
 
-  if (health === null || (health === "ok" && me === undefined)) {
+  const gateLink =
+    typeof window !== "undefined" &&
+    (new URLSearchParams(window.location.search).get("verify") ||
+      new URLSearchParams(window.location.search).get("reset"));
+
+  if (health === null || (health === "ok" && me === undefined && !gateLink)) {
     return <p className="grid min-h-screen place-items-center text-muted">读取中…</p>;
   }
 
-  if (health === "ok" && me === null) {
+  if (health === "ok" && (me === null || gateLink)) {
     return (
       <>
-        <Gate
-          onIn={(user) => setMe(user)}
-          oops={oops}
-        />
+        <Gate onIn={setMe} oops={oops} toast={toast} />
         {node}
       </>
     );
@@ -114,7 +116,25 @@ export default function App() {
               咖啡 · 记录 · 发现
             </em>
             {me?.email && (
-              <div className="mt-2 hidden text-[11px] text-muted md:block">{me.email}</div>
+              <div className="mt-2 hidden text-[11px] text-muted md:block">
+                {me.email}
+                {me.email_verified === false && (
+                  <button
+                    className="mt-1 block text-amber underline"
+                    onClick={async () => {
+                      try {
+                        const out = await api.resendVerify();
+                        if (out.verify_url) window.location.href = out.verify_url;
+                        else toast("验证信已发出");
+                      } catch (e) {
+                        oops(e.message);
+                      }
+                    }}
+                  >
+                    邮箱还没验证，再发一封
+                  </button>
+                )}
+              </div>
             )}
           </div>
           <div className="ml-auto flex gap-1 md:hidden">
@@ -190,19 +210,76 @@ export default function App() {
   );
 }
 
-function Gate({ onIn, oops }) {
-  const [mode, setMode] = useState("login");
+function gateQuery() {
+  const q = new URLSearchParams(window.location.search);
+  return { verify: q.get("verify"), reset: q.get("reset") };
+}
+
+function clearGateQuery() {
+  window.history.replaceState({}, "", window.location.pathname || "/");
+}
+
+function Gate({ onIn, oops, toast }) {
+  const q = gateQuery();
+  const [mode, setMode] = useState(q.reset ? "reset" : q.verify ? "verify" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [password2, setPassword2] = useState("");
   const [busy, setBusy] = useState(false);
+  const [note, setNote] = useState("");
+  const [devLink, setDevLink] = useState("");
+
+  useEffect(() => {
+    if (mode !== "verify" || !q.verify) return;
+    setBusy(true);
+    api
+      .verify(q.verify)
+      .then((user) => {
+        clearGateQuery();
+        toast?.("邮箱已验证");
+        onIn(user);
+      })
+      .catch((e) => {
+        oops(e.message);
+        clearGateQuery();
+        setMode("login");
+      })
+      .finally(() => setBusy(false));
+  }, []);
 
   const submit = async () => {
     setBusy(true);
+    setNote("");
+    setDevLink("");
     try {
+      if (mode === "forgot") {
+        const out = await api.forgot(email);
+        setNote("如果这个邮箱有账号，就发了一封重设信。本机没配邮箱时，下面会直接出链接。");
+        if (out.reset_url) setDevLink(out.reset_url);
+        return;
+      }
+      if (mode === "reset") {
+        if (password !== password2) {
+          oops("两次密码不一样");
+          return;
+        }
+        await api.reset(q.reset, password);
+        clearGateQuery();
+        toast?.("密码已改，用新密码登录");
+        setPassword("");
+        setPassword2("");
+        setMode("login");
+        onIn(null);
+        return;
+      }
       const user =
         mode === "register"
           ? await api.register(email, password)
           : await api.login(email, password);
+      if (user.verify_url) {
+        toast?.("本机没配邮箱，打开验证链接即可");
+        setDevLink(user.verify_url);
+      }
       onIn(user);
     } catch (e) {
       oops(e.message);
@@ -211,46 +288,111 @@ function Gate({ onIn, oops }) {
     }
   };
 
+  const title = {
+    login: "登录 coffeebar",
+    register: "建一个账号",
+    forgot: "忘记密码",
+    reset: "设新密码",
+    verify: "正在验证邮箱…",
+  }[mode];
+  const sub = {
+    login: "每人一份私库。豆、酒、进价只给自己看。",
+    register: "第一个注册的人会接手这台机器上已有的豆和酒。",
+    forgot: "填注册时的邮箱。有这个账号就发重设链接。",
+    reset: "新密码至少 8 个字符。改完要重新登录。",
+    verify: "请稍等。",
+  }[mode];
+
+  const canSubmit =
+    mode === "forgot"
+      ? Boolean(email)
+      : mode === "reset"
+        ? password.length >= 8 && password === password2
+        : Boolean(email) && password.length >= 8;
+
   return (
     <div className="grid min-h-screen place-items-center p-8">
       <div className="w-full max-w-sm">
         <CupMark className="mx-auto h-12 w-12 text-amber" />
-        <h1 className="serif mt-4 text-center text-2xl">
-          {mode === "register" ? "建一个账号" : "登录 coffeebar"}
-        </h1>
-        <p className="mt-2 mb-6 text-center text-sm text-muted">
-          {mode === "register"
-            ? "第一个注册的人会接手这台机器上已有的豆和酒。"
-            : "每人一份私库。豆、酒、进价只给自己看。"}
-        </p>
-        <Field label="邮箱">
-          <Input
-            type="email"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="you@example.com"
-            autoFocus
-          />
-        </Field>
-        <div className="mt-3">
-          <Field label="密码" hint="至少 8 个字符">
+        <h1 className="serif mt-4 text-center text-2xl">{title}</h1>
+        <p className="mt-2 mb-6 text-center text-sm text-muted">{sub}</p>
+        {mode !== "reset" && mode !== "verify" && (
+          <Field label="邮箱">
             <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit()}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="you@example.com"
+              autoFocus
             />
           </Field>
-        </div>
-        <Btn className="mt-5 w-full justify-center" onClick={submit} disabled={busy || !email || password.length < 8}>
-          {mode === "register" ? "注册并进入" : "登录"}
-        </Btn>
-        <button
-          className="mt-4 w-full text-center text-sm text-amber underline"
-          onClick={() => setMode(mode === "register" ? "login" : "register")}
-        >
-          {mode === "register" ? "已有账号，去登录" : "还没有账号，注册一个"}
-        </button>
+        )}
+        {(mode === "login" || mode === "register" || mode === "reset") && (
+          <div className={mode === "reset" ? "" : "mt-3"}>
+            <Field label={mode === "reset" ? "新密码" : "密码"} hint="至少 8 个字符">
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && mode !== "reset" && submit()}
+              />
+            </Field>
+          </div>
+        )}
+        {mode === "reset" && (
+          <div className="mt-3">
+            <Field label="再输一次">
+              <Input
+                type="password"
+                value={password2}
+                onChange={(e) => setPassword2(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && submit()}
+              />
+            </Field>
+          </div>
+        )}
+        {mode !== "verify" && (
+          <Btn
+            className="mt-5 w-full justify-center"
+            onClick={submit}
+            disabled={busy || !canSubmit}
+          >
+            {mode === "register" ? "注册并进入" : mode === "forgot" ? "发送重设链接" : mode === "reset" ? "保存新密码" : "登录"}
+          </Btn>
+        )}
+        {note && <p className="mt-4 text-center text-sm text-muted">{note}</p>}
+        {devLink && (
+          <a className="mt-3 block text-center text-sm text-amber underline" href={devLink}>
+            本机没配邮箱，点这里继续
+          </a>
+        )}
+        {mode === "login" && (
+          <button
+            className="mt-4 w-full text-center text-sm text-muted underline hover:text-amber"
+            onClick={() => setMode("forgot")}
+          >
+            忘记密码
+          </button>
+        )}
+        {(mode === "login" || mode === "register" || mode === "forgot") && (
+          <button
+            className="mt-3 w-full text-center text-sm text-amber underline"
+            onClick={() => setMode(mode === "register" ? "login" : "register")}
+          >
+            {mode === "register" ? "已有账号，去登录" : "还没有账号，注册一个"}
+          </button>
+        )}
+        {(mode === "forgot" || mode === "reset") && (
+          <button
+            className="mt-3 w-full text-center text-sm text-amber underline"
+            onClick={() => {
+              clearGateQuery();
+              setMode("login");
+            }}
+          >
+            回到登录
+          </button>
+        )}
       </div>
     </div>
   );

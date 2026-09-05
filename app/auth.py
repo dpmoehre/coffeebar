@@ -4,26 +4,35 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import os
 import secrets
 import sqlite3
 from datetime import timedelta
 
+from argon2 import PasswordHasher
+from argon2.exceptions import VerifyMismatchError
 from fastapi import HTTPException, Request, Response
 
-from . import db
+from . import db, mail
 
 COOKIE = "coffeebar_auth"
 ITERATIONS = 200_000
 SESSION_DAYS = 30
+TOKEN_HOURS = 2
+HASHER = PasswordHasher()
 
 
 def hash_password(password: str) -> str:
-    salt = secrets.token_hex(16)
-    dk = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(salt), ITERATIONS)
-    return f"pbkdf2_sha256${ITERATIONS}${salt}${dk.hex()}"
+    return HASHER.hash(password)
 
 
 def check_password(password: str, stored: str) -> bool:
+    if stored.startswith("$argon2"):
+        try:
+            HASHER.verify(stored, password)
+            return True
+        except (VerifyMismatchError, ValueError):
+            return False
     try:
         algo, iters, salt, digest = stored.split("$", 3)
     except ValueError:
@@ -34,12 +43,29 @@ def check_password(password: str, stored: str) -> bool:
     return hmac.compare_digest(dk.hex(), digest)
 
 
+def needs_rehash(stored: str) -> bool:
+    if not stored.startswith("$argon2"):
+        return True
+    try:
+        return HASHER.check_needs_rehash(stored)
+    except Exception:
+        return False
+
+
 def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
 def public_account(row: sqlite3.Row | dict) -> dict:
-    return {"id": row["id"], "email": row["email"]}
+    try:
+        verified = row["email_verified"]
+    except (KeyError, IndexError):
+        verified = 1
+    return {
+        "id": row["id"],
+        "email": row["email"],
+        "email_verified": bool(verified),
+    }
 
 
 def get_account(conn: sqlite3.Connection, account_id: int) -> dict | None:
@@ -56,14 +82,26 @@ def register(conn: sqlite3.Connection, email: str, password: str) -> dict:
     if conn.execute("SELECT id FROM account WHERE email = ?", (email,)).fetchone():
         raise HTTPException(409, "这个邮箱已经注册过了")
     first = conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 0
+    # 没配 SMTP 的本机：注册即视为已验证，不然小主机没法用
+    verified = 0 if mail.configured() else 1
     cur = conn.execute(
-        "INSERT INTO account (email, password_hash, created_at) VALUES (?, ?, ?)",
-        (email, hash_password(password), db.now()),
+        """INSERT INTO account (email, password_hash, email_verified, created_at)
+           VALUES (?, ?, ?, ?)""",
+        (email, hash_password(password), verified, db.now()),
     )
     account_id = int(cur.lastrowid)
     if first:
         claim_orphans(conn, account_id)
-    return {"id": account_id, "email": email, "claimed": first}
+    verify_token = None
+    if not verified:
+        verify_token = issue_token(conn, account_id, "verify")
+    return {
+        "id": account_id,
+        "email": email,
+        "claimed": first,
+        "email_verified": bool(verified),
+        "verify_token": verify_token,
+    }
 
 
 def login(conn: sqlite3.Connection, email: str, password: str) -> dict:
@@ -71,6 +109,11 @@ def login(conn: sqlite3.Connection, email: str, password: str) -> dict:
     row = conn.execute("SELECT * FROM account WHERE email = ?", (email,)).fetchone()
     if not row or row["status"] != "active" or not check_password(password, row["password_hash"]):
         raise HTTPException(401, "邮箱或密码不对")
+    if needs_rehash(row["password_hash"]):
+        conn.execute(
+            "UPDATE account SET password_hash = ? WHERE id = ?",
+            (hash_password(password), row["id"]),
+        )
     return public_account(row)
 
 
@@ -97,6 +140,74 @@ def drop_session(conn: sqlite3.Connection, token: str | None) -> None:
         conn.execute("DELETE FROM auth_session WHERE token = ?", (token,))
 
 
+def drop_all_sessions(conn: sqlite3.Connection, account_id: int) -> None:
+    conn.execute("DELETE FROM auth_session WHERE account_id = ?", (account_id,))
+
+
+def issue_token(conn: sqlite3.Connection, account_id: int, purpose: str) -> str:
+    token = secrets.token_urlsafe(32)
+    now = db.now()
+    expires = (db.parse(now) + timedelta(hours=TOKEN_HOURS)).replace(microsecond=0).isoformat(sep=" ")
+    conn.execute(
+        """INSERT INTO auth_token (token, account_id, purpose, created_at, expires_at)
+           VALUES (?, ?, ?, ?, ?)""",
+        (token, account_id, purpose, now, expires),
+    )
+    return token
+
+
+def consume_token(conn: sqlite3.Connection, token: str, purpose: str) -> int:
+    row = conn.execute("SELECT * FROM auth_token WHERE token = ?", (token,)).fetchone()
+    if (
+        not row
+        or row["purpose"] != purpose
+        or row["used_at"]
+        or row["expires_at"] <= db.now()
+    ):
+        raise HTTPException(400, "链接无效或过期了，再要一封")
+    conn.execute("UPDATE auth_token SET used_at = ? WHERE token = ?", (db.now(), token))
+    return int(row["account_id"])
+
+
+def request_reset(conn: sqlite3.Connection, email: str) -> str | None:
+    """邮箱不存在也当成功，免得被人扫号。有账号才发 token。"""
+    email = normalize_email(email)
+    row = conn.execute("SELECT id FROM account WHERE email = ? AND status = 'active'", (email,)).fetchone()
+    if not row:
+        return None
+    return issue_token(conn, row["id"], "reset")
+
+
+def reset_password(conn: sqlite3.Connection, token: str, password: str) -> None:
+    if len(password) < 8:
+        raise HTTPException(400, "密码至少 8 个字符")
+    account_id = consume_token(conn, token, "reset")
+    conn.execute(
+        "UPDATE account SET password_hash = ? WHERE id = ?",
+        (hash_password(password), account_id),
+    )
+    drop_all_sessions(conn, account_id)
+
+
+def verify_email(conn: sqlite3.Connection, token: str) -> dict:
+    account_id = consume_token(conn, token, "verify")
+    conn.execute("UPDATE account SET email_verified = 1 WHERE id = ?", (account_id,))
+    row = conn.execute("SELECT * FROM account WHERE id = ?", (account_id,)).fetchone()
+    return public_account(row)
+
+
+def link_for(request: Request, purpose: str, token: str) -> str:
+    base = (os.environ.get("COFFEEBAR_PUBLIC_URL") or str(request.base_url)).rstrip("/")
+    return f"{base}/?{purpose}={token}"
+
+
+def maybe_send(to: str, subject: str, body: str) -> bool:
+    if mail.send(to, subject, body):
+        return True
+    print(f"[coffeebar] 没配 SMTP，邮件没发出去：{subject} → {to}\n{body}")
+    return False
+
+
 def account_from_token(conn: sqlite3.Connection, token: str | None) -> dict | None:
     if not token:
         return None
@@ -109,13 +220,20 @@ def account_from_token(conn: sqlite3.Connection, token: str | None) -> dict | No
     return dict(row) if row else None
 
 
-def set_cookie(response: Response, token: str) -> None:
+def cookie_secure(request: Request | None = None) -> bool:
+    if os.environ.get("COFFEEBAR_COOKIE_SECURE") == "1":
+        return True
+    return bool(request and request.url.scheme == "https")
+
+
+def set_cookie(response: Response, token: str, request: Request | None = None) -> None:
     response.set_cookie(
         COOKIE,
         token,
         max_age=SESSION_DAYS * 86400,
         httponly=True,
         samesite="lax",
+        secure=cookie_secure(request),
         path="/",
     )
 

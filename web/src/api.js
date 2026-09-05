@@ -60,6 +60,10 @@ export const api = {
   register: (email, password) => req("POST", "/api/auth/register", { email, password }),
   login: (email, password) => req("POST", "/api/auth/login", { email, password }),
   logout: () => req("POST", "/api/auth/logout", {}),
+  forgot: (email) => req("POST", "/api/auth/forgot", { email }),
+  reset: (token, password) => req("POST", "/api/auth/reset", { token, password }),
+  verify: (token) => req("POST", "/api/auth/verify", { token }),
+  resendVerify: () => req("POST", "/api/auth/resend-verify", {}),
 
   beans: (scope = "stock") => req("GET", `/api/beans?scope=${scope}`),
   bean: (id) => req("GET", `/api/beans/${id}`),

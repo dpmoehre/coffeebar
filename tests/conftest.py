@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+# 套件里会连续注册/登录，默认限流会误伤。单独测限流的用例再打开。
+os.environ["COFFEEBAR_RATE_LIMIT"] = "0"
+
 
 @pytest.fixture()
 def conn(monkeypatch):

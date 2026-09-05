@@ -10,6 +10,7 @@ dependencies = [
     "python-multipart>=0.0.20",
     "pillow>=11.0",
     "pillow-heif>=0.21",
+    "argon2-cffi>=25.1.0",
 ]
 
 [project.scripts]
