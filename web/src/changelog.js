@@ -19,7 +19,15 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
-    date: "2026-09-05",
+    date: "2026-09-06",
+    title: "酒单倒酒能点选谁喝的，还能多选",
+    notes: [
+      "出品倒一杯时，人名用芯片点选，可以多选。",
+      "多选就是一人一杯：记几巡、库存也按人数扣。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "云上要邀请码才能注册",
     notes: [
       "公网打开后，注册会多一栏邀请码，避免路人先注册接手豆和酒。",

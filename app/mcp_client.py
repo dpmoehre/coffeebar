@@ -392,9 +392,12 @@ class Client:
         person: str | None = None,
         lines_json: str | None = None,
         note: str | None = None,
+        people_json: str | None = None,
     ):
         payload: dict = {"menu_item_id": menu_item_id}
-        if person:
+        if people_json:
+            payload["people"] = json.loads(people_json)
+        elif person:
             payload["person"] = person
         if note:
             payload["note"] = note

@@ -123,6 +123,44 @@ def test_old_card_pour_still_one_cup(conn):
     assert stats.summary(conn, "all")["drink_cups"] == 2
 
 
+def test_multi_people_is_one_cup_each(conn):
+    bottle_id, lot_id = make_spirit(conn, name="【测试】金酒", ml=700, price=140, abv=40)
+    item = _item(conn, bottle_id)
+    out = menu.pour(
+        conn,
+        {
+            "menu_item_id": item["id"],
+            "people": ["丁瀚舟", "戚浩辰"],
+            "lines": [{"spirit_id": bottle_id, "lot_id": lot_id, "amount_ml": 30}],
+        },
+    )
+    assert out["cups"] == 2
+    assert len(out["serves"]) == 2
+    assert {s["person"] for s in out["serves"]} == {"丁瀚舟", "戚浩辰"}
+    assert out["amount_ml"] == 60
+    assert spirits.get_lot(conn, lot_id)["balance_ml"] == 640
+    assert stats.summary(conn, "all")["drink_cups"] == 2
+
+
+def test_multi_people_refuses_if_not_enough_for_all(conn):
+    bottle_id, lot_id = make_spirit(conn, name="【测试】金酒", ml=50, price=20, abv=40)
+    item = _item(conn, bottle_id)
+    try:
+        menu.pour(
+            conn,
+            {
+                "menu_item_id": item["id"],
+                "people": ["丁瀚舟", "戚浩辰"],
+                "lines": [{"spirit_id": bottle_id, "lot_id": lot_id, "amount_ml": 30}],
+            },
+        )
+        raise AssertionError("should refuse")
+    except store.Conflict as exc:
+        assert "2 人" in str(exc)
+    assert spirits.get_lot(conn, lot_id)["balance_ml"] == 50
+    assert stats.summary(conn, "all")["drink_cups"] == 0
+
+
 def test_unlist_hidden_from_listed_only(conn):
     bottle_id, _ = make_spirit(conn)
     item = _item(conn, bottle_id)

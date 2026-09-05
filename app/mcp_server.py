@@ -579,9 +579,15 @@ def update_recipe(
 
 
 @mcp.tool()
-def pour_menu(menu_item_id: int, person: str | None = None, lines_json: str | None = None, note: str | None = None) -> Any:
-    """从酒单倒一巡。lines_json 可改实际毫升和 lot_id。多瓶未关不自挑。撤回整巡用 void_consumption。"""
-    return _call(client().pour_menu, menu_item_id, person, lines_json, note)
+def pour_menu(
+    menu_item_id: int,
+    person: str | None = None,
+    lines_json: str | None = None,
+    note: str | None = None,
+    people_json: str | None = None,
+) -> Any:
+    """从酒单倒酒。people_json 是人名数组，多选一人一杯。lines_json 可改毫升和 lot_id。多瓶未关不自挑。撤回整巡用 void_consumption。"""
+    return _call(client().pour_menu, menu_item_id, person, lines_json, note, people_json)
 
 
 # ── 统计 / 日历 / 地图 / 出表 ──────────────────────────────

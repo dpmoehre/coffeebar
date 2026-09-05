@@ -461,14 +461,27 @@ function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
   );
 }
 
+function lastPeople() {
+  try {
+    const raw = JSON.parse(localStorage.getItem("coffeebar-last-people") || "[]");
+    if (Array.isArray(raw)) return raw.filter((x) => typeof x === "string" && x);
+  } catch {
+    /* ignore */
+  }
+  const one = localStorage.getItem("coffeebar-last-person");
+  return one ? [one] : [];
+}
+
 function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone }) {
-  const [who, setWho] = useState("");
+  const [picked, setPicked] = useState([]);
+  const [draft, setDraft] = useState("");
   const [rows, setRows] = useState([]);
   const [needs, setNeeds] = useState(null);
 
   useEffect(() => {
     if (!item) return;
-    setWho(localStorage.getItem("coffeebar-last-person") || "");
+    setPicked(lastPeople());
+    setDraft("");
     setNeeds(null);
     setRows(
       (item.lines || []).map((ln) => ({
@@ -484,12 +497,30 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
 
   if (!item) return null;
 
+  const names = [...new Set([...people.map((p) => p.name), ...picked])];
+  const cups = Math.max(picked.length, 1);
+
+  function toggle(name) {
+    setPicked((cur) => (cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name]));
+  }
+
+  function addDraft() {
+    const n = draft.trim();
+    if (!n) return;
+    setPicked((cur) => (cur.includes(n) ? cur : [...cur, n]));
+    setDraft("");
+  }
+
   return (
     <Modal
       open={!!item}
       onClose={onClose}
-      title={`倒一杯 · ${item.name}`}
-      sub={item.kind === "neat" ? "纯饮，毫升按这次实际倒的填。" : "按配方预填，每支都能改。"}
+      title={`${cups > 1 ? `倒 ${cups} 杯` : "倒一杯"} · ${item.name}`}
+      sub={
+        item.kind === "neat"
+          ? "纯饮，毫升按这次实际倒的填。多选人名就是一人一杯。"
+          : "按配方预填，每支都能改。多选人名就是一人一杯。"
+      }
       footer={
         <>
           <Btn variant="ghost" onClick={onClose}>
@@ -501,7 +532,7 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
               try {
                 const out = await api.pourMenu({
                   menu_item_id: item.id,
-                  person: who.trim() || undefined,
+                  people: picked,
                   lines: rows.map((r) => ({
                     spirit_id: r.spirit_id,
                     amount_ml: Number(r.amount_ml),
@@ -517,9 +548,12 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
                   oops(out.error);
                   return;
                 }
-                if (who.trim()) localStorage.setItem("coffeebar-last-person", who.trim());
+                localStorage.setItem("coffeebar-last-people", JSON.stringify(picked));
+                if (picked[0]) localStorage.setItem("coffeebar-last-person", picked[0]);
+                const who = picked.length ? picked.join("、") : "没记谁";
+                const n = out.cups || out.serves?.length || 1;
                 toast(
-                  `${who.trim() || "没记谁"} · ${item.name} · ${out.amount_ml} ml${
+                  `${who} · ${item.name} · ${n} 杯 · ${out.amount_ml} ml${
                     out.cost ? ` · ${money(out.cost)}` : ""
                   }`
                 );
@@ -529,27 +563,46 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
               }
             }}
           >
-            记下并扣库存
+            {cups > 1 ? `记下 ${cups} 杯并扣库存` : "记下并扣库存"}
           </Btn>
         </>
       }
     >
       <div className="space-y-3">
-        <Field label="谁喝的">
-          <Input
-            list="menu-people"
-            value={who}
-            onChange={(e) => setWho(e.target.value)}
-            placeholder="可以空着"
-          />
-          <datalist id="menu-people">
-            {people.map((p) => (
-              <option key={p.id} value={p.name} />
-            ))}
-          </datalist>
+        <Field label="谁喝的" hint="点名字就能选，可以多选；多选是一人一杯。也可以空着。">
+          <div className="flex gap-2">
+            <Input
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") {
+                  e.preventDefault();
+                  addDraft();
+                }
+              }}
+              placeholder="新名字回车加上"
+            />
+            <Btn variant="ghost" disabled={!draft.trim()} onClick={addDraft}>
+              加上
+            </Btn>
+          </div>
         </Field>
-        {rows.map((r) => (
-          <div key={r.spirit_id} className="rounded-xl border border-line p-3">
+        {names.length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {names.map((name) => (
+              <Chip key={name} on={picked.includes(name)} onClick={() => toggle(name)}>
+                {name}
+              </Chip>
+            ))}
+          </div>
+        )}
+        {picked.length > 1 && (
+          <p className="m-0 text-[13px] text-muted">
+            已选 {picked.length} 人，按一人一杯记 {picked.length} 巡，库存也按 {picked.length} 倍扣。
+          </p>
+        )}
+        {rows.map((r, i) => (
+          <div key={`${r.spirit_id}-${i}`} className="rounded-xl border border-line p-3">
             <button
               type="button"
               className="text-sm text-amber underline"
@@ -566,7 +619,7 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
                   value={r.amount_ml}
                   onChange={(e) =>
                     setRows((cur) =>
-                      cur.map((x) => (x.spirit_id === r.spirit_id ? { ...x, amount_ml: e.target.value } : x))
+                      cur.map((x, j) => (j === i ? { ...x, amount_ml: e.target.value } : x))
                     )
                   }
                 />
@@ -580,9 +633,7 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
                 <Select
                   value={r.lot_id}
                   onChange={(e) =>
-                    setRows((cur) =>
-                      cur.map((x) => (x.spirit_id === r.spirit_id ? { ...x, lot_id: e.target.value } : x))
-                    )
+                    setRows((cur) => cur.map((x, j) => (j === i ? { ...x, lot_id: e.target.value } : x)))
                   }
                 >
                   <option value="">先选一瓶，我不自己挑</option>

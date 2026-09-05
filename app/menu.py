@@ -277,59 +277,30 @@ def _pick_lot(conn: sqlite3.Connection, spirit_id: int, lot_id: int | None) -> d
     return lots[0]
 
 
-def pour(
-    conn: sqlite3.Connection,
-    data: dict,
-    *,
-    session_id: str = "anon",
-    source: str = "web",
-) -> dict:
-    """从酒单倒一巡。lines 可改实际毫升。多瓶未关不自挑。有锁整巡不写。"""
-    item = get_item(conn, int(data["menu_item_id"]), data.get("owner_id"))
-    if not item:
-        raise store.Conflict("没有这条酒单")
-    wanted = {ln["spirit_id"]: ln for ln in item["lines"]}
-    incoming = data.get("lines") or []
-    if not incoming:
-        incoming = [{"spirit_id": ln["spirit_id"], "amount_ml": ln["amount_ml"]} for ln in item["lines"]]
-    by_spirit: dict[int, dict] = {}
-    for ln in incoming:
-        sid = int(ln["spirit_id"])
-        if sid not in wanted:
-            raise store.Conflict("这巡没有这支基酒")
-        by_spirit[sid] = ln
-    missing = [wanted[s]["spirit_name"] for s in wanted if s not in by_spirit]
-    if missing:
-        raise store.Conflict("还没写用量：" + "、".join(missing))
+def _guests(data: dict) -> list[dict]:
+    """倒酒对象。people 多选 = 一人一杯；空着仍记 1 巡、没记谁。"""
+    raw = data.get("people")
+    if isinstance(raw, str):
+        raw = [x.strip() for x in raw.split(",") if x.strip()]
+    if isinstance(raw, list) and raw:
+        guests = []
+        for x in raw:
+            if x in (None, ""):
+                continue
+            if isinstance(x, int):
+                guests.append({"person_id": x})
+            else:
+                guests.append({"person": str(x).strip()})
+        if guests:
+            return guests
+    if data.get("person_id"):
+        return [{"person_id": data["person_id"]}]
+    if data.get("person"):
+        return [{"person": data["person"]}]
+    return [{}]
 
-    needs = []
-    resolved = []
-    for sid, spec in wanted.items():
-        raw = by_spirit[sid]
-        amount = float(raw.get("amount_ml") or 0)
-        if amount <= 0:
-            raise store.Conflict(f"{spec['spirit_name']} 的毫升要大于 0")
-        picked = _pick_lot(conn, sid, raw.get("lot_id"))
-        if isinstance(picked, dict) and picked.get("error"):
-            needs.append(picked)
-            continue
-        if amount > picked["balance_ml"]:
-            raise store.Conflict(
-                f"{spec['spirit_name']} 只剩 {picked['balance_ml']:.0f} ml，不够 {amount:g} ml。"
-                "换一瓶、改用量，或先盘点"
-            )
-        resolved.append((spec, amount, picked))
-    if needs:
-        return {"error": "有多瓶未关，请指定 lot_id，我不自己挑", "needs": needs}
 
-    bottles = {spec["spirit_id"] for spec, _, _ in resolved}
-    for bid in bottles:
-        locks.check(conn, f"bottle:{bid}", session_id, source)
-
-    person_id = data.get("person_id") or store.ensure_person(
-        conn, data.get("person"), data.get("owner_id")
-    )
-    ts = data.get("at") or db.now()
+def _write_serve(conn: sqlite3.Connection, item: dict, data: dict, person_id, ts: str, resolved: list) -> dict:
     cur = conn.execute(
         """INSERT INTO drink_serve
              (owner_id, kind, menu_item_id, recipe_id, person_id, name, note, at)
@@ -346,7 +317,6 @@ def pour(
         ),
     )
     serve_id = int(cur.lastrowid)
-    events = []
     for spec, amount, lot in resolved:
         ev = spirits.record_drink(
             conn,
@@ -359,15 +329,81 @@ def pour(
                 "at": ts,
             },
         )
-        conn.execute(
-            "UPDATE consumption_event SET serve_id = ? WHERE id = ?", (serve_id, ev["id"])
-        )
-        ev["serve_id"] = serve_id
-        ev["spirit_id"] = spec["spirit_id"]
-        ev["spirit_name"] = spec["spirit_name"]
-        events.append(ev)
-
+        conn.execute("UPDATE consumption_event SET serve_id = ? WHERE id = ?", (serve_id, ev["id"]))
     return get_serve(conn, serve_id)
+
+
+def pour(
+    conn: sqlite3.Connection,
+    data: dict,
+    *,
+    session_id: str = "anon",
+    source: str = "web",
+) -> dict:
+    """从酒单倒一巡。多选人就是一人一杯。lines 可改实际毫升。多瓶未关不自挑。有锁整巡不写。"""
+    item = get_item(conn, int(data["menu_item_id"]), data.get("owner_id"))
+    if not item:
+        raise store.Conflict("没有这条酒单")
+    guests = _guests(data)
+    cups = len(guests)
+    incoming = data.get("lines") or []
+    if not incoming:
+        incoming = [{"spirit_id": ln["spirit_id"], "amount_ml": ln["amount_ml"]} for ln in item["lines"]]
+    if len(incoming) != len(item["lines"]):
+        raise store.Conflict("材料和配方对不上")
+
+    needs = []
+    resolved = []
+    remaining: dict[int, float] = {}
+    for spec, raw in zip(item["lines"], incoming):
+        if int(raw["spirit_id"]) != spec["spirit_id"]:
+            raise store.Conflict("材料和配方对不上")
+        amount = float(raw.get("amount_ml") or 0)
+        if amount <= 0:
+            raise store.Conflict(f"{spec['spirit_name']} 的毫升要大于 0")
+        picked = _pick_lot(conn, spec["spirit_id"], raw.get("lot_id"))
+        if isinstance(picked, dict) and picked.get("error"):
+            needs.append(picked)
+            continue
+        need = amount * cups
+        left = remaining.get(picked["id"], picked["balance_ml"])
+        if need > left:
+            who = f"{cups} 人 × {amount:g} ml" if cups > 1 else f"{amount:g} ml"
+            raise store.Conflict(
+                f"{spec['spirit_name']} 只剩 {left:.0f} ml，不够 {who}。"
+                "换一瓶、改用量，或先盘点"
+            )
+        remaining[picked["id"]] = left - need
+        resolved.append((spec, amount, picked))
+    if needs:
+        return {"error": "有多瓶未关，请指定 lot_id，我不自己挑", "needs": needs}
+
+    bottles = {spec["spirit_id"] for spec, _, _ in resolved}
+    for bid in bottles:
+        locks.check(conn, f"bottle:{bid}", session_id, source)
+
+    ts = data.get("at") or db.now()
+    serves = []
+    for guest in guests:
+        person_id = guest.get("person_id") or store.ensure_person(
+            conn, guest.get("person"), data.get("owner_id")
+        )
+        serves.append(_write_serve(conn, item, data, person_id, ts, resolved))
+
+    first = serves[0]
+    if len(serves) == 1:
+        return first
+    total_ml = round(sum(s.get("amount_ml") or 0 for s in serves), 1)
+    total_cost = round(sum(s.get("cost") or 0 for s in serves), 2)
+    return {
+        "cups": len(serves),
+        "serves": serves,
+        "kind": first["kind"],
+        "name": first["name"],
+        "amount_ml": total_ml,
+        "cost": total_cost or None,
+        "at": first.get("at"),
+    }
 
 
 def get_serve(conn: sqlite3.Connection, serve_id: int) -> dict | None:
