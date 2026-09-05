@@ -2,7 +2,8 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
-import { Chip, Empty, Panel, money } from "../ui.jsx";
+import { Download } from "../icons.jsx";
+import { Btn, Chip, Empty, Panel, money } from "../ui.jsx";
 
 const PERIODS = [
   ["week", "本周"],
@@ -11,9 +12,22 @@ const PERIODS = [
   ["all", "全部"],
 ];
 
-export default function Stats() {
+export default function Stats({ toast, oops }) {
   const [period, setPeriod] = useState("month");
   const [s, setS] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  const exportNow = async () => {
+    setBusy(true);
+    try {
+      await api.exportZip(period);
+      toast?.("表格已下载");
+    } catch (e) {
+      oops?.(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   useEffect(() => {
     setS(null);
@@ -24,11 +38,17 @@ export default function Stats() {
 
   return (
     <>
-      <header>
-        <h1 className="serif m-0 text-3xl font-semibold">统计</h1>
-        <p className="mt-2 mb-0 text-muted">
-          先看数字：消耗了多少豆、多少酒、花了多少钱。
-        </p>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="serif m-0 text-3xl font-semibold">统计</h1>
+          <p className="mt-2 mb-0 text-muted">
+            先看数字：消耗了多少豆、多少酒、花了多少钱。
+          </p>
+        </div>
+        <Btn variant="ghost" onClick={exportNow} disabled={busy}>
+          <Download className="h-4 w-4" />
+          出表 CSV
+        </Btn>
       </header>
 
       <div className="mt-5 flex flex-wrap gap-2">

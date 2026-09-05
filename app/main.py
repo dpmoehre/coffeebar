@@ -4,14 +4,15 @@ from __future__ import annotations
 
 import sqlite3
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, brew as brew_mod
-from . import db, locks, photos, places, ratelimit, spirits, stats, store
+from . import db, ledger, locks, photos, places, ratelimit, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -832,6 +833,67 @@ def api_restock(
     account: dict = Depends(current_account),
 ):
     return {"items": stats.restock_list(conn, owner_id=account["id"])}
+
+
+@app.get("/api/calendar")
+def api_calendar(
+    year: int | None = None,
+    month: int | None = None,
+    person_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    now = db.parse(db.now())
+    y = year or now.year
+    m = month or now.month
+    if y < 2000 or y > 2100 or m < 1 or m > 12:
+        raise HTTPException(400, "年月不对")
+    if person_id is not None:
+        row = conn.execute(
+            "SELECT id FROM person WHERE id = ? AND owner_id = ?",
+            (person_id, account["id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "没有这个人")
+    return ledger.month(conn, y, m, account["id"], person_id)
+
+
+@app.get("/api/calendar/day")
+def api_calendar_day(
+    date: str,
+    person_id: int | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    try:
+        datetime.strptime(date, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(400, "日期不对")
+    if person_id is not None:
+        row = conn.execute(
+            "SELECT id FROM person WHERE id = ? AND owner_id = ?",
+            (person_id, account["id"]),
+        ).fetchone()
+        if not row:
+            raise HTTPException(404, "没有这个人")
+    return ledger.day(conn, date, account["id"], person_id)
+
+
+@app.get("/api/export")
+def api_export(
+    period: str = "month",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    if period not in ("week", "month", "year", "all"):
+        raise HTTPException(400, "期间不对")
+    raw = ledger.export_zip(conn, account["id"], period)
+    name = f"coffeebar-{period}.zip"
+    return Response(
+        content=raw,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
 
 
 # ── 写锁 ────────────────────────────────────────────────────

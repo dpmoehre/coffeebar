@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { Plus } from "../icons.jsx";
 import { Bar, Btn, Chip, Empty, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
 
-export default function People({ toast, oops }) {
+export default function People({ toast, oops, onOpenCalendar }) {
   const [people, setPeople] = useState([]);
   const [pickedId, setPicked] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -72,7 +72,7 @@ export default function People({ toast, oops }) {
             )}
           </div>
 
-          {profile && <Profile p={profile} />}
+          {profile && <Profile p={profile} onOpenCalendar={onOpenCalendar} />}
         </>
       )}
 
@@ -88,15 +88,22 @@ export default function People({ toast, oops }) {
   );
 }
 
-function Profile({ p }) {
+function Profile({ p, onOpenCalendar }) {
   const t = p.taste || {};
   return (
     <>
-      <p className="serif mt-5 mb-6 max-w-[52ch] text-2xl leading-snug">
-        {!p.enough_sample
-          ? `${p.name} 才喝了 ${p.cups} 杯，还不够判断口味。`
-          : summarize(p)}
-      </p>
+      <div className="mt-5 mb-6 flex flex-wrap items-end justify-between gap-3">
+        <p className="serif m-0 max-w-[52ch] text-2xl leading-snug">
+          {!p.enough_sample
+            ? `${p.name} 才喝了 ${p.cups} 杯，还不够判断口味。`
+            : summarize(p)}
+        </p>
+        {onOpenCalendar && (
+          <Btn variant="ghost" onClick={() => onOpenCalendar(p.id)}>
+            看他的日历
+          </Btn>
+        )}
+      </div>
 
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="喝掉的豆" value={Math.round(p.beans_g)} unit="g" hint={`${p.cups} 杯`} />

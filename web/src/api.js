@@ -61,6 +61,26 @@ async function upload(path, formData) {
   return data;
 }
 
+async function download(path, filename) {
+  const res = await fetch(path, {
+    credentials: "include",
+    headers: { "X-Session": SESSION, "X-Source": "web" },
+  });
+  if (!res.ok) {
+    const data = readBody(await res.text(), res.status);
+    throw new ApiError(res.status, data);
+  }
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   me: () => req("GET", "/api/me"),
   health: () => req("GET", "/api/health"),
@@ -144,6 +164,18 @@ export const api = {
   recordDrink: (data) => req("POST", "/api/drinks", data),
 
   stats: (period = "month") => req("GET", `/api/stats?period=${period}`),
+  calendar: (year, month, personId) => {
+    const q = new URLSearchParams({ year, month });
+    if (personId) q.set("person_id", personId);
+    return req("GET", `/api/calendar?${q}`);
+  },
+  calendarDay: (date, personId) => {
+    const q = new URLSearchParams({ date });
+    if (personId) q.set("person_id", personId);
+    return req("GET", `/api/calendar/day?${q}`);
+  },
+  exportZip: (period = "month") =>
+    download(`/api/export?period=${period}`, `coffeebar-${period}.zip`),
   restock: () => req("GET", "/api/restock"),
   map: () => req("GET", "/api/map"),
   setPlaces: (id, places) => req("PUT", `/api/beans/${id}/places`, { places }),

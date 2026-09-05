@@ -2,12 +2,13 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Cart, Chart, CupMark, Glass, Globe, Log, People } from "./icons.jsx";
+import { Bean, Calendar as CalIcon, Cart, Chart, CupMark, Glass, Globe, Log, People } from "./icons.jsx";
 import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
 import BeanMap from "./pages/BeanMap.jsx";
 import Beans from "./pages/Beans.jsx";
+import Calendar from "./pages/Calendar.jsx";
 import PeoplePage from "./pages/People.jsx";
 import Restock from "./pages/Restock.jsx";
 import SpiritCard from "./pages/SpiritCard.jsx";
@@ -20,6 +21,7 @@ const NAV = [
   { key: "spirits", label: "酒水", Icon: Glass },
   { key: "restock", label: "补货", Icon: Cart },
   { key: "stats", label: "统计", Icon: Chart },
+  { key: "calendar", label: "日历", Icon: CalIcon },
   { key: "map", label: "地图", Icon: Globe },
   { key: "people", label: "画像", Icon: People },
   { key: "updates", label: "更新", Icon: Log },
@@ -30,6 +32,7 @@ export default function App() {
   const [beanId, setBeanId] = useState(null);
   const [spiritId, setSpiritId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
+  const [calendarPerson, setCalendarPerson] = useState(null);
   const { toast, oops, node } = useToast();
   const [health, setHealth] = useState(null);
   const [me, setMe] = useState(undefined);
@@ -76,10 +79,19 @@ export default function App() {
     setPage("spirit");
   }, []);
 
+  const openCalendar = useCallback((personId) => {
+    setBeanId(null);
+    setSpiritId(null);
+    setMapFocus(null);
+    setCalendarPerson(personId || null);
+    setPage("calendar");
+  }, []);
+
   const go = (key) => {
     setBeanId(null);
     setSpiritId(null);
     setMapFocus(null);
+    setCalendarPerson(null);
     setPage(key);
   };
 
@@ -185,7 +197,7 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="ml-auto flex gap-1 md:hidden">
+          <div className="ml-auto flex flex-wrap justify-end gap-1 md:hidden">
             {NAV.map(({ key, Icon }) => (
               <button
                 key={key}
@@ -272,11 +284,16 @@ export default function App() {
           <SpiritCard id={spiritId} onBack={() => go("spirits")} toast={toast} oops={oops} />
         )}
         {page === "restock" && <Restock onOpen={openBean} />}
-        {page === "stats" && <Stats onOpenPerson={() => go("people")} />}
+        {page === "stats" && <Stats toast={toast} oops={oops} />}
+        {page === "calendar" && (
+          <Calendar personId={calendarPerson} toast={toast} oops={oops} />
+        )}
         {page === "map" && (
           <BeanMap focusId={mapFocus} onOpen={openBean} toast={toast} oops={oops} />
         )}
-        {page === "people" && <PeoplePage toast={toast} oops={oops} />}
+        {page === "people" && (
+          <PeoplePage toast={toast} oops={oops} onOpenCalendar={openCalendar} />
+        )}
         {page === "updates" && <Updates />}
       </main>
 

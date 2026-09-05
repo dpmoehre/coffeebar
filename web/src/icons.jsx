@@ -80,6 +80,22 @@ export const Log = ({ className = "" }) => (
   </svg>
 );
 
+export const Calendar = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M7 4.5v3M17 4.5v3" />
+    <path d="M4.8 8.2h14.4M6.2 6.2h11.6A1.6 1.6 0 0 1 19.4 7.8v11.4a1.6 1.6 0 0 1-1.6 1.6H6.2a1.6 1.6 0 0 1-1.6-1.6V7.8A1.6 1.6 0 0 1 6.2 6.2z" />
+    <path d="M8 12.2h2.2M12 12.2h2.2M16 12.2h.8M8 16h2.2M12 16h2.2" />
+  </svg>
+);
+
+export const Download = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M12 5v10" />
+    <path d="M8 11.5L12 16l4-4.5" />
+    <path d="M5 19.5h14" />
+  </svg>
+);
+
 export const Globe = ({ className = "" }) => (
   <svg {...base} className={className}>
     <circle cx="12" cy="12" r="8.2" />
