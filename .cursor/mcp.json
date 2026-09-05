@@ -2,10 +2,10 @@
   "mcpServers": {
     "coffeebar": {
       "type": "stdio",
-      "command": "cmd.exe",
-      "args": ["/d", "/c", "C:\\Users\\dp\\Documents\\coffeebar\\scripts\\coffeebar-mcp.cmd"],
+      "command": "C:\\Users\\dp\\Documents\\coffeebar\\.venv\\Scripts\\coffeebar-mcp.exe",
       "env": {
-        "COFFEEBAR_URL": "http://127.0.0.1:8000"
+        "COFFEEBAR_URL": "http://127.0.0.1:8000",
+        "PATH": "C:\\Users\\dp\\Documents\\coffeebar\\.venv\\Scripts;C:\\Users\\dp\\.local\\bin;C:\\WINDOWS\\system32;C:\\WINDOWS"
       }
     }
   }

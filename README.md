@@ -47,7 +47,7 @@
 
 准备好豆袋照片和豆卡文字后，可以让 **Cursor 经 MCP 直接写入** 小主机上的库，不必在网页里一项项手填。网页和 MCP 走同一套接口与写锁，写完刷新豆库就能看见。网页正在改那张卡时，Cursor 会被拒，不会替你抢锁。
 
-先让网页服务跑着（`start.sh` / `start.bat`）。在仓库根目录复制 `.env.example` 为 `.env`，填登录邮箱和密码。Cursor 打开本仓库后应能看到 `coffeebar` 这个 MCP（`.cursor/mcp.json`）。Windows 用 `cmd.exe` 跑 `scripts\coffeebar-mcp.cmd`（从开始菜单开 Cursor 时 PATH 里没有 `uv`，而且 Cursor 会把 `command` 收成短名再去 PATH 找）。红点时把 MCP 关再开一次。Mac 把 `command` 改成 `uv`、`args` 改成 `["run", "coffeebar-mcp"]`。
+先让网页服务跑着（`start.sh` / `start.bat`）。在仓库根目录复制 `.env.example` 为 `.env`，填登录邮箱和密码。Cursor 打开本仓库后应能看到 `coffeebar` 这个 MCP（`.cursor/mcp.json`）。Windows 直接跑仓库里 `.venv\Scripts\coffeebar-mcp.exe`（Cursor 的 MCP 进程拿不到用户 PATH，写 `uv` / `cmd.exe` 都会红）。红了先完全退出 Cursor 再开，不要只拨开关。Mac 把 `command` 改成 `uv`、`args` 改成 `["run", "coffeebar-mcp"]`。
 
 | 你在 Cursor 里说 | MCP 去做 |
 | ---- | ---- |
