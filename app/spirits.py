@@ -78,9 +78,10 @@ def create_spirit(conn: sqlite3.Connection, data: dict) -> int:
     name = data["name"].strip()
     kind = normalize_kind(data.get("kind"), data.get("category"), name)
     cur = conn.execute(
-        """INSERT INTO bottle (name, kind, category, origin, abv, flavor, note, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO bottle (owner_id, name, kind, category, origin, abv, flavor, note, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
+            data.get("owner_id"),
             name,
             kind,
             data.get("category"),
@@ -144,7 +145,7 @@ def spirit_tags(conn: sqlite3.Connection, bottle_id: int) -> list[str]:
     ]
 
 
-def list_spirits(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
+def list_spirits(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | None = None) -> list[dict]:
     """scope: stock 在库（含待入瓶）/ history 喝完 / all。"""
     cur = conn.execute(
         f"""
@@ -159,8 +160,10 @@ def list_spirits(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
                (SELECT l.nominal_ml FROM bottle_lot l WHERE l.bottle_id = b.id
                  ORDER BY l.created_at DESC, l.id DESC LIMIT 1) AS last_ml
         FROM bottle b
+        WHERE (? IS NULL OR b.owner_id = ?)
         ORDER BY b.updated_at DESC
-        """
+        """,
+        (owner_id, owner_id),
     )
     out = []
     for b in _rows(cur):
@@ -177,9 +180,11 @@ def list_spirits(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
     return out
 
 
-def get_spirit(conn: sqlite3.Connection, bottle_id: int) -> dict | None:
+def get_spirit(conn: sqlite3.Connection, bottle_id: int, owner_id: int | None = None) -> dict | None:
     bottle = _row(conn.execute("SELECT * FROM bottle WHERE id = ?", (bottle_id,)))
     if not bottle:
+        return None
+    if owner_id is not None and bottle.get("owner_id") != owner_id:
         return None
     bottle["kind"] = normalize_kind(bottle.get("kind"), bottle.get("category"), bottle.get("name"))
     bottle["tags"] = spirit_tags(conn, bottle_id)
@@ -314,7 +319,9 @@ def record_drink(conn: sqlite3.Connection, data: dict) -> dict:
             "换一瓶、改用量，或先盘点"
         )
 
-    person_id = data.get("person_id") or store.ensure_person(conn, data.get("person"))
+    person_id = data.get("person_id") or store.ensure_person(
+        conn, data.get("person"), data.get("owner_id")
+    )
     ts = data.get("at") or db.now()
     cur = conn.execute(
         """INSERT INTO consumption_event

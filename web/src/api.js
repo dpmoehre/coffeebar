@@ -14,7 +14,7 @@ export const holderName = () =>
 
 export class ApiError extends Error {
   constructor(status, body) {
-    super(body?.message || body?.error || `请求失败（${status}）`);
+    super(body?.message || body?.error || body?.detail || `请求失败（${status}）`);
     this.status = status;
     this.body = body || {};
   }
@@ -26,6 +26,7 @@ export class ApiError extends Error {
 async function req(method, path, body) {
   const res = await fetch(path, {
     method,
+    credentials: "include",
     headers: {
       "Content-Type": "application/json",
       "X-Session": SESSION,
@@ -43,6 +44,7 @@ async function req(method, path, body) {
 async function upload(path, formData) {
   const res = await fetch(path, {
     method: "POST",
+    credentials: "include",
     headers: { "X-Session": SESSION, "X-Source": "web" },
     body: formData,
   });
@@ -53,6 +55,12 @@ async function upload(path, formData) {
 }
 
 export const api = {
+  me: () => req("GET", "/api/me"),
+  health: () => req("GET", "/api/health"),
+  register: (email, password) => req("POST", "/api/auth/register", { email, password }),
+  login: (email, password) => req("POST", "/api/auth/login", { email, password }),
+  logout: () => req("POST", "/api/auth/logout", {}),
+
   beans: (scope = "stock") => req("GET", `/api/beans?scope=${scope}`),
   bean: (id) => req("GET", `/api/beans/${id}`),
   createBean: (data) => req("POST", "/api/beans", data),

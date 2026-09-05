@@ -79,7 +79,7 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 不用 Docker。小主机上只要三个脚本：
 
 1. **装一次**：双击 [`scripts/install.bat`](scripts/install.bat)。会装 uv、同步 Python 依赖、装前端依赖并构建。没有 Node 会提示你去装 LTS。
-2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。
+2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。打开后先注册/登录；**这台机器上第一个注册的人会接手已有的豆和酒**，之后再注册的人是空库。
 3. **备份**：双击 [`scripts/backup.bat`](scripts/backup.bat)。服务开着也能安全导出，库文件和照片打包进 `%USERPROFILE%\coffeebar-backup`。
 
 想用 `http://coffee` 这种短地址而不是带端口的，再加 Caddy：`caddy run --config scripts/Caddyfile`。

@@ -32,14 +32,20 @@ def client(monkeypatch):
     from app import db as db_mod
 
     importlib.reload(db_mod)
-    from app import store, stats, locks, photos, spirits, main as main_mod
+    from app import store, stats, locks, photos, spirits, auth, main as main_mod
 
     importlib.reload(photos)
     importlib.reload(store)
     importlib.reload(spirits)
     importlib.reload(stats)
     importlib.reload(locks)
+    importlib.reload(auth)
     importlib.reload(main_mod)
 
     with TestClient(main_mod.app) as c:
+        r = c.post(
+            "/api/auth/register",
+            json={"email": "test@coffeebar.local", "password": "testpass1"},
+        )
+        assert r.status_code == 201, r.text
         yield c

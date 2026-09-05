@@ -6,11 +6,11 @@ import sqlite3
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import brew as brew_mod
+from . import auth, brew as brew_mod
 from . import db, locks, photos, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -36,6 +36,10 @@ def get_conn():
         conn.close()
 
 
+def current_account(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> dict:
+    return auth.require_account(request, conn)
+
+
 @app.exception_handler(store.Conflict)
 async def _conflict(request: Request, exc: store.Conflict):
     return JSONResponse(status_code=409, content={"error": "conflict", "message": str(exc)})
@@ -51,34 +55,78 @@ async def _bad_photo(request: Request, exc: photos.BadPhoto):
     return JSONResponse(status_code=400, content={"error": "bad_photo", "message": str(exc)})
 
 
+# ── 账号 ────────────────────────────────────────────────────
+
+
+@app.post("/api/auth/register", status_code=201)
+def api_register(payload: dict, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+    account = auth.register(conn, payload.get("email") or "", payload.get("password") or "")
+    token = auth.issue_session(conn, account["id"])
+    auth.set_cookie(response, token)
+    return {"id": account["id"], "email": account["email"], "claimed": account["claimed"]}
+
+
+@app.post("/api/auth/login")
+def api_login(payload: dict, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+    account = auth.login(conn, payload.get("email") or "", payload.get("password") or "")
+    token = auth.issue_session(conn, account["id"])
+    auth.set_cookie(response, token)
+    return account
+
+
+@app.post("/api/auth/logout")
+def api_logout(request: Request, response: Response, conn: sqlite3.Connection = Depends(get_conn)):
+    auth.drop_session(conn, auth.cookie_token(request))
+    auth.clear_cookie(response)
+    return {"ok": True}
+
+
+@app.get("/api/me")
+def api_me(account: dict = Depends(current_account)):
+    return {"id": account["id"], "email": account["email"]}
+
+
 # ── 豆子 ────────────────────────────────────────────────────
 
 
 @app.get("/api/beans")
-def api_beans(scope: str = "stock", conn: sqlite3.Connection = Depends(get_conn)):
-    beans = store.list_beans(conn, scope)
+def api_beans(
+    scope: str = "stock",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    beans = store.list_beans(conn, scope, owner_id=account["id"])
     for b in beans:
         dose = stats.average_dose(conn, b["id"])
         b["avg_dose"] = dose
         b["cups_left"] = stats.cups_left(b["balance_g"], dose["avg_g"])
         b["near_empty"] = b["in_stock"] and b["balance_g"] < dose["avg_g"]
         b["cover"] = photos.cover(photos.list_bean_photos(conn, b["id"]))
-    return {"beans": beans, "avg_dose": stats.average_dose(conn)}
+    return {"beans": beans, "avg_dose": stats.average_dose(conn, owner_id=account["id"])}
 
 
 @app.post("/api/beans", status_code=201)
-def api_create_bean(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_create_bean(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     if not payload.get("name", "").strip():
         raise store.Conflict("豆子得有个名字")
+    payload = {**payload, "owner_id": account["id"]}
     bean_id = store.create_bean(conn, payload)
     if payload.get("nominal_g"):
         store.add_lot(conn, bean_id, payload)
-    return store.get_bean(conn, bean_id)
+    return store.get_bean(conn, bean_id, owner_id=account["id"])
 
 
 @app.get("/api/beans/{bean_id}")
-def api_bean(bean_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    bean = store.get_bean(conn, bean_id)
+def api_bean(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    bean = store.get_bean(conn, bean_id, owner_id=account["id"])
     if not bean:
         raise HTTPException(404, "没有这支豆")
     bean["photos"] = photos.list_bean_photos(conn, bean_id)
@@ -87,7 +135,7 @@ def api_bean(bean_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     bean["cups_left"] = stats.cups_left(bean["balance_g"], dose["avg_g"])
     for lot in bean["lots"]:
         lot["cups_left"] = stats.cups_left(lot["balance_g"], dose["avg_g"])
-    bean["log"] = store.list_consumption(conn, bean_id=bean_id, limit=30)
+    bean["log"] = store.list_consumption(conn, bean_id=bean_id, owner_id=account["id"], limit=30)
     bean["lock"] = locks.status(conn, f"bean:{bean_id}")
     return bean
 
@@ -97,12 +145,14 @@ def api_update_bean(
     bean_id: int,
     payload: dict,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     locks.check(conn, f"bean:{bean_id}", x_session, x_source)
     store.update_bean(conn, bean_id, payload)
-    return store.get_bean(conn, bean_id)
+    return store.get_bean(conn, bean_id, owner_id=account["id"])
 
 
 @app.post("/api/beans/{bean_id}/photos", status_code=201)
@@ -111,20 +161,30 @@ async def api_add_photo(
     file: UploadFile = File(...),
     kind: str = Form("pack"),
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
 ):
     """挂一张照片。pack 包装 / tray 豆盘，都可以缺。HEIC 会转成 JPEG。"""
-    if not store.get_bean(conn, bean_id):
-        raise HTTPException(404, "没有这支豆")
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     return photos.attach_bean_photo(conn, bean_id, kind, await file.read(), file.filename or "")
 
 
 @app.delete("/api/photos/{photo_id}")
-def api_del_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    try:
+def api_del_photo(
+    photo_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    bean_row = conn.execute("SELECT bean_id FROM bean_photo WHERE id = ?", (photo_id,)).fetchone()
+    if bean_row:
+        auth.assert_owner(auth.bean_owner(conn, bean_row["bean_id"]), account["id"], "没有这张图")
         photos.delete_bean_photo(conn, photo_id)
-    except photos.BadPhoto:
+        return {"ok": True}
+    bottle_row = conn.execute("SELECT bottle_id FROM bottle_photo WHERE id = ?", (photo_id,)).fetchone()
+    if bottle_row:
+        auth.assert_owner(auth.spirit_owner(conn, bottle_row["bottle_id"]), account["id"], "没有这张图")
         photos.delete_bottle_photo(conn, photo_id)
-    return {"ok": True}
+        return {"ok": True}
+    raise HTTPException(404, "没有这张图")
 
 
 @app.post("/api/beans/{bean_id}/restock-photos", status_code=201)
@@ -133,61 +193,101 @@ async def api_add_restock_photo(
     file: UploadFile = File(...),
     note: str = Form(""),
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
 ):
     """补货条目的对照图：货架、淘宝截图、上次那袋都行。"""
-    if not store.get_bean(conn, bean_id):
-        raise HTTPException(404, "没有这支豆")
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     return photos.attach_restock_photo(conn, bean_id, await file.read(), file.filename or "", note or None)
 
 
 @app.post("/api/beans/{bean_id}/scores", status_code=201)
-def api_add_score(bean_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_add_score(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     store.add_score(conn, bean_id, payload)
-    return store.get_bean(conn, bean_id)
+    return store.get_bean(conn, bean_id, owner_id=account["id"])
 
 
 # ── 批次（袋子） ────────────────────────────────────────────
 
 
 @app.post("/api/beans/{bean_id}/lots", status_code=201)
-def api_add_lot(bean_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_add_lot(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """再入一袋：只加批次，不新建豆卡。"""
-    if not store.get_bean(conn, bean_id):
-        raise HTTPException(404, "没有这支豆")
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     lot_id = store.add_lot(conn, bean_id, payload)
     return store.get_lot(conn, lot_id)
 
 
 @app.post("/api/lots/{lot_id}/open")
-def api_open_lot(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def api_open_lot(
+    lot_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """开封：只记日子，不动克数。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     return store.open_lot(conn, lot_id, (payload or {}).get("on"))
 
 
 @app.post("/api/lots/{lot_id}/measure")
-def api_measure(lot_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_measure(
+    lot_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """开袋实称（可选，通常不填）。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     store.set_measured(conn, lot_id, float(payload["measured_g"]))
     return store.get_lot(conn, lot_id)
 
 
 @app.post("/api/lots/{lot_id}/adjust")
-def api_adjust(lot_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_adjust(
+    lot_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """中途盘点：输入现在实际还剩多少。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     delta = store.adjust_lot(conn, lot_id, float(payload["actual_g"]), payload.get("note"))
     return {"delta_g": round(delta, 1), "lot": store.get_lot(conn, lot_id)}
 
 
 @app.post("/api/lots/{lot_id}/close")
-def api_close(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def api_close(
+    lot_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """这袋用完：人确认才关，余数记成偏差。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     diff = store.close_lot(conn, lot_id, (payload or {}).get("note"))
     return {"deviation_g": round(diff, 1), "lot": store.get_lot(conn, lot_id)}
 
 
 @app.post("/api/lots/{lot_id}/writeoff", status_code=201)
-def api_writeoff(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def api_writeoff(
+    lot_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """整袋补录：克重和钱进统计，不算一杯、不算到人。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     return store.record_writeoff(conn, lot_id, (payload or {}).get("note"))
 
 
@@ -210,13 +310,19 @@ def api_brew_methods():
 
 
 @app.post("/api/beans/{bean_id}/brew-default")
-def api_brew_default(bean_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_brew_default(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     store.set_brew_default(
         conn, bean_id, payload.get("method", "v60"),
         float(payload.get("dose_g", 15)), float(payload.get("ratio", 16)),
         payload.get("note"),
     )
-    return store.get_bean(conn, bean_id)
+    return store.get_bean(conn, bean_id, owner_id=account["id"])
 
 
 # ── 冲一次 / 撤回 ───────────────────────────────────────────
@@ -226,6 +332,7 @@ def api_brew_default(bean_id: int, payload: dict, conn: sqlite3.Connection = Dep
 def api_record_brew(
     payload: dict,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
@@ -233,8 +340,9 @@ def api_record_brew(
     lot = store.get_lot(conn, int(payload["lot_id"]))
     if not lot:
         raise HTTPException(404, "没有这一袋")
+    auth.assert_owner(auth.bean_owner(conn, lot["bean_id"]), account["id"], "没有这一袋")
     locks.check(conn, f"bean:{lot['bean_id']}", x_session, x_source)
-    return store.record_brew(conn, payload)
+    return store.record_brew(conn, {**payload, "owner_id": account["id"]})
 
 
 @app.get("/api/consumption")
@@ -243,25 +351,46 @@ def api_consumption(
     person_id: int | None = None,
     limit: int = 50,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
 ):
-    return {"rows": store.list_consumption(conn, bean_id=bean_id, person_id=person_id, limit=limit)}
+    return {
+        "rows": store.list_consumption(
+            conn, bean_id=bean_id, person_id=person_id, owner_id=account["id"], limit=limit
+        )
+    }
 
 
 @app.post("/api/consumption/{cons_id}/void")
-def api_void(cons_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def api_void(
+    cons_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """撤回：只划掉不删。"""
+    auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
     return store.void_consumption(conn, cons_id, (payload or {}).get("reason"))
 
 
 @app.post("/api/consumption/{cons_id}/unvoid")
-def api_unvoid(cons_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def api_unvoid(
+    cons_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
     store.unvoid_consumption(conn, cons_id)
     return {"ok": True}
 
 
 @app.delete("/api/consumption/{cons_id}")
-def api_delete_voided(cons_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def api_delete_voided(
+    cons_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """彻底删：只接受已经撤回的行，库存不再动。"""
+    auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
     return store.delete_voided_consumption(conn, cons_id)
 
 
@@ -271,23 +400,40 @@ async def api_add_consumption_photo(
     file: UploadFile = File(...),
     kind: str = Form("bed"),
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
 ):
     """给一笔冲煮挂过程照。beans 称豆 / bed 粉床 / finish 冲完 / gear 器具。"""
+    if conn.execute("SELECT id FROM consumption_event WHERE id = ?", (cons_id,)).fetchone():
+        auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
     return photos.attach_consumption_photo(
         conn, cons_id, kind, await file.read(), file.filename or ""
     )
 
 
 @app.delete("/api/consumption-photos/{photo_id}")
-def api_del_consumption_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def api_del_consumption_photo(
+    photo_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    row = conn.execute("SELECT cons_id FROM consumption_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise HTTPException(404, "没有这张图")
+    auth.assert_owner(auth.consumption_owner(conn, row["cons_id"]), account["id"], "没有这张图")
     photos.delete_consumption_photo(conn, photo_id)
     return {"ok": True}
 
 
 @app.post("/api/consumption/{cons_id}/person")
-def api_reassign(cons_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_reassign(
+    cons_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """人选错了：只改归属，库存不动。"""
-    store.reassign_person(conn, cons_id, payload.get("person"))
+    auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
+    store.reassign_person(conn, cons_id, payload.get("person"), owner_id=account["id"])
     return {"ok": True}
 
 
@@ -295,30 +441,43 @@ def api_reassign(cons_id: int, payload: dict, conn: sqlite3.Connection = Depends
 
 
 @app.get("/api/spirits")
-def api_spirits(scope: str = "stock", conn: sqlite3.Connection = Depends(get_conn)):
-    items = spirits.list_spirits(conn, scope)
+def api_spirits(
+    scope: str = "stock",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    items = spirits.list_spirits(conn, scope, owner_id=account["id"])
     for s in items:
         s["cover"] = photos.cover(photos.list_bottle_photos(conn, s["id"]))
     return {"spirits": items, "kinds": spirits.KINDS}
 
 
 @app.post("/api/spirits", status_code=201)
-def api_create_spirit(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_create_spirit(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     if not payload.get("name", "").strip():
         raise store.Conflict("酒得有个名字")
+    payload = {**payload, "owner_id": account["id"]}
     bottle_id = spirits.create_spirit(conn, payload)
     if payload.get("nominal_ml"):
         spirits.add_lot(conn, bottle_id, payload)
-    return spirits.get_spirit(conn, bottle_id)
+    return spirits.get_spirit(conn, bottle_id, owner_id=account["id"])
 
 
 @app.get("/api/spirits/{bottle_id}")
-def api_spirit(bottle_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    bottle = spirits.get_spirit(conn, bottle_id)
+def api_spirit(
+    bottle_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    bottle = spirits.get_spirit(conn, bottle_id, owner_id=account["id"])
     if not bottle:
         raise HTTPException(404, "没有这支酒")
     bottle["photos"] = photos.list_bottle_photos(conn, bottle_id)
-    bottle["log"] = store.list_consumption(conn, bottle_id=bottle_id, limit=30)
+    bottle["log"] = store.list_consumption(conn, bottle_id=bottle_id, owner_id=account["id"], limit=30)
     bottle["lock"] = locks.status(conn, f"bottle:{bottle_id}")
     return bottle
 
@@ -328,12 +487,14 @@ def api_update_spirit(
     bottle_id: int,
     payload: dict,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
+    auth.assert_owner(auth.spirit_owner(conn, bottle_id), account["id"], "没有这支酒")
     locks.check(conn, f"bottle:{bottle_id}", x_session, x_source)
     spirits.update_spirit(conn, bottle_id, payload)
-    return spirits.get_spirit(conn, bottle_id)
+    return spirits.get_spirit(conn, bottle_id, owner_id=account["id"])
 
 
 @app.post("/api/spirits/{bottle_id}/lots", status_code=201)
@@ -341,12 +502,14 @@ def api_add_bottle_lot(
     bottle_id: int,
     payload: dict,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
+    auth.assert_owner(auth.spirit_owner(conn, bottle_id), account["id"], "没有这支酒")
     locks.check(conn, f"bottle:{bottle_id}", x_session, x_source)
     spirits.add_lot(conn, bottle_id, payload)
-    return spirits.get_spirit(conn, bottle_id)
+    return spirits.get_spirit(conn, bottle_id, owner_id=account["id"])
 
 
 @app.post("/api/spirits/{bottle_id}/photos", status_code=201)
@@ -355,72 +518,124 @@ async def api_add_bottle_photo(
     file: UploadFile = File(...),
     kind: str = Form("pack"),
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
 ):
-    if not spirits.get_spirit(conn, bottle_id):
-        raise HTTPException(404, "没有这支酒")
+    auth.assert_owner(auth.spirit_owner(conn, bottle_id), account["id"], "没有这支酒")
     return photos.attach_bottle_photo(conn, bottle_id, kind, await file.read(), file.filename or "")
 
 
 @app.post("/api/bottle-lots/{lot_id}/open")
-def api_open_bottle(lot_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def api_open_bottle(
+    lot_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.bottle_lot_owner(conn, lot_id), account["id"], "没有这一瓶")
     spirits.open_lot(conn, lot_id)
     return spirits.get_lot(conn, lot_id)
 
 
 @app.post("/api/bottle-lots/{lot_id}/adjust")
-def api_adjust_bottle(lot_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_adjust_bottle(
+    lot_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.bottle_lot_owner(conn, lot_id), account["id"], "没有这一瓶")
     return spirits.adjust_lot(conn, lot_id, float(payload["actual_ml"]), payload.get("note"))
 
 
 @app.post("/api/bottle-lots/{lot_id}/close")
-def api_close_bottle(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+def api_close_bottle(
+    lot_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.bottle_lot_owner(conn, lot_id), account["id"], "没有这一瓶")
     body = payload or {}
     return spirits.close_lot(conn, lot_id, body.get("note"))
 
 
 @app.post("/api/drinks", status_code=201)
-def api_record_drink(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
-    return spirits.record_drink(conn, payload)
+def api_record_drink(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    lot = spirits.get_lot(conn, int(payload["lot_id"]))
+    if not lot:
+        raise HTTPException(404, "没有这一瓶")
+    auth.assert_owner(auth.spirit_owner(conn, lot["bottle_id"]), account["id"], "没有这一瓶")
+    return spirits.record_drink(conn, {**payload, "owner_id": account["id"]})
 
 
 # ── 人 ──────────────────────────────────────────────────────
 
 
 @app.get("/api/people")
-def api_people(include_inactive: bool = False, conn: sqlite3.Connection = Depends(get_conn)):
-    return {"people": store.list_people(conn, include_inactive)}
+def api_people(
+    include_inactive: bool = False,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return {"people": store.list_people(conn, include_inactive, owner_id=account["id"])}
 
 
 @app.post("/api/people", status_code=201)
-def api_add_person(payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
-    pid = store.ensure_person(conn, payload.get("name"))
+def api_add_person(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    pid = store.ensure_person(conn, payload.get("name"), account["id"])
     if pid is None:
         raise store.Conflict("名字不能为空")
     return {"id": pid, "name": payload["name"].strip()}
 
 
 @app.patch("/api/people/{person_id}")
-def api_patch_person(person_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
+def api_patch_person(
+    person_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    auth.assert_owner(auth.person_owner(conn, person_id), account["id"], "没有这个人")
     if "name" in payload:
         store.rename_person(conn, person_id, payload["name"])
     if "active" in payload:
         store.set_person_active(conn, person_id, bool(payload["active"]))
-    return {"people": store.list_people(conn, include_inactive=True)}
+    return {"people": store.list_people(conn, include_inactive=True, owner_id=account["id"])}
 
 
 @app.delete("/api/people/{person_id}")
-def api_delete_person(person_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+def api_delete_person(
+    person_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
     """删掉这个人。他名下的流水留着，只是变成「没记」。"""
+    owner = auth.person_owner(conn, person_id)
+    if owner is not None:
+        auth.assert_owner(owner, account["id"], "没有这个人")
     out = store.delete_person(conn, person_id)
-    return {**out, "people": store.list_people(conn, include_inactive=True)}
+    return {**out, "people": store.list_people(conn, include_inactive=True, owner_id=account["id"])}
 
 
 @app.get("/api/people/{person_id}/profile")
-def api_profile(person_id: int, conn: sqlite3.Connection = Depends(get_conn)):
-    profile = stats.person_profile(conn, person_id)
+def api_profile(
+    person_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    profile = stats.person_profile(conn, person_id, owner_id=account["id"])
     if not profile:
         raise HTTPException(404, "没有这个人")
-    profile["log"] = store.list_consumption(conn, person_id=person_id, limit=50)
+    profile["log"] = store.list_consumption(
+        conn, person_id=person_id, owner_id=account["id"], limit=50
+    )
     return profile
 
 
@@ -428,13 +643,20 @@ def api_profile(person_id: int, conn: sqlite3.Connection = Depends(get_conn)):
 
 
 @app.get("/api/stats")
-def api_stats(period: str = "month", conn: sqlite3.Connection = Depends(get_conn)):
-    return stats.summary(conn, period)
+def api_stats(
+    period: str = "month",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return stats.summary(conn, period, owner_id=account["id"])
 
 
 @app.get("/api/restock")
-def api_restock(conn: sqlite3.Connection = Depends(get_conn)):
-    return {"items": stats.restock_list(conn)}
+def api_restock(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return {"items": stats.restock_list(conn, owner_id=account["id"])}
 
 
 # ── 写锁 ────────────────────────────────────────────────────
@@ -445,9 +667,11 @@ def api_lock(
     resource: str,
     payload: dict | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
+    auth.assert_lock_resource(conn, resource, account["id"])
     body = payload or {}
     return locks.acquire(
         conn, resource, x_session, body.get("holder"), x_source, bool(body.get("take_over"))
@@ -458,8 +682,10 @@ def api_lock(
 def api_heartbeat(
     resource: str,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
 ):
+    auth.assert_lock_resource(conn, resource, account["id"])
     ok = locks.heartbeat(conn, resource, x_session)
     if not ok:
         return JSONResponse(
@@ -473,8 +699,10 @@ def api_heartbeat(
 def api_unlock(
     resource: str,
     conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
 ):
+    auth.assert_lock_resource(conn, resource, account["id"])
     locks.release(conn, resource, x_session)
     return {"ok": True}
 

@@ -12,6 +12,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import sys
 import urllib.error
@@ -24,6 +25,8 @@ BASE = f"http://127.0.0.1:{PORT}"
 
 YELLOW, GREEN, RED, DIM, OFF = "\033[33m", "\033[32m", "\033[31m", "\033[2m", "\033[0m"
 failures: list[str] = []
+COOKIES = http.cookiejar.CookieJar()
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIES))
 
 
 def call(method: str, path: str, body=None, session="smoke", source="web"):
@@ -38,7 +41,7 @@ def call(method: str, path: str, body=None, session="smoke", source="web"):
         },
     )
     try:
-        with urllib.request.urlopen(req) as r:
+        with OPENER.open(req) as r:
             return r.status, json.loads(r.read() or "null")
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read() or "null")
@@ -70,6 +73,16 @@ def main() -> int:
             f"真要往这个库里跑就加 --force。{OFF}"
         )
         return 1
+
+    step(0, "注册一个演示账号")
+    code, acc = call("POST", "/api/auth/register", {
+        "email": "smoke@coffeebar.local", "password": "smokepass",
+    })
+    if code == 409:
+        code, acc = call("POST", "/api/auth/login", {
+            "email": "smoke@coffeebar.local", "password": "smokepass",
+        })
+    ok(code in (200, 201), f"登录 {acc.get('email') if isinstance(acc, dict) else acc}")
 
     step(1, "建一支豆，一袋 200 g / ¥128，刚拆袋不称重")
     _, bean = call("POST", "/api/beans", {

@@ -24,7 +24,9 @@ BALANCE_EXPR = """
 """
 
 
-def average_dose(conn: sqlite3.Connection, bean_id: int | None = None) -> dict:
+def average_dose(
+    conn: sqlite3.Connection, bean_id: int | None = None, owner_id: int | None = None
+) -> dict:
     """就近优先：这支豆最近 20 杯 → 全局最近 50 杯 → 兜底 15 g。
 
     同时给区间，只给一个平均值会掩盖波动。
@@ -34,7 +36,11 @@ def average_dose(conn: sqlite3.Connection, bean_id: int | None = None) -> dict:
         if got:
             return {**got, "source": "bean"}
 
-    got = _avg_from(conn, "1 = 1", (), GLOBAL_WINDOW)
+    extra, extra_args = "1 = 1", ()
+    if owner_id is not None:
+        extra = "EXISTS (SELECT 1 FROM bean b WHERE b.id = l.bean_id AND b.owner_id = ?)"
+        extra_args = (owner_id,)
+    got = _avg_from(conn, extra, extra_args, GLOBAL_WINDOW)
     if got:
         return {**got, "source": "global"}
 
@@ -86,14 +92,20 @@ def daily_rate(conn: sqlite3.Connection, bean_id: int, days: int = 14) -> float:
     return total / days
 
 
-def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
+def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | None = None) -> dict:
     """统计页顶部的数字。period: week / month / year / all"""
     start = db.period_start(period)
     where = "c.voided_at IS NULL AND c.kind = 'coffee'"
-    args: tuple = ()
+    args: list = []
+    if owner_id is not None:
+        where += (
+            " AND EXISTS (SELECT 1 FROM bean_lot l JOIN bean b ON b.id = l.bean_id"
+            " WHERE l.id = c.lot_id AND b.owner_id = ?)"
+        )
+        args.append(owner_id)
     if start:
         where += " AND c.at >= ?"
-        args = (start,)
+        args.append(start)
 
     row = conn.execute(
         f"""SELECT COALESCE(SUM(c.amount_g), 0) AS beans_g,
@@ -108,43 +120,65 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
     beans_g, cups, cup_g, spent = row[0], row[1], row[2], row[3]
 
     # 买进来的钱：期间新建批次的买入价合计，和「喝掉的钱」分开
-    bought_where = "1 = 1"
-    bought_args: tuple = ()
+    bean_lot_where, bottle_lot_where = "1 = 1", "1 = 1"
+    bean_lot_args: list = []
+    bottle_lot_args: list = []
+    if owner_id is not None:
+        bean_lot_where = "bean_id IN (SELECT id FROM bean WHERE owner_id = ?)"
+        bottle_lot_where = "bottle_id IN (SELECT id FROM bottle WHERE owner_id = ?)"
+        bean_lot_args.append(owner_id)
+        bottle_lot_args.append(owner_id)
     if start:
-        bought_where = "created_at >= ?"
-        bought_args = (start,)
+        bean_lot_where += " AND created_at >= ?"
+        bottle_lot_where += " AND created_at >= ?"
+        bean_lot_args.append(start)
+        bottle_lot_args.append(start)
     bought_beans = conn.execute(
-        f"SELECT COALESCE(SUM(price), 0) FROM bean_lot WHERE {bought_where}", bought_args
+        f"SELECT COALESCE(SUM(price), 0) FROM bean_lot WHERE {bean_lot_where}", bean_lot_args
     ).fetchone()[0]
     bought_bottles = conn.execute(
-        f"SELECT COALESCE(SUM(price), 0) FROM bottle_lot WHERE {bought_where}", bought_args
+        f"SELECT COALESCE(SUM(price), 0) FROM bottle_lot WHERE {bottle_lot_where}", bottle_lot_args
     ).fetchone()[0]
     bought = bought_beans + bought_bottles
 
     # 还在库约多少钱：未关袋/未关瓶的账面 × 单价
+    on_hand_bean_where = "l.closed_at IS NULL AND l.price IS NOT NULL"
+    on_hand_bottle_where = "l.closed_at IS NULL AND l.price IS NOT NULL"
+    on_hand_bean_args: list = []
+    on_hand_bottle_args: list = []
+    if owner_id is not None:
+        on_hand_bean_where += " AND l.bean_id IN (SELECT id FROM bean WHERE owner_id = ?)"
+        on_hand_bottle_where += " AND l.bottle_id IN (SELECT id FROM bottle WHERE owner_id = ?)"
+        on_hand_bean_args.append(owner_id)
+        on_hand_bottle_args.append(owner_id)
     on_hand_beans = conn.execute(
         f"""SELECT COALESCE(SUM(
                 ({BALANCE_EXPR}) * (l.price / NULLIF(COALESCE(l.measured_g, l.nominal_g), 0))
             ), 0)
-            FROM bean_lot l WHERE l.closed_at IS NULL AND l.price IS NOT NULL"""
+            FROM bean_lot l WHERE {on_hand_bean_where}""",
+        on_hand_bean_args,
     ).fetchone()[0]
     on_hand_bottles = conn.execute(
-        """SELECT COALESCE(SUM(
+        f"""SELECT COALESCE(SUM(
                 (l.nominal_ml
                  + COALESCE((SELECT SUM(delta_ml) FROM bottle_stock_event WHERE lot_id = l.id), 0)
                  - COALESCE((SELECT SUM(amount_ml) FROM consumption_event
                              WHERE bottle_lot_id = l.id AND voided_at IS NULL), 0)
                 ) * (l.price / NULLIF(l.nominal_ml, 0))
             ), 0)
-            FROM bottle_lot l WHERE l.closed_at IS NULL AND l.price IS NOT NULL"""
+            FROM bottle_lot l WHERE {on_hand_bottle_where}""",
+        on_hand_bottle_args,
     ).fetchone()[0]
     on_hand = on_hand_beans + on_hand_bottles
 
     drink_where = "c.voided_at IS NULL AND c.kind = 'drink'"
-    drink_args: tuple = ()
+    drink_args: list = []
+    if owner_id is not None:
+        drink_where += " AND b.owner_id = ?"
+        drink_args.append(owner_id)
     if start:
         drink_where += " AND c.at >= ?"
-        drink_args = (start,)
+        drink_args.append(start)
     drink = conn.execute(
         f"""SELECT COALESCE(SUM(c.amount_ml), 0),
                    COUNT(*),
@@ -158,7 +192,7 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
     ).fetchone()
     drinks_ml, drink_cups, drink_spent, alcohol_g = drink
 
-    dose = average_dose(conn)
+    dose = average_dose(conn, owner_id=owner_id)
     if cups:
         cup_where = f"{where} AND COALESCE(c.as_cup, 1) = 1"
         dose = {
@@ -245,7 +279,7 @@ def daily_series(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict
     return [{"day": r[0], "beans_g": round(r[1], 1), "cups": r[2]} for r in cur.fetchall()]
 
 
-def restock_list(conn: sqlite3.Connection) -> list[dict]:
+def restock_list(conn: sqlite3.Connection, owner_id: int | None = None) -> list[dict]:
     """低于安全库存，或按消耗速度估「还能撑的天数」过短的豆。"""
     beans = conn.execute(
         f"""SELECT b.id, b.name, b.roast,
@@ -258,7 +292,9 @@ def restock_list(conn: sqlite3.Connection) -> list[dict]:
                    COALESCE(r.min_days, 3) AS min_days,
                    (SELECT price FROM bean_lot l WHERE l.bean_id = b.id
                      ORDER BY l.created_at DESC LIMIT 1) AS last_price
-            FROM bean b LEFT JOIN restock_rule r ON r.bean_id = b.id"""
+            FROM bean b LEFT JOIN restock_rule r ON r.bean_id = b.id
+            WHERE (? IS NULL OR b.owner_id = ?)""",
+        (owner_id, owner_id),
     ).fetchall()
 
     out = []
@@ -297,10 +333,14 @@ def restock_list(conn: sqlite3.Connection) -> list[dict]:
     return out
 
 
-def person_profile(conn: sqlite3.Connection, person_id: int) -> dict:
+def person_profile(
+    conn: sqlite3.Connection, person_id: int, owner_id: int | None = None
+) -> dict:
     """画像：这个人的数字 + 常喝 + 口味倾向。"""
     person = conn.execute("SELECT * FROM person WHERE id = ?", (person_id,)).fetchone()
     if not person:
+        return {}
+    if owner_id is not None and person["owner_id"] != owner_id:
         return {}
     where = (
         "c.voided_at IS NULL AND c.kind = 'coffee' AND c.person_id = ?"

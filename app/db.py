@@ -41,6 +41,9 @@ ADDED_COLUMNS = [
     ("brew_guide", "note", "TEXT"),
     ("bottle", "kind", "TEXT"),
     ("consumption_event", "as_cup", "INTEGER NOT NULL DEFAULT 1"),
+    ("bean", "owner_id", "INTEGER"),
+    ("bottle", "owner_id", "INTEGER"),
+    ("person", "owner_id", "INTEGER"),
 ]
 
 
@@ -52,6 +55,8 @@ STALE_CHECKS = {
     "consumption_event": "lot_id       INTEGER NOT NULL REFERENCES bean_lot",
     # 冲煮过程照后来加了器具（称盘 / 壶 / 滤杯）
     "consumption_photo": "kind IN ('beans', 'bed', 'finish')",
+    # 人名从全局唯一改成「同一账号下唯一」，两个人才能各有一个戚浩辰
+    "person": "name       TEXT    NOT NULL UNIQUE",
 }
 
 

@@ -4,10 +4,29 @@
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- ── 账号：每人一份私库。公共豆种以后另表，这一期先把归属立住 ──
+
+CREATE TABLE IF NOT EXISTS account (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  email         TEXT    NOT NULL UNIQUE,
+  password_hash TEXT    NOT NULL,
+  created_at    TEXT    NOT NULL,
+  status        TEXT    NOT NULL DEFAULT 'active'
+);
+
+CREATE TABLE IF NOT EXISTS auth_session (
+  token      TEXT    PRIMARY KEY,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  created_at TEXT    NOT NULL,
+  expires_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_session_account ON auth_session(account_id);
+
 -- ── 豆子：卡是品种，袋子是批次 ────────────────────────────────
 
 CREATE TABLE IF NOT EXISTS bean (
   id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id    INTEGER REFERENCES account(id),
   name        TEXT    NOT NULL,
   origin      TEXT,                      -- 产地 / 产区
   varietal    TEXT,                      -- 豆种，包装上一般印 Varietal
@@ -54,14 +73,17 @@ CREATE INDEX IF NOT EXISTS idx_stock_lot ON stock_event(lot_id);
 -- 改名只改这一行，历史记录自动跟着变；停用不删。
 CREATE TABLE IF NOT EXISTS person (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
-  name       TEXT    NOT NULL UNIQUE,
+  owner_id   INTEGER REFERENCES account(id),
+  name       TEXT    NOT NULL,
   active     INTEGER NOT NULL DEFAULT 1, -- 0 = 停用（选人列表里不出现，记录仍在）
-  created_at TEXT    NOT NULL
+  created_at TEXT    NOT NULL,
+  UNIQUE (owner_id, name)
 );
 
 -- 基酒：卡是酒名，瓶子是批次。同样的酒再买一瓶只加批次。
 CREATE TABLE IF NOT EXISTS bottle (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id   INTEGER REFERENCES account(id),
   name       TEXT    NOT NULL,
   kind       TEXT,                      -- 大类：威士忌 / 金酒 / 朗姆 …
   category   TEXT,                      -- 细类：单一麦芽 / 波本 / 伦敦干金

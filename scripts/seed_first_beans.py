@@ -16,6 +16,7 @@
 
 from __future__ import annotations
 
+import http.cookiejar
 import json
 import mimetypes
 import sys
@@ -167,6 +168,21 @@ BEANS = [
 ]
 
 
+COOKIES = http.cookiejar.CookieJar()
+OPENER = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(COOKIES))
+
+
+def ensure_login():
+    code, _ = call("POST", "/api/auth/login", {
+        "email": "local@coffeebar.local", "password": "coffeebar-local",
+    })
+    if code == 200:
+        return
+    call("POST", "/api/auth/register", {
+        "email": "local@coffeebar.local", "password": "coffeebar-local",
+    })
+
+
 def call(method: str, path: str, body=None):
     req = urllib.request.Request(
         BASE + path,
@@ -175,7 +191,7 @@ def call(method: str, path: str, body=None):
         headers={"Content-Type": "application/json", "X-Session": "seed", "X-Source": "web"},
     )
     try:
-        with urllib.request.urlopen(req) as r:
+        with OPENER.open(req) as r:
             return r.status, json.loads(r.read() or "null")
     except urllib.error.HTTPError as e:
         return e.code, json.loads(e.read() or "null")
@@ -198,7 +214,7 @@ def upload(bean_id: int, path: Path, kind: str = "pack"):
         data=body,
         headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "X-Session": "seed"},
     )
-    with urllib.request.urlopen(req) as r:
+    with OPENER.open(req) as r:
         return json.loads(r.read())
 
 
@@ -209,6 +225,7 @@ def main() -> int:
         print(f"连不上 {BASE}，先把服务跑起来。")
         return 1
 
+    ensure_login()
     _, roster = call("GET", "/api/people?include_inactive=true")
     have_people = {p["name"] for p in roster.get("people") or []}
     for name in DEFAULT_PEOPLE:

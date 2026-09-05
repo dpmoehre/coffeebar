@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
 import { Bean, Cart, Chart, CupMark, Glass, People } from "./icons.jsx";
-import { useToast } from "./ui.jsx";
+import { Btn, Field, Input, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
 import Beans from "./pages/Beans.jsx";
@@ -27,13 +27,25 @@ export default function App() {
   const [spiritId, setSpiritId] = useState(null);
   const { toast, oops, node } = useToast();
   const [health, setHealth] = useState(null);
+  const [me, setMe] = useState(undefined);
 
   useEffect(() => {
     api
-      .beans()
+      .health()
       .then(() => setHealth("ok"))
       .catch(() => setHealth("down"));
   }, []);
+
+  useEffect(() => {
+    if (health !== "ok") return;
+    api
+      .me()
+      .then(setMe)
+      .catch((e) => {
+        if (e.status === 401) setMe(null);
+        else setHealth("down");
+      });
+  }, [health]);
 
   const openBean = useCallback((id) => {
     setBeanId(id);
@@ -55,6 +67,22 @@ export default function App() {
 
   const navOn = (key) =>
     page === key || (key === "beans" && page === "bean") || (key === "spirits" && page === "spirit");
+
+  if (health === null || (health === "ok" && me === undefined)) {
+    return <p className="grid min-h-screen place-items-center text-muted">读取中…</p>;
+  }
+
+  if (health === "ok" && me === null) {
+    return (
+      <>
+        <Gate
+          onIn={(user) => setMe(user)}
+          oops={oops}
+        />
+        {node}
+      </>
+    );
+  }
 
   if (health === "down") {
     return (
@@ -85,6 +113,9 @@ export default function App() {
             <em className="serif mt-1 hidden text-xs not-italic tracking-wider text-muted md:block">
               咖啡 · 记录 · 发现
             </em>
+            {me?.email && (
+              <div className="mt-2 hidden text-[11px] text-muted md:block">{me.email}</div>
+            )}
           </div>
           <div className="ml-auto flex gap-1 md:hidden">
             {NAV.map(({ key, Icon }) => (
@@ -122,6 +153,21 @@ export default function App() {
               </button>
             );
           })}
+          {me && (
+            <button
+              className="mt-4 text-left text-sm text-muted underline hover:text-amber"
+              onClick={async () => {
+                try {
+                  await api.logout();
+                  setMe(null);
+                } catch (e) {
+                  oops(e.message);
+                }
+              }}
+            >
+              退出
+            </button>
+          )}
         </div>
       </nav>
 
@@ -140,6 +186,72 @@ export default function App() {
       </main>
 
       {node}
+    </div>
+  );
+}
+
+function Gate({ onIn, oops }) {
+  const [mode, setMode] = useState("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async () => {
+    setBusy(true);
+    try {
+      const user =
+        mode === "register"
+          ? await api.register(email, password)
+          : await api.login(email, password);
+      onIn(user);
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="grid min-h-screen place-items-center p-8">
+      <div className="w-full max-w-sm">
+        <CupMark className="mx-auto h-12 w-12 text-amber" />
+        <h1 className="serif mt-4 text-center text-2xl">
+          {mode === "register" ? "建一个账号" : "登录 coffeebar"}
+        </h1>
+        <p className="mt-2 mb-6 text-center text-sm text-muted">
+          {mode === "register"
+            ? "第一个注册的人会接手这台机器上已有的豆和酒。"
+            : "每人一份私库。豆、酒、进价只给自己看。"}
+        </p>
+        <Field label="邮箱">
+          <Input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            placeholder="you@example.com"
+            autoFocus
+          />
+        </Field>
+        <div className="mt-3">
+          <Field label="密码" hint="至少 8 个字符">
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submit()}
+            />
+          </Field>
+        </div>
+        <Btn className="mt-5 w-full justify-center" onClick={submit} disabled={busy || !email || password.length < 8}>
+          {mode === "register" ? "注册并进入" : "登录"}
+        </Btn>
+        <button
+          className="mt-4 w-full text-center text-sm text-amber underline"
+          onClick={() => setMode(mode === "register" ? "login" : "register")}
+        >
+          {mode === "register" ? "已有账号，去登录" : "还没有账号，注册一个"}
+        </button>
+      </div>
     </div>
   );
 }

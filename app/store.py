@@ -85,10 +85,11 @@ def _row(cur) -> dict | None:
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
     ts = db.now()
     cur = conn.execute(
-        """INSERT INTO bean (name, origin, varietal, producer, altitude, process, roast,
+        """INSERT INTO bean (owner_id, name, origin, varietal, producer, altitude, process, roast,
                              water_temp, note, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
+            data.get("owner_id"),
             data["name"].strip(),
             data.get("origin"),
             data.get("varietal"),
@@ -160,7 +161,7 @@ def bean_tags(conn: sqlite3.Connection, bean_id: int) -> list[str]:
     return [r[0] for r in cur.fetchall()]
 
 
-def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
+def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | None = None) -> list[dict]:
     """scope: stock 在库（含只建了豆卡还没入袋的）/ history 历史（曾有袋且全关）/ all 全部。
 
     只建豆卡没入袋的豆子一袋都没有，既不算在库也不算喝完了。它跟着「在库」出，
@@ -180,8 +181,10 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
                {PRICED_G} AS priced_g,
                {LAST_UNIT_COST} AS last_unit_cost
         FROM bean b
+        WHERE (? IS NULL OR b.owner_id = ?)
         ORDER BY b.updated_at DESC
-        """
+        """,
+        (owner_id, owner_id),
     )
     beans = _rows(cur)
     out = []
@@ -203,9 +206,11 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
     return out
 
 
-def get_bean(conn: sqlite3.Connection, bean_id: int) -> dict | None:
+def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None) -> dict | None:
     bean = _row(conn.execute("SELECT * FROM bean WHERE id = ?", (bean_id,)))
     if not bean:
+        return None
+    if owner_id is not None and bean.get("owner_id") != owner_id:
         return None
     bean["tags"] = bean_tags(conn, bean_id)
     bean["lots"] = list_lots(conn, bean_id)
@@ -391,29 +396,54 @@ def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) ->
 # ── 人（谁喝的） ────────────────────────────────────────────
 
 
-def list_people(conn: sqlite3.Connection, include_inactive: bool = False) -> list[dict]:
+def list_people(
+    conn: sqlite3.Connection, include_inactive: bool = False, owner_id: int | None = None
+) -> list[dict]:
     """带上每人的记录条数，删人前要拿它提示影响面。"""
-    where = "" if include_inactive else " WHERE p.active = 1"
+    where, args = ["1 = 1"], []
+    if not include_inactive:
+        where.append("p.active = 1")
+    if owner_id is not None:
+        where.append("p.owner_id = ?")
+        args.append(owner_id)
     return _rows(
         conn.execute(
             f"""SELECT p.*,
                        (SELECT COUNT(*) FROM consumption_event c
                          WHERE c.person_id = p.id AND c.voided_at IS NULL) AS cups
-                FROM person p{where} ORDER BY p.active DESC, p.name"""
+                FROM person p WHERE {' AND '.join(where)}
+                ORDER BY p.active DESC, p.name""",
+            args,
         )
     )
 
 
-def ensure_person(conn: sqlite3.Connection, name: str | None) -> int | None:
-    """输入即创建。名字为空表示不记是谁。"""
+def ensure_person(conn: sqlite3.Connection, name: str | None, owner_id: int | None = None) -> int | None:
+    """输入即创建。名字为空表示不记是谁。同名只在同一账号下算重复。"""
     if not name or not name.strip():
         return None
     name = name.strip()
+    if owner_id is None:
+        row = conn.execute(
+            "SELECT id FROM person WHERE name = ? AND owner_id IS NULL", (name,)
+        ).fetchone()
+        if row:
+            return int(row[0])
+        cur = conn.execute(
+            "INSERT INTO person (name, owner_id, created_at) VALUES (?, NULL, ?)",
+            (name, db.now()),
+        )
+        return int(cur.lastrowid)
     conn.execute(
-        "INSERT INTO person (name, created_at) VALUES (?, ?) ON CONFLICT(name) DO NOTHING",
-        (name, db.now()),
+        """INSERT INTO person (name, owner_id, created_at) VALUES (?, ?, ?)
+           ON CONFLICT(owner_id, name) DO NOTHING""",
+        (name, owner_id, db.now()),
     )
-    return int(conn.execute("SELECT id FROM person WHERE name = ?", (name,)).fetchone()[0])
+    return int(
+        conn.execute(
+            "SELECT id FROM person WHERE name = ? AND owner_id = ?", (name, owner_id)
+        ).fetchone()[0]
+    )
 
 
 def rename_person(conn: sqlite3.Connection, person_id: int, name: str) -> None:
@@ -421,8 +451,10 @@ def rename_person(conn: sqlite3.Connection, person_id: int, name: str) -> None:
     name = name.strip()
     if not name:
         raise Conflict("名字不能为空")
+    owner = conn.execute("SELECT owner_id FROM person WHERE id = ?", (person_id,)).fetchone()
     exists = conn.execute(
-        "SELECT id FROM person WHERE name = ? AND id <> ?", (name, person_id)
+        "SELECT id FROM person WHERE name = ? AND id <> ? AND owner_id IS ?",
+        (name, person_id, owner["owner_id"] if owner else None),
     ).fetchone()
     if exists:
         raise Conflict(f"已经有叫「{name}」的人了")
@@ -488,7 +520,7 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
             "换一袋、改粉量，或先盘点补重"
         )
 
-    person_id = data.get("person_id") or ensure_person(conn, data.get("person"))
+    person_id = data.get("person_id") or ensure_person(conn, data.get("person"), data.get("owner_id"))
     ts = data.get("at") or db.now()
     stages = data.get("brew_stages")
     as_cup = 0 if data.get("as_cup") in (0, False, "0") else 1
@@ -661,7 +693,9 @@ def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
     return {"ok": True, "id": cons_id, "photos_removed": n}
 
 
-def reassign_person(conn: sqlite3.Connection, cons_id: int, person: str | None) -> None:
+def reassign_person(
+    conn: sqlite3.Connection, cons_id: int, person: str | None, owner_id: int | None = None
+) -> None:
     """人选错了：只改归属，克重不动，库存不变；留痕。"""
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
@@ -670,7 +704,7 @@ def reassign_person(conn: sqlite3.Connection, cons_id: int, person: str | None) 
     if row["person_id"]:
         r = conn.execute("SELECT name FROM person WHERE id = ?", (row["person_id"],)).fetchone()
         old = r[0] if r else None
-    new_id = ensure_person(conn, person)
+    new_id = ensure_person(conn, person, owner_id)
     conn.execute("UPDATE consumption_event SET person_id = ? WHERE id = ?", (new_id, cons_id))
     conn.execute(
         """INSERT INTO consumption_audit (cons_id, field, old_value, new_value, at)
@@ -684,10 +718,14 @@ def list_consumption(
     bean_id: int | None = None,
     bottle_id: int | None = None,
     person_id: int | None = None,
+    owner_id: int | None = None,
     limit: int = 50,
 ) -> list[dict]:
     """明细含已撤回的行（界面上划掉显示），汇总统计一律排除。"""
     where, args = ["1 = 1"], []
+    if owner_id is not None:
+        where.append("(b.owner_id = ? OR sp.owner_id = ?)")
+        args.extend([owner_id, owner_id])
     if bean_id:
         where.append("l.bean_id = ?")
         args.append(bean_id)
