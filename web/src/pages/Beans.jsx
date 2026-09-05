@@ -297,7 +297,7 @@ function NewBean({ open, onClose, onDone, oops }) {
       <div className="grid grid-cols-2 gap-3">
         <Field label="烘焙">
           <Select value={f.roast || "浅烘"} onChange={set("roast")} className="w-full">
-            {["浅烘", "中烘", "中深烘", "深烘"].map((r) => (
+            {["浅烘", "中浅烘", "中烘", "中深烘", "深烘"].map((r) => (
               <option key={r}>{r}</option>
             ))}
           </Select>

@@ -107,6 +107,56 @@ BEANS = [
         "stocktake_g": None,
         "photo": "chenxi-jiaotang.jpg",
     },
+    {
+        "bean": {
+            "name": "马森秋 Masincho",
+            "origin": "埃塞俄比亚 西达玛 Sidama",
+            "varietal": "74158",
+            "producer": "Yaye-Testi 处理站",
+            "process": "水洗",
+            "roast": "中浅烘",
+            "water_temp": 93,
+            "note": "言一社 · 单一产区 · 豆卡处理站亦作 Yaya-testi",
+            "tags": ["覆盆子", "茉莉", "柑橘"],
+            "brew_method": "v60",
+            "brew_dose_g": 16,
+            "brew_ratio": 15,
+            "brew_note": "V60 16 g / 92–94°C / 240 g（1:15）。闷蒸 30 g 30 s；"
+                         "1:00 注到 100 g；1:45 中心注到 240 g。"
+                         "聪明杯 20 g / 90–93°C / 300 g；法压 15 g / 92°C / 225 g。",
+            "nominal_g": 200,
+            "price": 80,
+        },
+        "opened": True,
+        "closed": True,
+        "stocktake_g": None,
+        "photo": None,
+    },
+    {
+        "bean": {
+            "name": "墨白",
+            "origin": "哥伦比亚 蕙兰 Huila",
+            "varietal": "铁皮卡 Typica",
+            "process": "水洗",
+            "roast": "深烘",
+            "water_temp": 88,
+            "note": "言一社 · 单一产区 SOE · 意式 / 手冲",
+            "tags": ["太妃糖", "奶油坚果"],
+            "brew_method": "v60",
+            "brew_dose_g": 15,
+            "brew_ratio": 15,
+            "brew_note": "V60 15 g / 86–89°C / 225 g（1:15）。闷蒸 30 g 30 s；"
+                         "约 1:00 注到 130 g；约 2:00 到 225 g。"
+                         "聪明杯 20 g / 90°C / 300 g；法压 15 g / 92°C / 225 g；"
+                         "意式 15–18 g / 91–93°C / 1.5–2 倍液重 / 9 bar / 25–30 s。",
+            "nominal_g": 200,
+            "price": 80,
+        },
+        "opened": True,
+        "closed": True,
+        "stocktake_g": None,
+        "photo": None,
+    },
 ]
 
 
@@ -182,7 +232,15 @@ def main() -> int:
                 )
                 print(f"   盘点到 {entry['stocktake_g']} g（差 {out['delta_g']:+.1f} g 记成校正）")
 
-        if PHOTO_DIR:
+            if entry.get("closed"):
+                _, out = call(
+                    "POST",
+                    f"/api/lots/{lot['id']}/close",
+                    {"note": "补录：入库时已经喝光，未逐杯记账"},
+                )
+                print(f"   关袋进历史（结清 {out.get('deviation_g')} g）")
+
+        if PHOTO_DIR and entry.get("photo"):
             img = PHOTO_DIR / entry["photo"]
             if img.exists():
                 upload(bean["id"], img, "pack")
