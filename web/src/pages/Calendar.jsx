@@ -198,7 +198,7 @@ export default function Calendar({ personId: initialPerson, toast, oops }) {
                   >
                     {c.day}
                   </strong>
-                  <span className="mt-1.5 flex justify-center gap-1">
+                  <span className="mt-1.5 flex flex-col items-center gap-1">
                     <i className={`block h-2 w-2 rounded-full ${coffeeDot(mark?.coffee)}`} />
                     <i className={`block h-2 w-2 rounded-full ${drinkDot(mark?.drink)}`} />
                   </span>

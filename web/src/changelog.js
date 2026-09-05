@@ -20,6 +20,11 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "日历点子改成上下",
+    notes: ["格子里上面是咖啡，下面是酒，不再并排左右。"],
+  },
+  {
+    date: "2026-09-06",
     title: "有了日历，也能把账导出成表",
     notes: [
       "侧栏多了「日历」。哪天冲了咖啡、哪天喝了酒，格子上有点子。点开看当天明细。",
