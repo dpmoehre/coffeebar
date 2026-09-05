@@ -82,6 +82,43 @@ def _rebuild(conn: sqlite3.Connection, table: str) -> None:
         conn.execute("PRAGMA foreign_keys = ON")
 
 
+def _tables_with_old_refs(conn: sqlite3.Connection) -> list[str]:
+    return [
+        r["name"]
+        for r in conn.execute(
+            "SELECT name, sql FROM sqlite_master WHERE type = 'table' AND sql IS NOT NULL"
+        )
+        if "_old_" in (r["sql"] or "") and not r["name"].startswith("_old_")
+    ]
+
+
+def repair_renamed_fks(conn: sqlite3.Connection) -> None:
+    """重建表时若外键还开着，子表会被改写成 REFERENCES _old_xxx；DROP 之后一写就报 no such table。
+
+    小主机老库重建过 person 后，consumption_event 就指着已经不存在的 _old_person。
+    """
+    seen: set[str] = set()
+    for _ in range(16):
+        names = [n for n in _tables_with_old_refs(conn) if n not in seen]
+        if not names:
+            break
+        for name in names:
+            seen.add(name)
+            _rebuild(conn, name)
+    leftovers = [
+        r["name"]
+        for r in conn.execute(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE '_old_%'"
+        )
+    ]
+    conn.execute("PRAGMA foreign_keys = OFF")
+    try:
+        for name in leftovers:
+            conn.execute(f'DROP TABLE IF EXISTS "{name}"')
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
+
+
 def init_db(conn: sqlite3.Connection) -> None:
     conn.executescript(SCHEMA.read_text(encoding="utf-8"))
     for table, column, decl in ADDED_COLUMNS:
@@ -94,6 +131,7 @@ def init_db(conn: sqlite3.Connection) -> None:
         ).fetchone()
         if row and stale in row["sql"]:
             _rebuild(conn, table)
+    repair_renamed_fks(conn)
     # 重建表会带走旧索引；schema 再跑一遍把 IF NOT EXISTS 的索引补上
     conn.executescript(SCHEMA.read_text(encoding="utf-8"))
     # 新列上的索引不能写进 schema.sql 的第一遍执行——老库还没重建时列不存在

@@ -186,6 +186,60 @@ def test_cookie_secure_when_forced(client, monkeypatch):
     assert "secure" in r.headers.get("set-cookie", "").lower()
 
 
+def _point_person_fk_at_old(conn):
+    """复现小主机：外键开着时重建 person，流水会指到已经删掉的 _old_person。"""
+    from app import db as db_mod
+
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("ALTER TABLE person RENAME TO _old_person")
+    ddl = next(
+        s
+        for s in db_mod.SCHEMA.read_text(encoding="utf-8").split(";")
+        if "CREATE TABLE IF NOT EXISTS person" in s
+    )
+    conn.executescript(ddl + ";")
+    old = [r[1] for r in conn.execute("PRAGMA table_info(_old_person)")]
+    keep = [c for c in (r[1] for r in conn.execute("PRAGMA table_info(person)")) if c in old]
+    cols = ", ".join(keep)
+    conn.execute(f"INSERT INTO person ({cols}) SELECT {cols} FROM _old_person")
+    conn.execute("DROP TABLE _old_person")
+
+
+def test_init_repairs_old_person_fk(conn):
+    from app import db as db_mod
+
+    _point_person_fk_at_old(conn)
+    broken = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'consumption_event'"
+    ).fetchone()["sql"]
+    assert "_old_person" in broken
+    db_mod.init_db(conn)
+    fixed = conn.execute(
+        "SELECT sql FROM sqlite_master WHERE name = 'consumption_event'"
+    ).fetchone()["sql"]
+    assert "_old_person" not in fixed
+    conn.execute("UPDATE consumption_event SET person_id = NULL")
+
+
+def test_delete_account_with_broken_person_fk(client):
+    from app import db as db_mod
+
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "oldp@coffeebar.local", "password": "testpass1"},
+    )
+    client.post("/api/people", json={"name": "路人"})
+    side = db_mod.connect()
+    _point_person_fk_at_old(side)
+    side.close()
+    r = client.post(
+        "/api/auth/delete",
+        json={"email": "oldp@coffeebar.local", "password": "testpass1"},
+    )
+    assert r.status_code == 200, r.text
+
+
 def test_delete_empty_account(client):
     client.post("/api/auth/logout")
     client.post(

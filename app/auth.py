@@ -135,6 +135,8 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
     from . import photos
 
     try:
+        # 老库重建 person 后，流水外键可能还指着已经不存在的 _old_person
+        conn.execute("PRAGMA foreign_keys = OFF")
         for path in photos.paths_for_owner(conn, aid):
             photos.remove(path)
         conn.execute(
@@ -145,7 +147,6 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
                )""",
             (aid, aid),
         )
-        # 老库 consumption.person_id 没有 ON DELETE，人还被流水指着就删不掉
         conn.execute(
             """UPDATE consumption_event SET person_id = NULL
                WHERE person_id IN (SELECT id FROM person WHERE owner_id = ?)""",
@@ -170,6 +171,8 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
         conn.execute("DELETE FROM account WHERE id = ?", (aid,))
     except sqlite3.Error as exc:
         raise HTTPException(500, f"注销没做成：{exc}") from exc
+    finally:
+        conn.execute("PRAGMA foreign_keys = ON")
 
 
 def issue_session(conn: sqlite3.Connection, account_id: int) -> str:
