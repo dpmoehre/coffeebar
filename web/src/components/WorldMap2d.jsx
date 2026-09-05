@@ -2,6 +2,7 @@
 import { geoEqualEarth, geoGraticule, geoMercator, geoPath } from "d3-geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
+import { spreadScreen } from "../geo/spread.js";
 import { countries } from "../geo/world.js";
 import PinTip from "./PinTip.jsx";
 
@@ -98,6 +99,9 @@ export default function WorldMap2d({
     [pins, projection]
   );
 
+  const spreadDots = useMemo(() => spreadScreen(dots, view.k), [dots, view.k]);
+  const inv = 1 / view.k;
+
   const localXY = (e) => {
     const box = wrap.current.getBoundingClientRect();
     return { x: e.clientX - box.left, y: e.clientY - box.top };
@@ -182,7 +186,13 @@ export default function WorldMap2d({
     >
       <svg width={w} height={h} className="block">
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-          <path d={grid} fill="none" stroke="#2a231c" strokeWidth={0.6} pointerEvents="none" />
+          <path
+            d={grid}
+            fill="none"
+            stroke="#2a231c"
+            strokeWidth={0.6 * inv}
+            pointerEvents="none"
+          />
           {countryPaths.map((c) => {
             const on = c.origin && activeOrigin === c.origin.key;
             return (
@@ -191,7 +201,7 @@ export default function WorldMap2d({
                 d={c.d}
                 fill={c.origin ? (on ? "#4a3828" : "#2a231c") : "#1c1814"}
                 stroke={c.origin ? "#6b5438" : "#3a3228"}
-                strokeWidth={0.7}
+                strokeWidth={0.7 * inv}
                 className={c.origin && !placing ? "cursor-pointer" : undefined}
                 style={{ pointerEvents: c.origin ? "auto" : "none" }}
                 onPointerEnter={(e) => hoverOrigin(c.origin, e)}
@@ -205,7 +215,7 @@ export default function WorldMap2d({
             return (
               <g
                 key={o.key}
-                transform={`translate(${o.x},${o.y})`}
+                transform={`translate(${o.x},${o.y}) scale(${inv})`}
                 className={placing ? undefined : "cursor-pointer"}
                 onPointerEnter={(e) => hoverOrigin(o, e)}
                 onPointerMove={(e) => hoverOrigin(o, e)}
@@ -223,13 +233,28 @@ export default function WorldMap2d({
               </g>
             );
           })}
-          {dots.map((p) => {
+          {spreadDots.map((p) =>
+            Math.hypot(p.sx - p.x, p.sy - p.y) > 0.8 ? (
+              <line
+                key={`leg-${p.bean_id}-${p.place_id}`}
+                x1={p.x}
+                y1={p.y}
+                x2={p.sx}
+                y2={p.sy}
+                stroke="#c88d44"
+                strokeOpacity={0.35}
+                strokeWidth={1.1 * inv}
+                pointerEvents="none"
+              />
+            ) : null
+          )}
+          {spreadDots.map((p) => {
             const on = p.bean_id === selectedId || tip?.pin?.place_id === p.place_id;
             const r = on ? 6.5 : 4.5;
             return (
               <g
                 key={`${p.bean_id}-${p.place_id}`}
-                transform={`translate(${p.x},${p.y})`}
+                transform={`translate(${p.sx},${p.sy}) scale(${inv})`}
                 className="cursor-pointer"
                 onPointerEnter={(e) => {
                   if (drag.current?.moved) return;
@@ -246,7 +271,7 @@ export default function WorldMap2d({
                   if (!placing && onOpen) onOpen(p.bean_id);
                 }}
               >
-                <circle r={14} fill="transparent" />
+                <circle r={12} fill="transparent" />
                 <circle
                   r={r + 3}
                   fill={p.in_stock ? "#c88d44" : "transparent"}

@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Globe from "react-globe.gl";
 
+import { spreadLatLng } from "../geo/spread.js";
 import { countries } from "../geo/world.js";
 import PinTip from "./PinTip.jsx";
 
@@ -53,10 +54,10 @@ export default function BeanGlobe({
         color: "#c88d44",
         alt: 0.006,
       }));
-    const beans = pins.map((p) => ({
+    const beans = spreadLatLng(pins).map((p) => ({
       ...p,
       _kind: "pin",
-      size: p.bean_id === selectedId || tip?.pin?.place_id === p.place_id ? 0.55 : 0.32,
+      size: p.bean_id === selectedId || tip?.pin?.place_id === p.place_id ? 0.42 : 0.24,
       color: p.in_stock ? "#c88d44" : "#9c8b74",
       alt: 0.012,
     }));
@@ -114,8 +115,8 @@ export default function BeanGlobe({
         }}
         polygonsTransitionDuration={0}
         pointsData={points}
-        pointLat="lat"
-        pointLng="lng"
+        pointLat={(d) => (d._kind === "pin" ? d.plat : d.lat)}
+        pointLng={(d) => (d._kind === "pin" ? d.plng : d.lng)}
         pointAltitude="alt"
         pointRadius="size"
         pointColor="color"
