@@ -144,12 +144,64 @@ CREATE TABLE IF NOT EXISTS bottle_photo (
   created_at TEXT    NOT NULL
 );
 
+-- 鸡尾酒配方。辅料只写在 note / steps，不建库存。
+CREATE TABLE IF NOT EXISTS recipe (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id   INTEGER REFERENCES account(id),
+  name       TEXT    NOT NULL,
+  steps      TEXT,
+  note       TEXT,
+  created_at TEXT    NOT NULL,
+  updated_at TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS recipe_line (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  recipe_id  INTEGER NOT NULL REFERENCES recipe(id) ON DELETE CASCADE,
+  spirit_id  INTEGER NOT NULL REFERENCES bottle(id),
+  amount_ml  REAL    NOT NULL,
+  sort       INTEGER NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_rline_recipe ON recipe_line(recipe_id);
+
+-- 推荐酒单：一条纯饮（基酒）或鸡尾酒。listed=0 编辑区能看见，正面不出现。
+CREATE TABLE IF NOT EXISTS menu_item (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id   INTEGER REFERENCES account(id),
+  kind       TEXT    NOT NULL CHECK (kind IN ('neat', 'cocktail')),
+  spirit_id  INTEGER REFERENCES bottle(id),
+  recipe_id  INTEGER REFERENCES recipe(id) ON DELETE CASCADE,
+  sort       INTEGER NOT NULL DEFAULT 0,
+  listed     INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT    NOT NULL,
+  CHECK (
+    (kind = 'neat' AND spirit_id IS NOT NULL AND recipe_id IS NULL)
+    OR (kind = 'cocktail' AND recipe_id IS NOT NULL AND spirit_id IS NULL)
+  )
+);
+CREATE INDEX IF NOT EXISTS idx_menu_owner ON menu_item(owner_id, sort);
+
+-- 酒单一巡：鸡尾酒多行扣瓶，杯数按巡算 1。酒卡上老的「倒一杯」没有 serve。
+CREATE TABLE IF NOT EXISTS drink_serve (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id     INTEGER REFERENCES account(id),
+  kind         TEXT    NOT NULL CHECK (kind IN ('neat', 'cocktail')),
+  menu_item_id INTEGER REFERENCES menu_item(id) ON DELETE SET NULL,
+  recipe_id    INTEGER REFERENCES recipe(id) ON DELETE SET NULL,
+  person_id    INTEGER REFERENCES person(id),
+  name         TEXT    NOT NULL,
+  note         TEXT,
+  at           TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_serve_owner ON drink_serve(owner_id, at);
+
 -- 喝掉一次。咖啡扣 bean_lot，酒扣 bottle_lot，同一张表避免双记。
 CREATE TABLE IF NOT EXISTS consumption_event (
   id            INTEGER PRIMARY KEY AUTOINCREMENT,
   kind          TEXT    NOT NULL DEFAULT 'coffee' CHECK (kind IN ('coffee', 'drink')),
   lot_id        INTEGER REFERENCES bean_lot(id) ON DELETE CASCADE,
   bottle_lot_id INTEGER REFERENCES bottle_lot(id) ON DELETE CASCADE,
+  serve_id      INTEGER REFERENCES drink_serve(id),
   person_id     INTEGER REFERENCES person(id),          -- 可空：没记是谁
   amount_g      REAL,                                   -- 咖啡：当次实际粉量
   amount_ml     REAL,                                   -- 酒：当次倒了多少毫升
@@ -171,6 +223,7 @@ CREATE TABLE IF NOT EXISTS consumption_event (
 CREATE INDEX IF NOT EXISTS idx_cons_lot    ON consumption_event(lot_id);
 CREATE INDEX IF NOT EXISTS idx_cons_at     ON consumption_event(at);
 CREATE INDEX IF NOT EXISTS idx_cons_void   ON consumption_event(voided_at);
+CREATE INDEX IF NOT EXISTS idx_cons_serve  ON consumption_event(serve_id);
 
 -- 改归属人留痕
 CREATE TABLE IF NOT EXISTS consumption_audit (

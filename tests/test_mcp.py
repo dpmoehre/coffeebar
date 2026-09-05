@@ -1,6 +1,7 @@
 """MCP 打现有 HTTP：未运行要报、网页占锁硬拒、多袋不自挑。"""
 
 import io
+import json
 import zipfile
 from pathlib import Path
 
@@ -80,6 +81,13 @@ def test_tool_catalog_covers_bar():
         "adjust_bottle",
         "close_bottle",
         "record_drink",
+        "list_menu",
+        "add_menu_item",
+        "set_menu_listed",
+        "reorder_menu",
+        "create_recipe",
+        "update_recipe",
+        "pour_menu",
         "list_restock",
         "add_restock_photo",
         "get_stats",
@@ -150,5 +158,12 @@ def test_photo_calendar_stats_spirit(client, tmp_path):
     spirit = c.create_spirit({"name": "MCP酒", "abv": 40, "kind": "威士忌", "nominal_ml": 700, "price": 200})
     drink = c.record_drink({"lot_id": spirit["lots"][0]["id"], "amount_ml": 30, "person": "丁瀚舟"})
     assert drink["lot_id"] == spirit["lots"][0]["id"]
+    rec = c.create_recipe("【测试】MCP纯饮方", json.dumps([{"spirit_id": spirit["id"], "amount_ml": 25}]))
+    item = c.add_menu_item({"kind": "cocktail", "recipe_id": rec["id"]})
+    poured = c.pour_menu(item["id"], "丁瀚舟", json.dumps([
+        {"spirit_id": spirit["id"], "lot_id": spirit["lots"][0]["id"], "amount_ml": 20}
+    ]))
+    assert poured["amount_ml"] == 20
+    assert poured["kind"] == "cocktail"
     mapped = c.get_map()
     assert "beans" in mapped or "pins" in mapped or "places" in mapped or "origins" in mapped

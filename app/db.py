@@ -47,6 +47,7 @@ ADDED_COLUMNS = [
     # 老账号补列当已验证，免得小主机升级后全员变成「没验证」
     ("account", "email_verified", "INTEGER NOT NULL DEFAULT 1"),
     ("bean", "deleted_at", "TEXT"),
+    ("consumption_event", "serve_id", "INTEGER"),
 ]
 
 
@@ -141,6 +142,8 @@ def init_db(conn: sqlite3.Connection) -> None:
         conn.execute(
             "CREATE INDEX IF NOT EXISTS idx_cons_blot ON consumption_event(bottle_lot_id)"
         )
+    if "serve_id" in cols:
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_cons_serve ON consumption_event(serve_id)")
 
 
 def now() -> str:

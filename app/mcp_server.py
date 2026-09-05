@@ -17,7 +17,7 @@ mcp = MCPServer(
         "网页正在改这一条时硬拒绝，不要接管、不要重试。"
         "关袋、撤回、删卡、删人必须人明确说。"
         "多袋/多瓶未关时不要自己挑，先列出再等 lot_id。"
-        "酒单、鸡尾酒、自制基酒还没有。"
+        "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升。自制基酒还没有。"
         "服务没开就说 coffeebar 未在运行。"
     ),
 )
@@ -398,7 +398,7 @@ def get_profile(person_id: int) -> Any:
 
 @mcp.tool()
 def list_spirits(scope: str = "stock") -> Any:
-    """查酒库。scope: stock / history / all。酒单和鸡尾酒还没有。"""
+    """查酒库。scope: stock / history / all。"""
     return _call(client().list_spirits, scope)
 
 
@@ -523,6 +523,65 @@ def record_drink(
             {"amount_ml": amount_ml, "lot_id": lot_id, "bottle_id": bottle_id, "person": person, "note": note}
         ),
     )
+
+
+# ── 酒单 / 鸡尾酒 ──────────────────────────────────────────
+
+
+@mcp.tool()
+def list_menu(listed_only: bool = True) -> Any:
+    """查推荐酒单。listed_only 只看已上架。"""
+    return _call(client().list_menu, listed_only)
+
+
+@mcp.tool()
+def add_menu_item(
+    kind: str,
+    spirit_id: int | None = None,
+    recipe_id: int | None = None,
+    listed: bool = True,
+) -> Any:
+    """上架一条。kind=neat 要 spirit_id；kind=cocktail 要 recipe_id。"""
+    return _call(
+        client().add_menu_item,
+        _drop_none({"kind": kind, "spirit_id": spirit_id, "recipe_id": recipe_id, "listed": listed}),
+    )
+
+
+@mcp.tool()
+def set_menu_listed(item_id: int, listed: bool) -> Any:
+    """上架或下架一条酒单。"""
+    return _call(client().set_menu_listed, item_id, listed)
+
+
+@mcp.tool()
+def reorder_menu(ids: list[int]) -> Any:
+    """按这个顺序重排酒单，必须包含全部条目。"""
+    return _call(client().reorder_menu, ids)
+
+
+@mcp.tool()
+def create_recipe(name: str, lines_json: str, steps: str | None = None, note: str | None = None) -> Any:
+    """建鸡尾酒配方。lines_json 是 JSON 数组，每项 {spirit_id, amount_ml}。"""
+    return _call(client().create_recipe, name, lines_json, steps, note)
+
+
+@mcp.tool()
+def update_recipe(
+    recipe_id: int,
+    name: str | None = None,
+    lines_json: str | None = None,
+    steps: str | None = None,
+    note: str | None = None,
+) -> Any:
+    """改鸡尾酒配方。网页占锁时会被拒。"""
+    return _call(client().update_recipe, recipe_id, name, lines_json, steps, note)
+
+
+@mcp.tool()
+def pour_menu(menu_item_id: int, person: str | None = None, lines_json: str | None = None, note: str | None = None) -> Any:
+    """从酒单倒一巡。lines_json 可改实际毫升和 lot_id。多瓶未关不自挑。撤回整巡用 void_consumption。"""
+    return _call(client().pour_menu, menu_item_id, person, lines_json, note)
 
 
 # ── 统计 / 日历 / 地图 / 出表 ──────────────────────────────

@@ -163,6 +163,17 @@ export const api = {
   closeBottle: (lotId, note) => req("POST", `/api/bottle-lots/${lotId}/close`, { note }),
   recordDrink: (data) => req("POST", "/api/drinks", data),
 
+  menu: (listedOnly = false) => req("GET", `/api/menu?listed_only=${listedOnly}`),
+  addMenuItem: (data) => req("POST", "/api/menu", data),
+  patchMenuItem: (id, data) => req("PATCH", `/api/menu/${id}`, data),
+  reorderMenu: (ids) => req("PUT", "/api/menu/order", { ids }),
+  deleteMenuItem: (id) => req("DELETE", `/api/menu/${id}`),
+  pourMenu: (data) => req("POST", "/api/menu/pour", data),
+  recipes: () => req("GET", "/api/recipes"),
+  createRecipe: (data) => req("POST", "/api/recipes", data),
+  updateRecipe: (id, data) => req("PATCH", `/api/recipes/${id}`, data),
+  deleteRecipe: (id) => req("DELETE", `/api/recipes/${id}`),
+
   stats: (period = "month") => req("GET", `/api/stats?period=${period}`),
   calendar: (year, month, personId) => {
     const q = new URLSearchParams({ year, month });

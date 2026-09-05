@@ -241,7 +241,14 @@ export default function Calendar({ personId: initialPerson, toast, oops }) {
                         <td className="border-b border-line px-2 py-2">
                           {e.kind === "drink" ? "酒" : "咖啡"}
                         </td>
-                        <td className="border-b border-line px-2 py-2">{e.name}</td>
+                        <td className="border-b border-line px-2 py-2">
+                          <div>{e.name}</div>
+                          {e.kind === "drink" && e.lines?.length > 0 && (
+                            <div className="mt-0.5 text-xs text-muted">
+                              {e.lines.map((ln) => `${ln.name} ${ln.amount_ml} ml`).join(" · ")}
+                            </div>
+                          )}
+                        </td>
                         <td className="border-b border-line px-2 py-2">{e.person || "没记"}</td>
                         <td className="border-b border-line px-2 py-2 text-amber">
                           {e.kind === "drink" ? `${e.amount_ml} ml` : `${e.amount_g} g`}

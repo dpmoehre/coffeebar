@@ -20,6 +20,15 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "侧栏有酒单了，能倒鸡尾酒",
+    notes: [
+      "「酒水」下面多了「酒单」。可以上架纯饮，也可以写鸡尾酒（选几支基酒、填默认毫升）。",
+      "倒一杯时毫升都能改。鸡尾酒会扣好几瓶，日历上仍算一杯。",
+      "没上架的酒不出现在正面。酒卡上原来的「倒一杯」还在。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "可以用 Cursor 直接记账",
     notes: [
       "把豆袋照片和克重发给 Cursor，能直接建卡、入袋、记谁喝了。",

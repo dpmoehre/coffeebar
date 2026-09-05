@@ -144,8 +144,10 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
                  SELECT 'bean:' || id FROM bean WHERE owner_id = ?
                  UNION
                  SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
+                 UNION
+                 SELECT 'recipe:' || id FROM recipe WHERE owner_id = ?
                )""",
-            (aid, aid),
+            (aid, aid, aid),
         )
         conn.execute(
             """UPDATE consumption_event SET person_id = NULL
@@ -163,6 +165,9 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
         conn.execute(f"DELETE FROM consumption_photo WHERE cons_id IN ({cons_owned})", (aid, aid))
         conn.execute(f"DELETE FROM consumption_audit WHERE cons_id IN ({cons_owned})", (aid, aid))
         conn.execute(f"DELETE FROM consumption_event WHERE id IN ({cons_owned})", (aid, aid))
+        conn.execute("DELETE FROM drink_serve WHERE owner_id = ?", (aid,))
+        conn.execute("DELETE FROM menu_item WHERE owner_id = ?", (aid,))
+        conn.execute("DELETE FROM recipe WHERE owner_id = ?", (aid,))
         conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
         conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
         conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
@@ -364,5 +369,9 @@ def assert_lock_resource(conn: sqlite3.Connection, resource: str, account_id: in
         assert_owner(bean_owner(conn, rid), account_id, "没有这支豆")
     elif kind == "bottle":
         assert_owner(spirit_owner(conn, rid), account_id, "没有这支酒")
+    elif kind == "recipe":
+        from . import menu as menu_mod
+
+        assert_owner(menu_mod.recipe_owner(conn, rid), account_id, "没有这个配方")
     else:
         raise HTTPException(400, "锁的资源不对")

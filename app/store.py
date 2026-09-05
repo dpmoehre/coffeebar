@@ -702,8 +702,8 @@ def retarget_finished_lot(
     return out
 
 
-def void_consumption(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) -> dict:
-    """撤回一笔：只划掉不删。已关袋的批次补一笔当天调整，不改写历史。"""
+def void_one(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) -> dict:
+    """撤回单行。酒单整巡请走 void_consumption / menu.void_serve。"""
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
         raise Conflict("没有这条记录")
@@ -734,8 +734,7 @@ def void_consumption(conn: sqlite3.Connection, cons_id: int, reason: str | None 
     return {"id": cons_id, "voided_at": ts, "closed_lot_adjusted": compensated}
 
 
-def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
-    """撤回撤错了，恢复这一笔。"""
+def unvoid_one(conn: sqlite3.Connection, cons_id: int) -> None:
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
         raise Conflict("没有这条记录")
@@ -757,8 +756,7 @@ def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
     )
 
 
-def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
-    """彻底删掉已经撤回的一笔。库存在撤回时已经加回去，这里不再动账。"""
+def delete_voided_one(conn: sqlite3.Connection, cons_id: int) -> dict:
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
         raise Conflict("没有这条记录")
@@ -767,6 +765,46 @@ def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
     n = photos.purge_consumption_photos(conn, cons_id)
     conn.execute("DELETE FROM consumption_event WHERE id = ?", (cons_id,))
     return {"ok": True, "id": cons_id, "photos_removed": n}
+
+
+def void_consumption(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) -> dict:
+    """撤回一笔：只划掉不删。属于酒单一巡的，整巡一起撤。"""
+    row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
+    if not row:
+        raise Conflict("没有这条记录")
+    serve_id = row.get("serve_id")
+    if serve_id:
+        from . import menu as menu_mod
+
+        return menu_mod.void_serve(conn, int(serve_id), reason)
+    return void_one(conn, cons_id, reason)
+
+
+def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
+    """撤回撤错了，恢复这一笔。属于酒单一巡的，整巡一起恢复。"""
+    row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
+    if not row:
+        raise Conflict("没有这条记录")
+    serve_id = row.get("serve_id")
+    if serve_id:
+        from . import menu as menu_mod
+
+        menu_mod.unvoid_serve(conn, int(serve_id))
+        return
+    unvoid_one(conn, cons_id)
+
+
+def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
+    """彻底删掉已经撤回的一笔。库存在撤回时已经加回去，这里不再动账。"""
+    row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
+    if not row:
+        raise Conflict("没有这条记录")
+    serve_id = row.get("serve_id")
+    if serve_id:
+        from . import menu as menu_mod
+
+        return menu_mod.delete_voided_serve(conn, int(serve_id))
+    return delete_voided_one(conn, cons_id)
 
 
 def reassign_person(
@@ -781,12 +819,23 @@ def reassign_person(
         r = conn.execute("SELECT name FROM person WHERE id = ?", (row["person_id"],)).fetchone()
         old = r[0] if r else None
     new_id = ensure_person(conn, person, owner_id)
-    conn.execute("UPDATE consumption_event SET person_id = ? WHERE id = ?", (new_id, cons_id))
-    conn.execute(
-        """INSERT INTO consumption_audit (cons_id, field, old_value, new_value, at)
-           VALUES (?, 'person', ?, ?, ?)""",
-        (cons_id, old, (person or "").strip() or None, db.now()),
-    )
+    serve_id = row.get("serve_id")
+    ids = [cons_id]
+    if serve_id:
+        ids = [
+            r[0]
+            for r in conn.execute(
+                "SELECT id FROM consumption_event WHERE serve_id = ?", (serve_id,)
+            )
+        ]
+        conn.execute("UPDATE drink_serve SET person_id = ? WHERE id = ?", (new_id, serve_id))
+    for cid in ids:
+        conn.execute("UPDATE consumption_event SET person_id = ? WHERE id = ?", (new_id, cid))
+        conn.execute(
+            """INSERT INTO consumption_audit (cons_id, field, old_value, new_value, at)
+               VALUES (?, 'person', ?, ?, ?)""",
+            (cid, old, (person or "").strip() or None, db.now()),
+        )
 
 
 def list_consumption(

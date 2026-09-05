@@ -182,9 +182,11 @@ def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | Non
     if start:
         drink_where += " AND c.at >= ?"
         drink_args.append(start)
+    from . import menu as menu_mod
+
     drink = conn.execute(
         f"""SELECT COALESCE(SUM(c.amount_ml), 0),
-                   COUNT(*),
+                   {menu_mod.drink_cups_sql("c")},
                    COALESCE(SUM(c.amount_ml * COALESCE(c.unit_cost, 0)), 0),
                    COALESCE(SUM(c.amount_ml * (COALESCE(b.abv, 0) / 100.0) * 0.789), 0)
             FROM consumption_event c
@@ -217,7 +219,7 @@ def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | Non
         "cups": cups,
         "avg_dose": dose,
         "drinks_ml": round(drinks_ml, 1),
-        "drink_cups": drink_cups,
+        "drink_cups": int(drink_cups or 0),
         "alcohol_g": round(alcohol_g, 1),
         "spent": round(spent + drink_spent, 2),
         "bought": round(bought, 2),

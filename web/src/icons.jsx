@@ -39,6 +39,13 @@ export const Cart = ({ className = "" }) => (
   </svg>
 );
 
+export const MenuBoard = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M6 5.2h12A1.4 1.4 0 0 1 19.4 6.6v12.2A1.4 1.4 0 0 1 18 20.2H6A1.4 1.4 0 0 1 4.6 18.8V6.6A1.4 1.4 0 0 1 6 5.2z" />
+    <path d="M8.4 9.4h7.2M8.4 12.6h7.2M8.4 15.8h4.6" />
+  </svg>
+);
+
 export const Glass = ({ className = "" }) => (
   <svg {...base} className={className}>
     <path d="M8 4h8l-1.2 7.2A3.8 3.8 0 0 1 11 15h0a3.8 3.8 0 0 1-3.8-3.8L8 4z" />

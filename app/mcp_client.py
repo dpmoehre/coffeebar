@@ -347,6 +347,61 @@ class Client:
         out["lot_id"] = payload["lot_id"]
         return out
 
+    def list_menu(self, listed_only: bool = True):
+        return self.request("GET", f"/api/menu?listed_only={'true' if listed_only else 'false'}")
+
+    def add_menu_item(self, data: dict):
+        return self.request("POST", "/api/menu", json=data)
+
+    def set_menu_listed(self, item_id: int, listed: bool):
+        return self.request("PATCH", f"/api/menu/{item_id}", json={"listed": listed})
+
+    def reorder_menu(self, ids: list[int]):
+        return self.request("PUT", "/api/menu/order", json={"ids": ids})
+
+    def create_recipe(self, name: str, lines_json: str, steps: str | None = None, note: str | None = None):
+        data = {"name": name, "lines": json.loads(lines_json)}
+        if steps is not None:
+            data["steps"] = steps
+        if note is not None:
+            data["note"] = note
+        return self.request("POST", "/api/recipes", json=data)
+
+    def update_recipe(
+        self,
+        recipe_id: int,
+        name: str | None = None,
+        lines_json: str | None = None,
+        steps: str | None = None,
+        note: str | None = None,
+    ):
+        data: dict = {}
+        if name is not None:
+            data["name"] = name
+        if lines_json is not None:
+            data["lines"] = json.loads(lines_json)
+        if steps is not None:
+            data["steps"] = steps
+        if note is not None:
+            data["note"] = note
+        return self.request("PATCH", f"/api/recipes/{recipe_id}", json=data)
+
+    def pour_menu(
+        self,
+        menu_item_id: int,
+        person: str | None = None,
+        lines_json: str | None = None,
+        note: str | None = None,
+    ):
+        payload: dict = {"menu_item_id": menu_item_id}
+        if person:
+            payload["person"] = person
+        if note:
+            payload["note"] = note
+        if lines_json:
+            payload["lines"] = json.loads(lines_json)
+        return self.request("POST", "/api/menu/pour", json=payload)
+
     # ── 统计 / 日历 / 地图 / 出表 ──────────────────────────
 
     def list_restock(self):

@@ -49,11 +49,13 @@ def month(
     if person_id:
         where += " AND c.person_id = ?"
         args.append(person_id)
+    from . import menu as menu_mod
+
     rows = conn.execute(
         f"""SELECT {_DAY} AS day,
                    SUM(CASE WHEN c.kind = 'coffee' AND c.voided_at IS NULL THEN 1 ELSE 0 END)
                        AS coffee,
-                   SUM(CASE WHEN c.kind = 'drink' AND c.voided_at IS NULL THEN 1 ELSE 0 END)
+                   {menu_mod.drink_cups_sql("c")}
                        AS drink,
                    COALESCE(SUM(CASE WHEN c.kind = 'coffee' AND c.voided_at IS NULL
                                      THEN c.amount_g ELSE 0 END), 0) AS beans_g,
@@ -104,8 +106,9 @@ def day(
         args.append(person_id)
     rows = conn.execute(
         f"""SELECT c.id, c.kind, c.at, c.amount_g, c.amount_ml, c.unit_cost,
-                   c.voided_at, c.as_cup, c.note,
+                   c.voided_at, c.as_cup, c.note, c.serve_id,
                    b.name AS bean_name, sp.name AS spirit_name, p.name AS person_name,
+                   s.name AS serve_name, s.kind AS serve_kind,
                    CASE c.kind
                      WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0))
                      ELSE (c.amount_g * COALESCE(c.unit_cost, 0))
@@ -116,12 +119,50 @@ def day(
             LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
             LEFT JOIN bottle sp ON sp.id = bl.bottle_id
             LEFT JOIN person p ON p.id = c.person_id
+            LEFT JOIN drink_serve s ON s.id = c.serve_id
             WHERE {where}
             ORDER BY c.at, c.id""",
         args,
     ).fetchall()
     events = []
+    served: dict[int, dict] = {}
     for r in rows:
+        if r["kind"] == "drink" and r["serve_id"]:
+            sid = int(r["serve_id"])
+            ev = served.get(sid)
+            if not ev:
+                ev = {
+                    "id": f"serve:{sid}",
+                    "serve_id": sid,
+                    "kind": "drink",
+                    "at": r["at"],
+                    "name": r["serve_name"] or r["spirit_name"],
+                    "person": r["person_name"],
+                    "amount_g": None,
+                    "amount_ml": 0.0,
+                    "cost": 0.0,
+                    "as_cup": True,
+                    "voided": True,
+                    "note": r["note"],
+                    "serve_kind": r["serve_kind"],
+                    "lines": [],
+                }
+                served[sid] = ev
+                events.append(ev)
+            ev["lines"].append(
+                {
+                    "id": r["id"],
+                    "name": r["spirit_name"],
+                    "amount_ml": r["amount_ml"],
+                    "cost": round(float(r["cost"] or 0), 2),
+                    "voided": bool(r["voided_at"]),
+                }
+            )
+            if not r["voided_at"]:
+                ev["voided"] = False
+                ev["amount_ml"] = round(ev["amount_ml"] + float(r["amount_ml"] or 0), 1)
+                ev["cost"] = round(ev["cost"] + float(r["cost"] or 0), 2)
+            continue
         events.append(
             {
                 "id": r["id"],

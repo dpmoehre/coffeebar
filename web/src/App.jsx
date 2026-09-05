@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Calendar as CalIcon, Cart, Chart, CupMark, Glass, Globe, Log, People } from "./icons.jsx";
+import { Bean, Calendar as CalIcon, Cart, Chart, CupMark, Glass, Globe, Log, MenuBoard, People } from "./icons.jsx";
 import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
@@ -11,6 +11,7 @@ import Beans from "./pages/Beans.jsx";
 import Calendar from "./pages/Calendar.jsx";
 import PeoplePage from "./pages/People.jsx";
 import Restock from "./pages/Restock.jsx";
+import Menu from "./pages/Menu.jsx";
 import SpiritCard from "./pages/SpiritCard.jsx";
 import Spirits from "./pages/Spirits.jsx";
 import Stats from "./pages/Stats.jsx";
@@ -19,6 +20,7 @@ import Updates from "./pages/Updates.jsx";
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
   { key: "spirits", label: "酒水", Icon: Glass },
+  { key: "menu", label: "酒单", Icon: MenuBoard },
   { key: "restock", label: "补货", Icon: Cart },
   { key: "stats", label: "统计", Icon: Chart },
   { key: "calendar", label: "日历", Icon: CalIcon },
@@ -283,6 +285,7 @@ export default function App() {
         {page === "spirit" && (
           <SpiritCard id={spiritId} onBack={() => go("spirits")} toast={toast} oops={oops} />
         )}
+        {page === "menu" && <Menu onOpenSpirit={openSpirit} toast={toast} oops={oops} />}
         {page === "restock" && <Restock onOpen={openBean} />}
         {page === "stats" && <Stats toast={toast} oops={oops} />}
         {page === "calendar" && (
