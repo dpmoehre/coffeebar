@@ -73,3 +73,17 @@ def test_volcano_scales_with_dose():
     assert p["total_water_g"] == 280
     assert sum(s["add_g"] for s in p["stages"]) == 280
     assert p["total_seconds"] == 135, "段数固定，改粉量只改水量"
+
+
+def test_stage_ratios_match_grams_over_dose():
+    """各段水粉比 = 克数 ÷ 粉量，和方程式称上的 1:x 同一口径。"""
+    p = brew.plan("v60", 15.9, 16)
+    assert p["total_water_g"] == 254
+    assert p["total_ratio"] == 15.97
+    for s in p["stages"]:
+        assert s["target_ratio"] == round(s["target_g"] / 15.9, 2)
+        assert s["add_ratio"] == (0 if s["add_g"] == 0 else round(s["add_g"] / 15.9, 2))
+    assert p["stages"][0]["add_ratio"] == 2.01
+    assert p["stages"][0]["target_ratio"] == 2.01
+    assert p["stages"][-1]["add_ratio"] == 0
+    assert p["stages"][-1]["target_ratio"] == 15.97

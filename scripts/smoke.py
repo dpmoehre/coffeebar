@@ -123,7 +123,11 @@ def main() -> int:
     print(f"   {p['method_label']} · 18 g · 1:15 → 总水 {p['total_water_g']} g")
     for s in p["stages"]:
         add = f"+{s['add_g']} g" if s["add_g"] else "停手"
-        print(f"     {s['name']:<6}{add:>7}  秤到 {s['target_g']:>3} g  {s['seconds']:>2}s  {s['how']}")
+        add_r = f"1:{s['add_ratio']:.2f}" if s["add_g"] else "—"
+        print(
+            f"     {s['name']:<6}{add:>7} {add_r:>7}  秤到 {s['target_g']:>3} g  "
+            f"1:{s['target_ratio']:.2f}  {s['seconds']:>2}s  {s['how']}"
+        )
     ok(total == p["total_water_g"], f"各段加总 {total} = 总水 {p['total_water_g']}")
 
     step(7, "统计出数字")

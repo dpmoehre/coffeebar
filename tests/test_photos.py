@@ -388,6 +388,57 @@ def test_migration_relaxes_photo_kind_on_old_db(tmp_path, monkeypatch):
     conn.close()
 
 
+def test_brew_photo_on_consumption(client):
+    """冲一次留下的过程照挂在那笔消耗上，豆卡冲煮记录能读到。"""
+    bean = make_bean(client)
+    brew = client.post(
+        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16}
+    ).json()
+    r = client.post(
+        f"/api/consumption/{brew['id']}/photos",
+        files={"file": ("bed.png", png_bytes(), "image/png")},
+        data={"kind": "bed"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["kind"] == "bed"
+    assert body["path"].endswith(".jpg")
+    assert client.get(body["url"]).status_code == 200
+    assert client.get(body["thumb"]).status_code == 200
+
+    detail = client.get(f"/api/beans/{bean['id']}").json()
+    assert len(detail["log"][0]["photos"]) == 1
+    assert detail["log"][0]["photos"][0]["kind"] == "bed"
+
+    name = body["path"].split("/")[-1]
+    assert client.delete(f"/api/consumption-photos/{body['id']}").status_code == 200
+    assert not (db.PHOTO_DIR / name).exists()
+    assert client.get(f"/api/beans/{bean['id']}").json()["log"][0]["photos"] == []
+
+
+def test_brew_photo_rejects_bad_kind(client):
+    bean = make_bean(client)
+    brew = client.post(
+        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16}
+    ).json()
+    r = client.post(
+        f"/api/consumption/{brew['id']}/photos",
+        files={"file": ("a.png", png_bytes(), "image/png")},
+        data={"kind": "selfie"},
+    )
+    assert r.status_code == 400
+
+
+def test_brew_photo_needs_the_brew(client):
+    r = client.post(
+        "/api/consumption/999/photos",
+        files={"file": ("a.png", png_bytes(), "image/png")},
+        data={"kind": "beans"},
+    )
+    assert r.status_code == 400
+    assert "没有这笔冲煮" in r.json()["message"]
+
+
 def test_migration_is_idempotent(tmp_path, monkeypatch):
     """反复启动不该反复重建表。"""
     import importlib

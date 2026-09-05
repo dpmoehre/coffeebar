@@ -199,6 +199,16 @@ CREATE TABLE IF NOT EXISTS restock_photo (
   created_at TEXT    NOT NULL
 );
 
+-- 冲一次留下的过程照：称豆 / 粉床 / 冲完，都可以缺
+CREATE TABLE IF NOT EXISTS consumption_photo (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  cons_id    INTEGER NOT NULL REFERENCES consumption_event(id) ON DELETE CASCADE,
+  kind       TEXT    NOT NULL CHECK (kind IN ('beans', 'bed', 'finish')),
+  path       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_cons_photo ON consumption_photo(cons_id);
+
 -- 每支豆的安全库存（克）：低于它进补货清单
 CREATE TABLE IF NOT EXISTS restock_rule (
   bean_id   INTEGER PRIMARY KEY REFERENCES bean(id) ON DELETE CASCADE,

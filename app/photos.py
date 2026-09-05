@@ -1,8 +1,11 @@
-"""豆卡照片：存盘、转码、缩略图。
+"""照片：存盘、转码、缩略图。
 
-三种照片都可以缺（见 docs/002）：`pack` 包装袋、`tray` 豆盘、`card` 店家豆卡。
+豆卡三种都可以缺（见 docs/002）：`pack` 包装袋、`tray` 豆盘、`card` 店家豆卡。
 没开封往往只有包装，开封后再补豆盘。豆卡是店家印的参数说明，拍下来留档，
 但它不适合当封面（缩略图里一片字），所以 `cover()` 不选它。
+
+冲煮记录另有过程照：`beans` 称豆、`bed` 粉床、`finish` 冲完，也都可缺。
+
 手机直出多是 HEIC，浏览器认不了，一律转成 JPEG 存。原图不留——自用场景没必要
 占空间，也省得备份包变大。
 """
@@ -148,6 +151,58 @@ def delete_bottle_photo(conn: sqlite3.Connection, photo_id: int) -> None:
         raise BadPhoto("没有这张图")
     remove(row["path"])
     conn.execute("DELETE FROM bottle_photo WHERE id = ?", (photo_id,))
+
+
+BREW_PHOTO_KINDS = ("beans", "bed", "finish")
+
+
+def attach_consumption_photo(
+    conn: sqlite3.Connection, cons_id: int, kind: str, raw: bytes, filename: str
+) -> dict:
+    if kind not in BREW_PHOTO_KINDS:
+        raise BadPhoto("只能是 beans（称豆）、bed（粉床）或 finish（冲完）")
+    row = conn.execute("SELECT id FROM consumption_event WHERE id = ?", (cons_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这笔冲煮")
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO consumption_photo (cons_id, kind, path, created_at) VALUES (?, ?, ?, ?)",
+        (cons_id, kind, rel, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "cons_id": cons_id,
+        "kind": kind,
+        "path": rel,
+        "url": f"/{rel}",
+        "thumb": thumb_url(rel),
+    }
+
+
+def list_consumption_photos(conn: sqlite3.Connection, cons_ids: list[int]) -> dict[int, list[dict]]:
+    """按消耗 id 分组。空列表直接返回。"""
+    if not cons_ids:
+        return {}
+    q = ",".join("?" * len(cons_ids))
+    rows = conn.execute(
+        f"SELECT id, cons_id, kind, path, created_at FROM consumption_photo "
+        f"WHERE cons_id IN ({q}) ORDER BY created_at, id",
+        cons_ids,
+    ).fetchall()
+    out: dict[int, list[dict]] = {i: [] for i in cons_ids}
+    for r in rows:
+        out[r["cons_id"]].append(
+            {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])}
+        )
+    return out
+
+
+def delete_consumption_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute("SELECT path FROM consumption_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM consumption_photo WHERE id = ?", (photo_id,))
 
 
 def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,

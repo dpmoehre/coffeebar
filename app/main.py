@@ -253,6 +253,25 @@ def api_unvoid(cons_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     return {"ok": True}
 
 
+@app.post("/api/consumption/{cons_id}/photos", status_code=201)
+async def api_add_consumption_photo(
+    cons_id: int,
+    file: UploadFile = File(...),
+    kind: str = Form("bed"),
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    """给一笔冲煮挂过程照。beans 称豆 / bed 粉床 / finish 冲完。"""
+    return photos.attach_consumption_photo(
+        conn, cons_id, kind, await file.read(), file.filename or ""
+    )
+
+
+@app.delete("/api/consumption-photos/{photo_id}")
+def api_del_consumption_photo(photo_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    photos.delete_consumption_photo(conn, photo_id)
+    return {"ok": True}
+
+
 @app.post("/api/consumption/{cons_id}/person")
 def api_reassign(cons_id: int, payload: dict, conn: sqlite3.Connection = Depends(get_conn)):
     """人选错了：只改归属，库存不动。"""

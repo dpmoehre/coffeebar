@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import db
+from . import db, photos
 
 # 可用克重：开袋实称有则用之，否则用包装标称（刚拆袋不会称，默认走标称）
 USABLE = "COALESCE(l.measured_g, l.nominal_g)"
@@ -643,4 +643,15 @@ def list_consumption(
             ORDER BY c.at DESC, c.id DESC LIMIT ?""",
         (*args, limit),
     )
-    return _rows(cur)
+    out = _rows(cur)
+    for row in out:
+        raw = row.get("brew_stages")
+        if isinstance(raw, str) and raw:
+            try:
+                row["brew_stages"] = json.loads(raw)
+            except ValueError:
+                pass
+    by_photo = photos.list_consumption_photos(conn, [r["id"] for r in out])
+    for row in out:
+        row["photos"] = by_photo.get(row["id"], [])
+    return out

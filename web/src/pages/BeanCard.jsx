@@ -1,5 +1,5 @@
-// 豆卡：库存（多袋）+ 雷达在上，冲煮指导整行在下，最近消耗可撤回。
-import { useCallback, useEffect, useState } from "react";
+// 豆卡：库存（多袋）+ 雷达在上，冲煮指导整行在下，冲煮记录可撤回、可挂过程照。
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { api } from "../api.js";
 import BrewPlan from "../components/BrewPlan.jsx";
@@ -163,6 +163,11 @@ export default function BeanCard({ id, onBack, toast, oops }) {
         <Panel>
           <div className="serif text-lg">杯测雷达</div>
           <Radar scores={bean.scores} />
+          {bean.scores?.comment && (
+            <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
+              {bean.scores.comment}
+            </p>
+          )}
         </Panel>
       </div>
 
@@ -185,70 +190,74 @@ export default function BeanCard({ id, onBack, toast, oops }) {
       />
 
       <Panel className="mt-5">
-        <div className="serif text-lg">最近消耗</div>
-        <p className="mt-1 mb-3 text-[13px] text-muted">记错了可以撤回，撤回只划掉、不删记录。</p>
+        <div className="serif text-lg">冲煮记录</div>
+        <p className="mt-1 mb-3 text-[13px] text-muted">
+          每次怎么冲都留在这支豆上，称豆、粉床、冲完的照片也可以挂上。记错了可以撤回，撤回只划掉、不删记录。
+        </p>
         {bean.log.length === 0 ? (
           <p className="text-muted">还没冲过。</p>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
-              <thead>
-                <tr className="text-muted">
-                  {["时间", "谁喝的", "哪一袋", "粉量", "这杯钱", ""].map((h, i) => (
-                    <th key={i} className="border-b border-line px-2 py-2 text-left font-normal">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {bean.log.map((r) => (
-                  <tr key={r.id} className={r.voided_at ? "opacity-45 line-through" : ""}>
-                    <td className="border-b border-line px-2 py-2 whitespace-nowrap">
-                      {r.at.slice(5, 16)}
-                    </td>
-                    <td className="border-b border-line px-2 py-2">{r.person_name || "没记"}</td>
-                    <td className="border-b border-line px-2 py-2 text-muted whitespace-nowrap">
-                      第 {r.lot_seq} 袋
+          <div className="space-y-3">
+            {bean.log.map((r) => (
+              <div
+                key={r.id}
+                className={`rounded-xl border border-line px-3 py-3 ${
+                  r.voided_at ? "opacity-45" : ""
+                }`}
+              >
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <div className={r.voided_at ? "line-through" : ""}>
+                      <span className="text-cream">{r.person_name || "没记"}</span>
+                      <span className="mx-2 text-muted">·</span>
+                      <span className="text-amber">{r.amount_g} g</span>
+                      {r.unit_cost ? (
+                        <span className="ml-2 text-amber">{money(r.cost)}</span>
+                      ) : null}
+                    </div>
+                    <div className="mt-1 text-[13px] text-muted">
+                      {r.at.slice(5, 16)} · 第 {r.lot_seq} 袋
                       {r.lot_closed_at ? "（已关）" : ""}
-                    </td>
-                    <td className="border-b border-line px-2 py-2 text-amber whitespace-nowrap">
-                      {r.amount_g} g
-                    </td>
-                    <td className="border-b border-line px-2 py-2 text-amber whitespace-nowrap">
-                      {r.unit_cost ? money(r.cost) : "—"}
-                    </td>
-                    <td className="border-b border-line px-2 py-2 text-right whitespace-nowrap">
-                      <button
-                        className="inline-flex items-center gap-1 text-xs text-muted underline
-                          hover:text-amber no-underline"
-                        onClick={async () => {
-                          try {
-                            if (r.voided_at) {
-                              await api.unvoidBrew(r.id);
-                              toast("已恢复这一笔");
-                            } else {
-                              const out = await api.voidBrew(r.id, "记错了");
-                              toast(
-                                out.closed_lot_adjusted
-                                  ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
-                                  : `已撤回，${r.amount_g} g 加回库存`
-                              );
-                            }
-                            load();
-                          } catch (e) {
-                            oops(e.message);
-                          }
-                        }}
-                      >
-                        <Undo className="h-3.5 w-3.5" />
-                        {r.voided_at ? "恢复" : "撤回"}
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                      {brewHeadline(r) ? ` · ${brewHeadline(r)}` : ""}
+                    </div>
+                    {r.note ? <div className="mt-1 text-[13px] text-muted">{r.note}</div> : null}
+                  </div>
+                  <button
+                    className="inline-flex items-center gap-1 text-xs text-muted underline
+                      hover:text-amber"
+                    onClick={async () => {
+                      try {
+                        if (r.voided_at) {
+                          await api.unvoidBrew(r.id);
+                          toast("已恢复这一笔");
+                        } else {
+                          const out = await api.voidBrew(r.id, "记错了");
+                          toast(
+                            out.closed_lot_adjusted
+                              ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
+                              : `已撤回，${r.amount_g} g 加回库存`
+                          );
+                        }
+                        load();
+                      } catch (e) {
+                        oops(e.message);
+                      }
+                    }}
+                  >
+                    <Undo className="h-3.5 w-3.5" />
+                    {r.voided_at ? "恢复" : "撤回"}
+                  </button>
+                </div>
+                <BrewHistory stages={parseStages(r.brew_stages)} />
+                <BrewPhotos
+                  consId={r.id}
+                  photos={r.photos || []}
+                  onDone={load}
+                  toast={toast}
+                  oops={oops}
+                />
+              </div>
+            ))}
           </div>
         )}
       </Panel>
@@ -603,5 +612,159 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
         <Input type="date" value={f.bought_on ?? ""} onChange={(e) => setF({ ...f, bought_on: e.target.value })} />
       </Field>
     </Modal>
+  );
+}
+
+const METHOD = {
+  v60: "V60 四段",
+  hoffmann: "Hoffmann 一杯",
+  kasuya: "4:6 粕谷",
+  kalita: "Kalita",
+  volcano: "多段式火山冲",
+};
+
+function wr(n) {
+  if (n == null || n === 0) return "";
+  return `1:${Number(n).toFixed(2)}`;
+}
+
+function fmtSec(s) {
+  if (s == null) return "";
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+}
+
+function parseStages(raw) {
+  if (!raw) return [];
+  if (Array.isArray(raw)) return raw;
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch {
+    return [];
+  }
+}
+
+function brewHeadline(r) {
+  const bits = [];
+  if (r.brew_method) bits.push(METHOD[r.brew_method] || r.brew_method);
+  if (r.brew_ratio) bits.push(wr(r.brew_ratio));
+  if (r.brew_total_s) bits.push(fmtSec(r.brew_total_s));
+  return bits.join(" · ");
+}
+
+const BREW_PHOTO_KINDS = [
+  ["beans", "称豆"],
+  ["bed", "粉床"],
+  ["finish", "冲完"],
+];
+
+function BrewPhotos({ consId, photos, onDone, toast, oops }) {
+  const [busy, setBusy] = useState(null);
+  const [zoom, setZoom] = useState(null);
+  const inputs = useRef({});
+  const label = Object.fromEntries(BREW_PHOTO_KINDS);
+
+  const pick = async (kind, files) => {
+    if (!files?.length) return;
+    setBusy(kind);
+    try {
+      for (const f of files) await api.addBrewPhoto(consId, f, kind);
+      toast(files.length > 1 ? `加了 ${files.length} 张` : "照片挂上了");
+      onDone();
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(null);
+      if (inputs.current[kind]) inputs.current[kind].value = "";
+    }
+  };
+
+  return (
+    <div className="mt-3">
+      <div className="flex flex-wrap gap-2">
+        {BREW_PHOTO_KINDS.map(([kind, name]) => (
+          <label
+            key={kind}
+            className="inline-flex cursor-pointer items-center gap-1 rounded-full border
+              border-line px-2.5 py-1 text-xs hover:border-amber"
+          >
+            <Plus className="h-3 w-3" />
+            {busy === kind ? "上传中…" : name}
+            <input
+              ref={(el) => (inputs.current[kind] = el)}
+              type="file"
+              accept="image/*,.heic,.heif"
+              multiple
+              className="hidden"
+              onChange={(e) => pick(kind, [...e.target.files])}
+            />
+          </label>
+        ))}
+      </div>
+      {photos.length > 0 ? (
+        <div className="mt-2 grid grid-cols-3 gap-2">
+          {photos.map((p) => (
+            <figure key={p.id} className="group relative m-0">
+              <img
+                src={p.thumb}
+                alt={label[p.kind] || p.kind}
+                onClick={() => setZoom(p)}
+                className="aspect-square w-full cursor-zoom-in rounded-lg border border-line
+                  object-cover transition hover:border-amber"
+              />
+              <figcaption
+                className="absolute bottom-1.5 left-1.5 rounded-full bg-black/65 px-2 py-0.5
+                  text-[11px] text-cream"
+              >
+                {label[p.kind] || p.kind}
+              </figcaption>
+              <button
+                title="删掉这张"
+                className="absolute right-1.5 top-1.5 hidden h-6 w-6 rounded-full bg-black/70
+                  text-cream hover:bg-warn group-hover:block"
+                onClick={async () => {
+                  try {
+                    await api.delBrewPhoto(p.id);
+                    toast("删掉了");
+                    onDone();
+                  } catch (e) {
+                    oops(e.message);
+                  }
+                }}
+              >
+                ×
+              </button>
+            </figure>
+          ))}
+        </div>
+      ) : null}
+      {zoom ? (
+        <div
+          onClick={() => setZoom(null)}
+          className="fixed inset-0 z-50 grid cursor-zoom-out place-items-center bg-black/80 p-6"
+        >
+          <img src={zoom.url} alt="" className="max-h-full max-w-full rounded-xl" />
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function BrewHistory({ stages }) {
+  if (!stages.length) return null;
+  const objects = stages.filter((s) => s && typeof s === "object");
+  if (!objects.length) return null;
+  return (
+    <div className="mt-2 overflow-x-auto text-[13px] text-muted">
+      {objects.map((s, i) => (
+        <div key={i}>
+          {s.name}
+          {s.add_g ? ` +${s.add_g} g` : " 停手"}
+          {s.add_ratio ? ` ${wr(s.add_ratio)}` : ""}
+          {s.target_g != null ? ` → 秤到 ${s.target_g} g` : ""}
+          {s.target_ratio ? ` ${wr(s.target_ratio)}` : ""}
+        </div>
+      ))}
+    </div>
   );
 }

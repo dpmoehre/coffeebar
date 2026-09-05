@@ -161,7 +161,10 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
         </Field>
         {plan && (
           <div className="pb-2 text-[13px] text-muted">
-            总水 <b className="text-amber">{plan.total_water_g} g</b> · 建议总时间{" "}
+            总水 <b className="text-amber">{plan.total_water_g} g</b>
+            {" · "}
+            <b className="text-amber">{wr(plan.total_ratio ?? ratioOf(plan.total_water_g, plan.dose_g))}</b>
+            {" · 建议总时间 "}
             {fmt(plan.total_seconds)}
           </div>
         )}
@@ -172,7 +175,7 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
           <table className="w-full border-collapse text-[13px]">
             <thead>
               <tr className="text-muted">
-                {["段", "本段", "秤到", "本段", "累计", "手法", "目标", "功能"].map((h, i) => (
+                {["段", "本段", "本段比", "秤到", "秤到比", "秒", "累计", "手法", "目标", "功能"].map((h, i) => (
                   <th key={i} className="border-b border-line px-2 py-2 text-left font-normal">
                     {h}
                   </th>
@@ -187,7 +190,13 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
                     {s.add_g ? `+${s.add_g} g` : "—"}
                   </td>
                   <td className="whitespace-nowrap border-b border-line px-2 py-2 text-amber">
+                    {s.add_g ? wr(s.add_ratio ?? ratioOf(s.add_g, plan.dose_g)) : "—"}
+                  </td>
+                  <td className="whitespace-nowrap border-b border-line px-2 py-2 text-amber">
                     {s.target_g} g
+                  </td>
+                  <td className="whitespace-nowrap border-b border-line px-2 py-2 text-amber">
+                    {wr(s.target_ratio ?? ratioOf(s.target_g, plan.dose_g))}
                   </td>
                   <td className="whitespace-nowrap border-b border-line px-2 py-2">{s.seconds}s</td>
                   <td className="whitespace-nowrap border-b border-line px-2 py-2 text-muted">
@@ -206,8 +215,8 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
           <div className="serif text-xl">
             {cur
               ? cur.add_g
-                ? `${cur.name} · 本段 +${cur.add_g} g · 秤到 ${cur.target_g} g`
-                : `${cur.name} · 停手`
+                ? `${cur.name} · 本段 +${cur.add_g} g（${wr(cur.add_ratio ?? ratioOf(cur.add_g, plan.dose_g))}）· 秤到 ${cur.target_g} g（${wr(cur.target_ratio ?? ratioOf(cur.target_g, plan.dose_g))}）`
+                : `${cur.name} · 停手 · 秤到 ${cur.target_g} g（${wr(cur.target_ratio ?? ratioOf(cur.target_g, plan.dose_g))}）`
               : "未播放"}
           </div>
           <p className="mt-1.5 text-[13px] text-muted">
@@ -227,6 +236,9 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
 }
 
 const fmt = (s) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+const ratioOf = (water, dose) =>
+  water && dose ? Math.round((Number(water) / Number(dose)) * 100) / 100 : null;
+const wr = (n) => (n == null || n === 0 ? "—" : `1:${Number(n).toFixed(2)}`);
 
 // anime.js SVG：按场景键切动画（bloom 打湿 / 螺旋 / 中心注 / 滴滤）
 function PourAnimation({ stage, target }) {

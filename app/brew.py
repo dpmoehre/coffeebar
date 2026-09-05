@@ -21,11 +21,18 @@ METHODS = {
 }
 
 
+def water_ratio(water_g: float, dose_g: float) -> float:
+    """本段/累计用水 ÷ 粉量，两位小数，和方程式称上的 1:x 对齐。"""
+    return round(float(water_g) / float(dose_g), 2)
+
+
 @dataclass
 class Stage:
     name: str
     add_g: int          # 本段用水（滴滤为 0）
     target_g: int       # 累计目标：秤上要看到的克数
+    add_ratio: float    # 本段用水 ÷ 粉量（滴滤为 0）
+    target_ratio: float # 累计用水 ÷ 粉量
     seconds: int        # 本段建议秒数
     elapsed_s: int      # 累计时间
     how: str            # 手法
@@ -122,6 +129,8 @@ def plan(method: str, dose_g: float, ratio: float) -> dict:
                 name=_stage_name(method, len(stages), add),
                 add_g=add,
                 target_g=target,
+                add_ratio=water_ratio(add, dose) if add else 0,
+                target_ratio=water_ratio(target, dose),
                 seconds=secs,
                 elapsed_s=elapsed,
                 how=how,
@@ -137,6 +146,7 @@ def plan(method: str, dose_g: float, ratio: float) -> dict:
         "dose_g": dose,
         "ratio": ratio,
         "total_water_g": total,
+        "total_ratio": water_ratio(total, dose),
         "total_seconds": stages[-1].elapsed_s if stages else 0,
         "stages": [asdict(s) for s in stages],
     }
