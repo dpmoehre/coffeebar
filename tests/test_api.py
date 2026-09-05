@@ -160,19 +160,59 @@ def test_delete_bean_card(client):
 
 
 def test_delete_bean_refuses_live_brews(client):
-    """有没撤回的消耗就不给删——直接抹掉会悄悄改写历史统计。"""
+    """有没撤回的消耗时，不带 mode 仍拒删，避免旧客户端一键抹账。"""
     bean = new_bean(client)
     lot = bean["lots"][0]["id"]
     brew = client.post("/api/brews", json={"lot_id": lot, "amount_g": 16}).json()
 
     r = client.delete(f"/api/beans/{bean['id']}")
     assert r.status_code == 409
-    assert "撤回" in r.json()["message"]
+    assert "花掉的钱" in r.json()["message"]
     assert client.get(f"/api/beans/{bean['id']}").status_code == 200
 
-    # 撤回 + 彻底删那一笔之后就能删卡了
+    # 撤回之后没有活记录，不带 mode 也能物理删
     client.post(f"/api/consumption/{brew['id']}/void", json={"reason": "记错了"})
     assert client.delete(f"/api/beans/{bean['id']}").status_code == 200
+
+
+def test_delete_bean_keep_spend(client):
+    """真喝过：从豆库收起，统计里杯数和钱还在。"""
+    bean = new_bean(client, name="喝过的豆", price=128.0, nominal=200)
+    lot = bean["lots"][0]["id"]
+    client.post("/api/brews", json={"lot_id": lot, "amount_g": 16})
+    before = client.get("/api/stats", params={"period": "all"}).json()
+    assert before["spent"] == pytest.approx(10.24)  # 16 × 128/200
+    assert before["on_hand"] == pytest.approx(117.76)  # 184 × 0.64
+    assert any(b["name"] == "喝过的豆" for b in before["by_bean"])
+
+    r = client.delete(f"/api/beans/{bean['id']}", params={"mode": "keep"})
+    assert r.status_code == 200, r.text
+    assert r.json()["kept_spend"] is True
+    assert client.get(f"/api/beans/{bean['id']}").status_code == 404
+    assert client.get("/api/beans?scope=all").json()["beans"] == []
+
+    after = client.get("/api/stats", params={"period": "all"}).json()
+    assert after["spent"] == pytest.approx(before["spent"])
+    assert after["bought"] == pytest.approx(before["bought"])
+    assert after["on_hand"] == pytest.approx(0)
+    assert any(b["name"] == "喝过的豆" for b in after["by_bean"])
+    assert all(row["id"] != bean["id"] for row in client.get("/api/restock").json()["items"])
+
+
+def test_delete_bean_wipe_clears_spend(client):
+    """建错的测试卡：连流水一起抹，统计里那几笔钱也没了。"""
+    bean = new_bean(client, name="抹掉的豆", price=128.0, nominal=200)
+    lot = bean["lots"][0]["id"]
+    client.post("/api/brews", json={"lot_id": lot, "amount_g": 16})
+    assert client.get("/api/stats", params={"period": "all"}).json()["spent"] > 0
+
+    r = client.delete(f"/api/beans/{bean['id']}", params={"mode": "wipe"})
+    assert r.status_code == 200, r.text
+    assert client.get(f"/api/beans/{bean['id']}").status_code == 404
+    after = client.get("/api/stats", params={"period": "all"}).json()
+    assert after["spent"] == pytest.approx(0)
+    assert after["bought"] == pytest.approx(0)
+    assert after["by_bean"] == []
 
 
 def test_delete_bean_keeps_others(client):

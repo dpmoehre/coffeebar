@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS bean (
   roast       TEXT,                      -- 浅烘 / 中烘 / 深烘
   water_temp  INTEGER,                   -- 建议水温 °C
   note        TEXT,
+  deleted_at  TEXT,                      -- 非空 = 从豆库收起；流水和花掉的钱还在统计里
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );

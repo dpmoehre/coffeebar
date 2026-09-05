@@ -142,7 +142,10 @@ def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | Non
     bought = bought_beans + bought_bottles
 
     # 还在库约多少钱：未关袋/未关瓶的账面 × 单价
-    on_hand_bean_where = "l.closed_at IS NULL AND l.price IS NOT NULL"
+    on_hand_bean_where = (
+        "l.closed_at IS NULL AND l.price IS NOT NULL"
+        " AND EXISTS (SELECT 1 FROM bean b WHERE b.id = l.bean_id AND b.deleted_at IS NULL)"
+    )
     on_hand_bottle_where = "l.closed_at IS NULL AND l.price IS NOT NULL"
     on_hand_bean_args: list = []
     on_hand_bottle_args: list = []
@@ -293,7 +296,8 @@ def restock_list(conn: sqlite3.Connection, owner_id: int | None = None) -> list[
                    (SELECT price FROM bean_lot l WHERE l.bean_id = b.id
                      ORDER BY l.created_at DESC LIMIT 1) AS last_price
             FROM bean b LEFT JOIN restock_rule r ON r.bean_id = b.id
-            WHERE (? IS NULL OR b.owner_id = ?)""",
+            WHERE (? IS NULL OR b.owner_id = ?)
+              AND b.deleted_at IS NULL""",
         (owner_id, owner_id),
     ).fetchall()
 

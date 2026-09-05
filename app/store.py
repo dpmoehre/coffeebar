@@ -137,15 +137,20 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         set_tags(conn, bean_id, data["tags"] or [])
 
 
-def delete_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
-    """删掉整张豆卡：袋子、库存事件、照片、评分、冲煮默认值一起走。
+def delete_bean(conn: sqlite3.Connection, bean_id: int, mode: str | None = None) -> dict:
+    """从豆库拿掉一张卡。
 
-    有没撤回的消耗就拒绝——那些克重真扣过、钱真花了，直接抹掉会悄悄改写历史统计。
-    要删先在豆卡里把那几笔撤回并彻底删除（和「撤回才能彻底删」同一个口径）。
+    没未撤回消耗：整张物理删（袋子、照片、评分一起走）。
+    有未撤回消耗时必须带 mode：
+    - keep：只从豆库收起（deleted_at），花掉的钱和杯数留在统计里（钱不回溯）
+    - wipe：连流水一起物理删，统计里那几笔钱和杯也没了
+    不带 mode 仍 409，避免旧客户端一键抹掉账。
     """
     row = _row(conn.execute("SELECT * FROM bean WHERE id = ?", (bean_id,)))
     if not row:
         raise Conflict("没有这支豆")
+    if row.get("deleted_at"):
+        raise Conflict("这张卡已经不在豆库里了")
 
     live = conn.execute(
         """SELECT COUNT(*) FROM consumption_event c
@@ -153,10 +158,24 @@ def delete_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
            WHERE l.bean_id = ? AND c.voided_at IS NULL""",
         (bean_id,),
     ).fetchone()[0]
-    if live:
+    if live and mode not in ("keep", "wipe"):
         raise Conflict(
-            f"这支豆还有 {live} 笔没撤回的记录。先在冲煮记录里撤回并彻底删除，再删豆卡"
+            f"这支豆还有 {live} 笔没撤回的记录。删卡时选留下花掉的钱，或连记录一起抹掉"
         )
+
+    if live and mode == "keep":
+        now = db.now()
+        # 袋子从货架收走，剩下的克不进「在库约多少钱」；已花的钱不动
+        conn.execute(
+            "UPDATE bean_lot SET closed_at = ? WHERE bean_id = ? AND closed_at IS NULL",
+            (now, bean_id),
+        )
+        conn.execute(
+            "UPDATE bean SET deleted_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, bean_id),
+        )
+        conn.execute("DELETE FROM write_lock WHERE resource = ?", (f"bean:{bean_id}",))
+        return {"ok": True, "id": bean_id, "name": row["name"], "kept_spend": True, "live": live}
 
     for path in photos.paths_for_bean(conn, bean_id):
         photos.remove(path)
@@ -225,6 +244,7 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
                {LAST_UNIT_COST} AS last_unit_cost
         FROM bean b
         WHERE (? IS NULL OR b.owner_id = ?)
+          AND b.deleted_at IS NULL
         ORDER BY b.updated_at DESC
         """,
         (owner_id, owner_id),
@@ -254,6 +274,8 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     if not bean:
         return None
     if owner_id is not None and bean.get("owner_id") != owner_id:
+        return None
+    if bean.get("deleted_at"):
         return None
     bean["tags"] = bean_tags(conn, bean_id)
     bean["lots"] = list_lots(conn, bean_id)
@@ -343,6 +365,11 @@ def get_lot(conn: sqlite3.Connection, lot_id: int) -> dict | None:
 
 def add_lot(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
     """再入一袋：只加批次，不新建豆卡。标称必填，实称通常为空。"""
+    bean = _row(conn.execute("SELECT deleted_at FROM bean WHERE id = ?", (bean_id,)))
+    if not bean:
+        raise Conflict("没有这支豆")
+    if bean.get("deleted_at"):
+        raise Conflict("这张卡已经不在豆库里了")
     nominal = float(data["nominal_g"])
     if nominal <= 0:
         raise Conflict("包装标称克重要大于 0")

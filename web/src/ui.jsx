@@ -96,7 +96,7 @@ export function Modal({ open, onClose, title, sub, children, footer, wide }) {
       <h2 className="serif m-0 text-xl">{title}</h2>
       {sub && <p className="mt-1.5 mb-0 text-[13px] text-muted">{sub}</p>}
       <div className="mt-4 space-y-3">{children}</div>
-      {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+      {footer && <div className="mt-6 flex flex-wrap justify-end gap-2">{footer}</div>}
     </dialog>
   );
 }

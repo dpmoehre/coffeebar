@@ -83,6 +83,17 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   const openLots = bean.lots.filter((l) => !l.closed_at);
   const current = openLots[0];
   const dose = bean.avg_dose;
+  const liveBrews = (bean.log || []).filter((r) => !r.voided_at).length;
+  const removeCard = async (mode, done) => {
+    setKillCard(false);
+    try {
+      await api.deleteBean(id, mode);
+      toast(done);
+      onBack();
+    } catch (e) {
+      oops(e.message);
+    }
+  };
 
   return (
     <>
@@ -303,34 +314,49 @@ export default function BeanCard({ id, onBack, toast, oops }) {
         open={killCard}
         onClose={() => setKillCard(false)}
         title={`删掉「${bean.name}」这张豆卡？`}
+        wide={liveBrews > 0}
         footer={
           <>
             <Btn variant="ghost" onClick={() => setKillCard(false)}>
               不删了
             </Btn>
-            <Btn
-              variant="danger"
-              onClick={async () => {
-                setKillCard(false);
-                try {
-                  await api.deleteBean(id);
-                  toast(`已删掉「${bean.name}」`);
-                  onBack();
-                } catch (e) {
-                  oops(e.message);
-                }
-              }}
-            >
-              删掉豆卡
-            </Btn>
+            {liveBrews > 0 ? (
+              <>
+                <Btn
+                  onClick={() =>
+                    removeCard("keep", `已从豆库收起「${bean.name}」，花掉的钱还在统计里`)
+                  }
+                >
+                  留下花掉的钱
+                </Btn>
+                <Btn
+                  variant="danger"
+                  onClick={() =>
+                    removeCard("wipe", `已删掉「${bean.name}」，记录和钱也一起抹了`)
+                  }
+                >
+                  连记录一起抹
+                </Btn>
+              </>
+            ) : (
+              <Btn variant="danger" onClick={() => removeCard(null, `已删掉「${bean.name}」`)}>
+                删掉豆卡
+              </Btn>
+            )}
           </>
         }
       >
-        <p className="text-muted">
-          袋子、库存事件、照片、评分和冲煮默认值一起删，恢复不了。
-          还有没撤回的冲煮记录时删不掉——那些克重真扣过、钱真花了，
-          先在下面的冲煮记录里撤回并彻底删除。
-        </p>
+        {liveBrews > 0 ? (
+          <p className="text-muted">
+            这张卡还有 {liveBrews} 笔没撤回的冲煮，不用先去撤回。
+            真喝过就选「留下花掉的钱」：豆库里没这张卡了，统计里杯数和钱还在。
+            建错的测试卡选「连记录一起抹」，那几笔也不进账。
+          </p>
+        ) : (
+          <p className="text-muted">
+            袋子、库存事件、照片、评分和冲煮默认值一起删，恢复不了。
+          </p>
+        )}
       </Modal>
 
       <Modal

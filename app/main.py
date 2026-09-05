@@ -263,15 +263,16 @@ def api_update_bean(
 @app.delete("/api/beans/{bean_id}")
 def api_delete_bean(
     bean_id: int,
+    mode: str | None = None,
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
     x_session: str = Header(default="anon"),
     x_source: str = Header(default="web"),
 ):
-    """删整张豆卡。有没撤回的消耗会被拒——先撤回那几笔。"""
+    """从豆库拿掉一张卡。有未撤回消耗时带 mode=keep（留下花掉的钱）或 wipe（连记录一起抹）。"""
     auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     locks.check(conn, f"bean:{bean_id}", x_session, x_source)
-    return store.delete_bean(conn, bean_id)
+    return store.delete_bean(conn, bean_id, mode=mode)
 
 
 @app.post("/api/beans/{bean_id}/photos", status_code=201)
