@@ -23,7 +23,8 @@ SPIRITS = [
     {
         "spirit": {
             "name": "格兰杰 谜 16年",
-            "category": "单一麦芽威士忌",
+            "kind": "威士忌",
+            "category": "单一麦芽",
             "origin": "苏格兰高地",
             "abv": 43,
             "flavor": "柑橘甜、圆润、一丝烟熏",

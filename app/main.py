@@ -20,6 +20,7 @@ WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 async def lifespan(app: FastAPI):
     conn = db.connect()
     db.init_db(conn)
+    spirits.backfill_kinds(conn)
     conn.close()
     yield
 
@@ -267,7 +268,7 @@ def api_spirits(scope: str = "stock", conn: sqlite3.Connection = Depends(get_con
     items = spirits.list_spirits(conn, scope)
     for s in items:
         s["cover"] = photos.cover(photos.list_bottle_photos(conn, s["id"]))
-    return {"spirits": items}
+    return {"spirits": items, "kinds": spirits.KINDS}
 
 
 @app.post("/api/spirits", status_code=201)

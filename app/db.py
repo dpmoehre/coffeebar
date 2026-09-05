@@ -39,6 +39,7 @@ ADDED_COLUMNS = [
     ("bean", "producer", "TEXT"),
     ("bean", "altitude", "TEXT"),
     ("brew_guide", "note", "TEXT"),
+    ("bottle", "kind", "TEXT"),
 ]
 
 

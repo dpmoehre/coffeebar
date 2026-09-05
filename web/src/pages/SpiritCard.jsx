@@ -39,7 +39,8 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
           <h1 className="serif m-0 text-3xl font-semibold">{spirit.name}</h1>
           <p className="mt-2 mb-0 text-muted">
             {[
-              spirit.category,
+              spirit.kind,
+              spirit.category && spirit.category !== spirit.kind ? spirit.category : null,
               spirit.origin,
               spirit.flavor,
               spirit.abv != null && `${spirit.abv}% vol`,

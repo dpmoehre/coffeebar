@@ -14,6 +14,41 @@ from . import db, store
 
 ETHANOL = 0.789  # 酒精密度，毫升 × (%vol/100) × 0.789 = 大约克数
 
+# 酒库按大类筛。细类（单一麦芽 / 伦敦干金）仍写在 category。
+KINDS = ["威士忌", "金酒", "朗姆", "伏特加", "龙舌兰", "白兰地", "利口酒", "其他"]
+
+_KIND_HINTS = (
+    ("金酒", ("金酒", "杜松", "干金", "gin")),
+    ("朗姆", ("朗姆", "rum")),
+    ("伏特加", ("伏特加", "vodka")),
+    ("龙舌兰", ("龙舌兰", "梅斯卡尔", "tequila", "mezcal")),
+    ("白兰地", ("白兰地", "干邑", "雅文邑", "cognac", "armagnac")),
+    ("利口酒", ("利口", "甜酒", "liqueur")),
+    ("威士忌", ("威士忌", "单一麦芽", "波本", "黑麦", "whisky", "whiskey", "bourbon", "scotch", "rye")),
+)
+
+
+def normalize_kind(kind: str | None, category: str | None = None, name: str | None = None) -> str:
+    """大类只认 KINDS 里那几个。没填或写了细类，从品类/酒名里认。"""
+    if kind and kind.strip() in KINDS:
+        return kind.strip()
+    blob = " ".join(x for x in (kind, category, name) if x).lower()
+    for target, hints in _KIND_HINTS:
+        if any(h in blob for h in hints):
+            return target
+    return "其他"
+
+
+def backfill_kinds(conn: sqlite3.Connection) -> None:
+    """老库没有 kind 列，启动时按品类补上，格兰杰那种「单一麦芽威士忌」归进威士忌。"""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(bottle)")}
+    if "kind" not in cols:
+        return
+    for r in conn.execute("SELECT id, kind, category, name FROM bottle"):
+        got = normalize_kind(r["kind"], r["category"], r["name"])
+        if r["kind"] != got:
+            conn.execute("UPDATE bottle SET kind = ? WHERE id = ?", (got, r["id"]))
+
 USABLE = "l.nominal_ml"
 BALANCE = f"""
     {USABLE}
@@ -40,11 +75,14 @@ def alcohol_g(ml: float, abv: float | None) -> float | None:
 
 def create_spirit(conn: sqlite3.Connection, data: dict) -> int:
     ts = db.now()
+    name = data["name"].strip()
+    kind = normalize_kind(data.get("kind"), data.get("category"), name)
     cur = conn.execute(
-        """INSERT INTO bottle (name, category, origin, abv, flavor, note, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        """INSERT INTO bottle (name, kind, category, origin, abv, flavor, note, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
-            data["name"].strip(),
+            name,
+            kind,
             data.get("category"),
             data.get("origin"),
             data.get("abv"),
@@ -60,12 +98,18 @@ def create_spirit(conn: sqlite3.Connection, data: dict) -> int:
 
 
 def update_spirit(conn: sqlite3.Connection, bottle_id: int, data: dict) -> None:
-    fields = ["name", "category", "origin", "abv", "flavor", "note"]
+    fields = ["name", "kind", "category", "origin", "abv", "flavor", "note"]
     sets, args = [], []
     for f in fields:
-        if f in data:
-            sets.append(f"{f} = ?")
-            args.append(data[f] if f != "name" else (data[f] or "").strip())
+        if f not in data:
+            continue
+        sets.append(f"{f} = ?")
+        if f == "name":
+            args.append((data[f] or "").strip())
+        elif f == "kind":
+            args.append(normalize_kind(data[f], data.get("category"), data.get("name")))
+        else:
+            args.append(data[f])
     if "tags" in data:
         set_tags(conn, bottle_id, data["tags"] or [])
     if not sets:
@@ -126,6 +170,7 @@ def list_spirits(conn: sqlite3.Connection, scope: str = "stock") -> list[dict]:
             continue
         if scope == "history" and (b["in_stock"] or b["pending"]):
             continue
+        b["kind"] = normalize_kind(b.get("kind"), b.get("category"), b.get("name"))
         b["unit_cost"] = (b["last_price"] / b["last_ml"]) if b["last_price"] and b["last_ml"] else None
         b["tags"] = spirit_tags(conn, b["id"])
         out.append(b)
@@ -136,6 +181,7 @@ def get_spirit(conn: sqlite3.Connection, bottle_id: int) -> dict | None:
     bottle = _row(conn.execute("SELECT * FROM bottle WHERE id = ?", (bottle_id,)))
     if not bottle:
         return None
+    bottle["kind"] = normalize_kind(bottle.get("kind"), bottle.get("category"), bottle.get("name"))
     bottle["tags"] = spirit_tags(conn, bottle_id)
     bottle["lots"] = list_lots(conn, bottle_id)
     bottle["balance_ml"] = sum(l["balance_ml"] for l in bottle["lots"] if not l["closed_at"])

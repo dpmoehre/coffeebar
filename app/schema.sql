@@ -63,7 +63,8 @@ CREATE TABLE IF NOT EXISTS person (
 CREATE TABLE IF NOT EXISTS bottle (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   name       TEXT    NOT NULL,
-  category   TEXT,                      -- 单一麦芽 / 波本 / 金酒 …
+  kind       TEXT,                      -- 大类：威士忌 / 金酒 / 朗姆 …
+  category   TEXT,                      -- 细类：单一麦芽 / 波本 / 伦敦干金
   origin     TEXT,                      -- 产地，如苏格兰高地
   abv        REAL,                      -- 酒精度 % vol
   flavor     TEXT,                      -- 风味类型：柑橘甜、泥煤、香草焦糖

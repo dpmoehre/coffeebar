@@ -28,6 +28,7 @@ def test_create_spirit_lists_name_price_flavor_abv(conn):
     assert card["last_price"] == 399
     assert card["flavor"] == "柑橘甜、圆润、一丝烟熏"
     assert card["abv"] == 43
+    assert card["kind"] == "威士忌"
     assert card["balance_ml"] == 1000
     assert card["unit_cost"] == pytest.approx(0.399)
 
@@ -101,7 +102,38 @@ def test_create_via_api(client):
     assert d["balance_ml"] == 1000
     assert d["lots"][0]["unit_cost"] == pytest.approx(0.399)
 
-    lib = client.get("/api/spirits").json()["spirits"]
-    assert len(lib) == 1
-    assert lib[0]["last_price"] == 399
-    assert lib[0]["abv"] == 43
+    lib = client.get("/api/spirits").json()
+    assert lib["kinds"] == spirits.KINDS
+    assert len(lib["spirits"]) == 1
+    assert lib["spirits"][0]["last_price"] == 399
+    assert lib["spirits"][0]["abv"] == 43
+    assert lib["spirits"][0]["kind"] == "威士忌"
+
+
+def test_kind_inferred_from_category(conn):
+    make_spirit(conn)
+    assert spirits.list_spirits(conn)[0]["kind"] == "威士忌"
+
+
+def test_kind_explicit_gin(conn):
+    bottle_id = spirits.create_spirit(
+        conn, {"name": "Beefeater", "kind": "金酒", "category": "伦敦干金", "abv": 40}
+    )
+    assert spirits.get_spirit(conn, bottle_id)["kind"] == "金酒"
+
+
+def test_normalize_kind_hints():
+    assert spirits.normalize_kind(None, "单一麦芽威士忌") == "威士忌"
+    assert spirits.normalize_kind(None, "伦敦干金") == "金酒"
+    assert spirits.normalize_kind("金酒", "波本") == "金酒"
+    assert spirits.normalize_kind(None, "梅斯卡尔") == "龙舌兰"
+    assert spirits.normalize_kind(None, None, "无名瓶") == "其他"
+
+
+def test_backfill_kinds_on_old_row(conn):
+    conn.execute(
+        "INSERT INTO bottle (name, category, created_at, updated_at) VALUES (?, ?, ?, ?)",
+        ("老格兰杰", "单一麦芽威士忌", "2026-01-01 00:00:00", "2026-01-01 00:00:00"),
+    )
+    spirits.backfill_kinds(conn)
+    assert conn.execute("SELECT kind FROM bottle WHERE name = '老格兰杰'").fetchone()[0] == "威士忌"
