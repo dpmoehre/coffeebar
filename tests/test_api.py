@@ -136,6 +136,85 @@ def test_delete_missing_person_via_api(client):
     assert client.delete("/api/people/999").status_code == 409
 
 
+def test_delete_bean_card(client):
+    """建错的卡（比如 smoke 写进来的演示豆）要能整张删掉。"""
+    from app import db
+
+    bean = new_bean(client, name="演示豆")
+    photo = client.post(
+        f"/api/beans/{bean['id']}/photos",
+        files={"file": ("bag.png", _png(), "image/png")},
+        data={"kind": "pack"},
+    ).json()
+    name = photo["path"].split("/")[-1]
+    assert (db.PHOTO_DIR / name).exists()
+
+    r = client.delete(f"/api/beans/{bean['id']}")
+    assert r.status_code == 200, r.text
+    assert r.json()["name"] == "演示豆"
+    assert client.get(f"/api/beans/{bean['id']}").status_code == 404
+    assert client.get("/api/beans?scope=all").json()["beans"] == []
+    assert not (db.PHOTO_DIR / name).exists(), "照片文件跟着清掉"
+    # 统计里那笔买入价也一起走
+    assert client.get("/api/stats?period=all").json()["bought"] == 0
+
+
+def test_delete_bean_refuses_live_brews(client):
+    """有没撤回的消耗就不给删——直接抹掉会悄悄改写历史统计。"""
+    bean = new_bean(client)
+    lot = bean["lots"][0]["id"]
+    brew = client.post("/api/brews", json={"lot_id": lot, "amount_g": 16}).json()
+
+    r = client.delete(f"/api/beans/{bean['id']}")
+    assert r.status_code == 409
+    assert "撤回" in r.json()["message"]
+    assert client.get(f"/api/beans/{bean['id']}").status_code == 200
+
+    # 撤回 + 彻底删那一笔之后就能删卡了
+    client.post(f"/api/consumption/{brew['id']}/void", json={"reason": "记错了"})
+    assert client.delete(f"/api/beans/{bean['id']}").status_code == 200
+
+
+def test_delete_bean_keeps_others(client):
+    keep = new_bean(client, name="留着的豆")
+    gone = new_bean(client, name="删掉的豆")
+    assert client.delete(f"/api/beans/{gone['id']}").status_code == 200
+    names = [b["name"] for b in client.get("/api/beans?scope=all").json()["beans"]]
+    assert names == ["留着的豆"]
+    assert client.get(f"/api/beans/{keep['id']}").status_code == 200
+
+
+def test_delete_bean_of_other_account(client):
+    bean = new_bean(client, name="A 的豆")
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "nosy@coffeebar.local", "password": "testpass1"},
+    )
+    assert client.delete(f"/api/beans/{bean['id']}").status_code == 404
+
+
+def test_delete_bean_blocked_by_other_session(client):
+    bean = new_bean(client)
+    client.post(
+        f"/api/locks/bean:{bean['id']}",
+        json={"holder": "另一台"},
+        headers={"X-Session": "other"},
+    )
+    r = client.delete(f"/api/beans/{bean['id']}", headers={"X-Session": "mine"})
+    assert r.status_code == 423
+
+
+def _png():
+    import io
+
+    from PIL import Image
+
+    buf = io.BytesIO()
+    Image.new("RGB", (60, 40), (120, 80, 50)).save(buf, "PNG")
+    return buf.getvalue()
+
+
 def test_add_second_lot_not_new_bean(client):
     bean = new_bean(client, price=118.0)
     r = client.post(f"/api/beans/{bean['id']}/lots", json={"nominal_g": 200, "price": 128.0})

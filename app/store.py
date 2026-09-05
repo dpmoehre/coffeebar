@@ -137,6 +137,49 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         set_tags(conn, bean_id, data["tags"] or [])
 
 
+def delete_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
+    """删掉整张豆卡：袋子、库存事件、照片、评分、冲煮默认值一起走。
+
+    有没撤回的消耗就拒绝——那些克重真扣过、钱真花了，直接抹掉会悄悄改写历史统计。
+    要删先在豆卡里把那几笔撤回并彻底删除（和「撤回才能彻底删」同一个口径）。
+    """
+    row = _row(conn.execute("SELECT * FROM bean WHERE id = ?", (bean_id,)))
+    if not row:
+        raise Conflict("没有这支豆")
+
+    live = conn.execute(
+        """SELECT COUNT(*) FROM consumption_event c
+           JOIN bean_lot l ON l.id = c.lot_id
+           WHERE l.bean_id = ? AND c.voided_at IS NULL""",
+        (bean_id,),
+    ).fetchone()[0]
+    if live:
+        raise Conflict(
+            f"这支豆还有 {live} 笔没撤回的记录。先在冲煮记录里撤回并彻底删除，再删豆卡"
+        )
+
+    for path in photos.paths_for_bean(conn, bean_id):
+        photos.remove(path)
+    # consumption_photo / audit 挂在流水上，流水靠 bean_lot 级联；先手清免得老库外键拦住
+    conn.execute(
+        """DELETE FROM consumption_photo WHERE cons_id IN (
+             SELECT c.id FROM consumption_event c
+             JOIN bean_lot l ON l.id = c.lot_id WHERE l.bean_id = ?
+           )""",
+        (bean_id,),
+    )
+    conn.execute(
+        """DELETE FROM consumption_audit WHERE cons_id IN (
+             SELECT c.id FROM consumption_event c
+             JOIN bean_lot l ON l.id = c.lot_id WHERE l.bean_id = ?
+           )""",
+        (bean_id,),
+    )
+    conn.execute("DELETE FROM write_lock WHERE resource = ?", (f"bean:{bean_id}",))
+    conn.execute("DELETE FROM bean WHERE id = ?", (bean_id,))
+    return {"ok": True, "id": bean_id, "name": row["name"]}
+
+
 def set_tags(conn: sqlite3.Connection, bean_id: int, names: list[str]) -> None:
     """自由标签：输入即创建，没有标签后台。"""
     conn.execute("DELETE FROM bean_tag WHERE bean_id = ?", (bean_id,))

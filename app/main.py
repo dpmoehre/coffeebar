@@ -260,6 +260,20 @@ def api_update_bean(
     return store.get_bean(conn, bean_id, owner_id=account["id"])
 
 
+@app.delete("/api/beans/{bean_id}")
+def api_delete_bean(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    """删整张豆卡。有没撤回的消耗会被拒——先撤回那几笔。"""
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    return store.delete_bean(conn, bean_id)
+
+
 @app.post("/api/beans/{bean_id}/photos", status_code=201)
 async def api_add_photo(
     bean_id: int,

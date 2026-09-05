@@ -18,6 +18,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   const [opening, setOpening] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
   const [wipe, setWipe] = useState(null);
+  const [killCard, setKillCard] = useState(false);
   const holding = useRef(false);
 
   const load = useCallback(
@@ -126,6 +127,10 @@ export default function BeanCard({ id, onBack, toast, oops }) {
           <Btn variant="ghost" onClick={() => setLotOpen(true)}>
             <Plus className="h-4 w-4" />
             再入一袋
+          </Btn>
+          <Btn variant="danger" onClick={() => setKillCard(true)}>
+            <Trash className="h-4 w-4" />
+            删除豆卡
           </Btn>
         </div>
       </header>
@@ -293,6 +298,40 @@ export default function BeanCard({ id, onBack, toast, oops }) {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={killCard}
+        onClose={() => setKillCard(false)}
+        title={`删掉「${bean.name}」这张豆卡？`}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setKillCard(false)}>
+              不删了
+            </Btn>
+            <Btn
+              variant="danger"
+              onClick={async () => {
+                setKillCard(false);
+                try {
+                  await api.deleteBean(id);
+                  toast(`已删掉「${bean.name}」`);
+                  onBack();
+                } catch (e) {
+                  oops(e.message);
+                }
+              }}
+            >
+              删掉豆卡
+            </Btn>
+          </>
+        }
+      >
+        <p className="text-muted">
+          袋子、库存事件、照片、评分和冲煮默认值一起删，恢复不了。
+          还有没撤回的冲煮记录时删不掉——那些克重真扣过、钱真花了，
+          先在下面的冲煮记录里撤回并彻底删除。
+        </p>
+      </Modal>
 
       <Modal
         open={!!wipe}

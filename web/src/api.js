@@ -77,6 +77,7 @@ export const api = {
   bean: (id) => req("GET", `/api/beans/${id}`),
   createBean: (data) => req("POST", "/api/beans", data),
   updateBean: (id, data) => req("PATCH", `/api/beans/${id}`, data),
+  deleteBean: (id) => req("DELETE", `/api/beans/${id}`),
   addScore: (id, data) => req("POST", `/api/beans/${id}/scores`, data),
 
   addPhoto: (beanId, file, kind = "pack") => {
