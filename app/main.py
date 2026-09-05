@@ -182,8 +182,9 @@ def api_delete_me(
     request: Request,
     response: Response,
     conn: sqlite3.Connection = Depends(get_conn),
-    account: dict = Depends(current_account),
 ):
+    # 只用这一根连接：再 Depends(current_account) 会另开一条，Windows 上删账号容易锁库 500
+    account = auth.require_account(request, conn)
     ratelimit.check(request, "delete", 5)
     auth.delete_account(conn, account, payload.get("email") or "", payload.get("password") or "")
     auth.clear_cookie(response)

@@ -186,6 +186,22 @@ def test_cookie_secure_when_forced(client, monkeypatch):
     assert "secure" in r.headers.get("set-cookie", "").lower()
 
 
+def test_delete_empty_account(client):
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "empty@coffeebar.local", "password": "testpass1"},
+    )
+    assert (
+        client.post(
+            "/api/auth/delete",
+            json={"email": "empty@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/me").status_code == 401
+
+
 def test_delete_account_wipes_only_self(client):
     from app import db
     from tests.test_photos import png_bytes

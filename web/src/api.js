@@ -23,6 +23,15 @@ export class ApiError extends Error {
   }
 }
 
+function readBody(text, status) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new ApiError(status, { message: text.slice(0, 80) || `请求失败（${status}）` });
+  }
+}
+
 async function req(method, path, body) {
   const res = await fetch(path, {
     method,
@@ -34,8 +43,7 @@ async function req(method, path, body) {
     },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = readBody(await res.text(), res.status);
   if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }
@@ -48,8 +56,7 @@ async function upload(path, formData) {
     headers: { "X-Session": SESSION, "X-Source": "web" },
     body: formData,
   });
-  const text = await res.text();
-  const data = text ? JSON.parse(text) : null;
+  const data = readBody(await res.text(), res.status);
   if (!res.ok) throw new ApiError(res.status, data);
   return data;
 }

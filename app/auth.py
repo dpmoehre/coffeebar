@@ -134,20 +134,42 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
     aid = int(account["id"])
     from . import photos
 
-    for path in photos.paths_for_owner(conn, aid):
-        photos.remove(path)
-    conn.execute(
-        """DELETE FROM write_lock WHERE resource IN (
-             SELECT 'bean:' || id FROM bean WHERE owner_id = ?
-             UNION
-             SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
-           )""",
-        (aid, aid),
-    )
-    conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
-    conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
-    conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
-    conn.execute("DELETE FROM account WHERE id = ?", (aid,))
+    try:
+        for path in photos.paths_for_owner(conn, aid):
+            photos.remove(path)
+        conn.execute(
+            """DELETE FROM write_lock WHERE resource IN (
+                 SELECT 'bean:' || id FROM bean WHERE owner_id = ?
+                 UNION
+                 SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
+               )""",
+            (aid, aid),
+        )
+        # 老库 consumption.person_id 没有 ON DELETE，人还被流水指着就删不掉
+        conn.execute(
+            """UPDATE consumption_event SET person_id = NULL
+               WHERE person_id IN (SELECT id FROM person WHERE owner_id = ?)""",
+            (aid,),
+        )
+        cons_owned = """
+            SELECT c.id FROM consumption_event c
+            LEFT JOIN bean_lot l ON l.id = c.lot_id
+            LEFT JOIN bean b ON b.id = l.bean_id
+            LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
+            LEFT JOIN bottle sp ON sp.id = bl.bottle_id
+            WHERE b.owner_id = ? OR sp.owner_id = ?
+        """
+        conn.execute(f"DELETE FROM consumption_photo WHERE cons_id IN ({cons_owned})", (aid, aid))
+        conn.execute(f"DELETE FROM consumption_audit WHERE cons_id IN ({cons_owned})", (aid, aid))
+        conn.execute(f"DELETE FROM consumption_event WHERE id IN ({cons_owned})", (aid, aid))
+        conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
+        conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
+        conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
+        conn.execute("DELETE FROM auth_token WHERE account_id = ?", (aid,))
+        conn.execute("DELETE FROM auth_session WHERE account_id = ?", (aid,))
+        conn.execute("DELETE FROM account WHERE id = ?", (aid,))
+    except sqlite3.Error as exc:
+        raise HTTPException(500, f"注销没做成：{exc}") from exc
 
 
 def issue_session(conn: sqlite3.Connection, account_id: int) -> str:
