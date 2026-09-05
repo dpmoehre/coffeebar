@@ -1,6 +1,6 @@
 // 共用的小组件：按钮、面板、进度条、芯片、对话框、提示。
 // 全站只有这一套样式来源。
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export function Btn({ variant = "solid", className = "", ...rest }) {
   const base =
@@ -103,6 +103,8 @@ export function Modal({ open, onClose, title, sub, children, footer, wide }) {
 
 export function useToast() {
   const [msg, setMsg] = useState(null);
+  const toast = useCallback((text) => setMsg({ text }), []);
+  const oops = useCallback((text) => setMsg({ text, bad: true }), []);
   useEffect(() => {
     if (!msg) return;
     const t = setTimeout(() => setMsg(null), 2600);
@@ -117,11 +119,7 @@ export function useToast() {
       {msg.text}
     </div>
   ) : null;
-  return {
-    toast: (text) => setMsg({ text }),
-    oops: (text) => setMsg({ text, bad: true }),
-    node,
-  };
+  return { toast, oops, node };
 }
 
 export function Empty({ children }) {

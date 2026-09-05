@@ -19,10 +19,21 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
   );
 
   useEffect(() => {
+    let cancelled = false;
     setSpirit(null);
-    load();
-    api.people().then((d) => setPeople(d.people));
-  }, [id, load]);
+    api
+      .spirit(id)
+      .then((s) => {
+        if (!cancelled) setSpirit(s);
+      })
+      .catch((e) => oops(e.message));
+    api.people().then((d) => {
+      if (!cancelled) setPeople(d.people);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, oops]);
 
   if (!spirit) return <p className="text-muted">读取中…</p>;
 

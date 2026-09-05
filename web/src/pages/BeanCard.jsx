@@ -18,6 +18,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   const [opening, setOpening] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
   const [wipe, setWipe] = useState(null);
+  const holding = useRef(false);
 
   const load = useCallback(
     () => api.bean(id).then(setBean).catch((e) => oops(e.message)),
@@ -25,31 +26,47 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   );
 
   useEffect(() => {
+    let cancelled = false;
     setBean(null);
-    load();
-    api.people().then((d) => setPeople(d.people));
-  }, [id, load]);
+    api
+      .bean(id)
+      .then((b) => {
+        if (!cancelled) setBean(b);
+      })
+      .catch((e) => oops(e.message));
+    api.people().then((d) => {
+      if (!cancelled) setPeople(d.people);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id, oops]);
 
-  // 编辑期间每 60 秒续锁；被接管会被明确告知
+  // 只有自己拿到写锁才续；光看着不占锁，也不对空锁心跳（否则会误报被接管、整页闪）。
   useEffect(() => {
-    if (!bean) return;
-    const res = `bean:${bean.id}`;
+    const res = `bean:${id}`;
     const t = setInterval(async () => {
+      if (!holding.current) return;
       try {
         await api.heartbeat(res);
       } catch (e) {
+        holding.current = false;
         if (e.status === 409) oops(e.message);
       }
     }, 60000);
     return () => {
       clearInterval(t);
-      api.unlock(res).catch(() => {});
+      if (holding.current) {
+        holding.current = false;
+        api.unlock(res).catch(() => {});
+      }
     };
-  }, [bean?.id, oops]);
+  }, [id, oops]);
 
   const guarded = async (fn) => {
     try {
       await api.lock(`bean:${id}`);
+      holding.current = true;
       await fn();
     } catch (e) {
       if (e.isLocked && e.body.can_take_over) {
@@ -365,6 +382,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
                 setLockInfo(null);
                 try {
                   await api.lock(`bean:${id}`, true);
+                  holding.current = true;
                   await retry();
                 } catch (e) {
                   oops(e.message);
