@@ -252,6 +252,10 @@ def test_map_pins_from_origin(client):
     assert any(u["id"] == mystery["id"] for u in data["unplaced"])
     sidama = [p for p in data["pins"] if p["name"] == "西达玛豆"]
     assert sidama and sidama[0]["source"] == "gazetteer"
+    assert sidama[0]["balance_g"] == 200
+    assert sidama[0]["roast"] == "浅烘"
+    assert "柑橘" in sidama[0]["tags"]
+    assert sidama[0]["origin"] == "埃塞俄比亚"
 
 
 def test_map_click_not_overwritten_and_hidden_when_deleted(client):

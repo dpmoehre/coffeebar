@@ -287,11 +287,15 @@ def backfill(conn: sqlite3.Connection) -> int:
 
 def map_data(conn: sqlite3.Connection, owner_id: int, cover_of) -> dict:
     """给地图页：钉 + 还没定点的豆。cover_of(bean_id) -> 封面或 None。"""
+    from . import store  # 函数内导入，避免和 store → places 顶层循环
+
     beans = conn.execute(
-        """SELECT b.id, b.name, b.origin,
+        f"""SELECT b.id, b.name, b.origin, b.roast, b.process, b.producer,
                   (SELECT COUNT(*) FROM bean_lot l
                     WHERE l.bean_id = b.id AND l.closed_at IS NULL) AS open_lots,
-                  (SELECT COUNT(*) FROM bean_lot l WHERE l.bean_id = b.id) AS all_lots
+                  (SELECT COUNT(*) FROM bean_lot l WHERE l.bean_id = b.id) AS all_lots,
+                  COALESCE((SELECT SUM({store.BALANCE}) FROM bean_lot l
+                             WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS balance_g
            FROM bean b
            WHERE b.owner_id = ? AND b.deleted_at IS NULL
            ORDER BY b.updated_at DESC""",
@@ -306,6 +310,11 @@ def map_data(conn: sqlite3.Connection, owner_id: int, cover_of) -> dict:
             "id": b["id"],
             "name": b["name"],
             "origin": b["origin"],
+            "roast": b["roast"],
+            "process": b["process"],
+            "producer": b["producer"],
+            "tags": store.bean_tags(conn, b["id"]),
+            "balance_g": round(float(b["balance_g"] or 0), 1),
             "in_stock": in_stock,
             "pending": pending,
             "cover": cover_of(b["id"]),

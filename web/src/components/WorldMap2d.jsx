@@ -3,6 +3,7 @@ import { geoEqualEarth, geoGraticule, geoMercator, geoPath } from "d3-geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { countries } from "../geo/world.js";
+import PinTip from "./PinTip.jsx";
 
 function makeProjection(kind, w, h) {
   const proj = kind === "mercator" ? geoMercator() : geoEqualEarth();
@@ -26,6 +27,7 @@ export default function WorldMap2d({
   const wrap = useRef(null);
   const [size, setSize] = useState({ w: 640, h: 420 });
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
+  const [tip, setTip] = useState(null);
   const drag = useRef(null);
 
   useEffect(() => {
@@ -87,7 +89,10 @@ export default function WorldMap2d({
     const dx = e.clientX - d.x;
     const dy = e.clientY - d.y;
     if (Math.hypot(dx, dy) > 5) d.moved = true;
-    if (d.moved) setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
+    if (d.moved) {
+      setTip(null);
+      setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
+    }
   };
 
   const onPointerUp = (e) => {
@@ -129,19 +134,31 @@ export default function WorldMap2d({
           <path d={grid} fill="none" stroke="#2a231c" strokeWidth={0.6} />
           <path d={land} fill="#1c1814" stroke="#3a3228" strokeWidth={0.7} />
           {dots.map((p) => {
-            const on = p.bean_id === selectedId;
+            const on = p.bean_id === selectedId || tip?.pin?.place_id === p.place_id;
             const r = on ? 6.5 : 4.5;
             return (
               <g
                 key={`${p.bean_id}-${p.place_id}`}
                 transform={`translate(${p.x},${p.y})`}
                 className="cursor-pointer"
+                onPointerEnter={(e) => {
+                  if (drag.current?.moved) return;
+                  const box = wrap.current.getBoundingClientRect();
+                  setTip({ pin: p, x: e.clientX - box.left, y: e.clientY - box.top });
+                }}
+                onPointerMove={(e) => {
+                  if (drag.current?.moved) return;
+                  const box = wrap.current.getBoundingClientRect();
+                  setTip({ pin: p, x: e.clientX - box.left, y: e.clientY - box.top });
+                }}
+                onPointerLeave={() => setTip(null)}
                 onPointerUp={(e) => {
                   e.stopPropagation();
                   if (drag.current?.moved) return;
                   if (!placing && onOpen) onOpen(p.bean_id);
                 }}
               >
+                <circle r={14} fill="transparent" />
                 <circle
                   r={r + 3}
                   fill={p.in_stock ? "#c88d44" : "transparent"}
@@ -161,6 +178,7 @@ export default function WorldMap2d({
           })}
         </g>
       </svg>
+      <PinTip pin={tip?.pin} x={tip?.x} y={tip?.y} box={size} />
     </div>
   );
 }
