@@ -11,10 +11,13 @@ dependencies = [
     "pillow>=11.0",
     "pillow-heif>=0.21",
     "argon2-cffi>=25.1.0",
+    "mcp>=2.1.1",
+    "httpx>=0.28.1",
 ]
 
 [project.scripts]
 coffeebar = "app.main:run"
+coffeebar-mcp = "app.mcp_server:run"
 
 [dependency-groups]
 dev = [

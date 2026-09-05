@@ -20,6 +20,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "可以用 Cursor 直接记账",
+    notes: [
+      "把豆袋照片和克重发给 Cursor，能直接建卡、入袋、记谁喝了。",
+      "网页正在改那张卡时，它不会抢。关袋、撤回要你明确说。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "日历点子改成上下",
     notes: ["格子里上面是咖啡，下面是酒，不再并排左右。"],
   },

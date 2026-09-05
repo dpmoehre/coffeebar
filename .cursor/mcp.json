@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "coffeebar": {
+      "command": "uv",
+      "args": ["run", "coffeebar-mcp"],
+      "env": {
+        "COFFEEBAR_URL": "http://127.0.0.1:8000"
+      }
+    }
+  }
+}
