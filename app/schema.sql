@@ -199,11 +199,11 @@ CREATE TABLE IF NOT EXISTS restock_photo (
   created_at TEXT    NOT NULL
 );
 
--- 冲一次留下的过程照：称豆 / 粉床 / 冲完，都可以缺
+-- 冲一次留下的过程照：称豆 / 粉床 / 冲完 / 器具（称盘、壶、滤杯），都可以缺
 CREATE TABLE IF NOT EXISTS consumption_photo (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,
   cons_id    INTEGER NOT NULL REFERENCES consumption_event(id) ON DELETE CASCADE,
-  kind       TEXT    NOT NULL CHECK (kind IN ('beans', 'bed', 'finish')),
+  kind       TEXT    NOT NULL CHECK (kind IN ('beans', 'bed', 'finish', 'gear')),
   path       TEXT    NOT NULL,
   created_at TEXT    NOT NULL
 );

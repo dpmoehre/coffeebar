@@ -192,7 +192,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
       <Panel className="mt-5">
         <div className="serif text-lg">冲煮记录</div>
         <p className="mt-1 mb-3 text-[13px] text-muted">
-          每次怎么冲都留在这支豆上，称豆、粉床、冲完的照片也可以挂上。记错了可以撤回，撤回只划掉、不删记录。
+          每次怎么冲都留在这支豆上，称豆、粉床、冲完、器具（称盘、壶、滤杯）的照片也可以挂上。记错了可以撤回，撤回只划掉、不删记录。
         </p>
         {bean.log.length === 0 ? (
           <p className="text-muted">还没冲过。</p>
@@ -656,6 +656,7 @@ const BREW_PHOTO_KINDS = [
   ["beans", "称豆"],
   ["bed", "粉床"],
   ["finish", "冲完"],
+  ["gear", "器具"],
 ];
 
 function BrewPhotos({ consId, photos, onDone, toast, oops }) {

@@ -4,7 +4,7 @@
 没开封往往只有包装，开封后再补豆盘。豆卡是店家印的参数说明，拍下来留档，
 但它不适合当封面（缩略图里一片字），所以 `cover()` 不选它。
 
-冲煮记录另有过程照：`beans` 称豆、`bed` 粉床、`finish` 冲完，也都可缺。
+冲煮记录另有过程照：`beans` 称豆、`bed` 粉床、`finish` 冲完、`gear` 器具（称盘、壶、滤杯），也都可缺。
 
 手机直出多是 HEIC，浏览器认不了，一律转成 JPEG 存。原图不留——自用场景没必要
 占空间，也省得备份包变大。
@@ -153,14 +153,14 @@ def delete_bottle_photo(conn: sqlite3.Connection, photo_id: int) -> None:
     conn.execute("DELETE FROM bottle_photo WHERE id = ?", (photo_id,))
 
 
-BREW_PHOTO_KINDS = ("beans", "bed", "finish")
+BREW_PHOTO_KINDS = ("beans", "bed", "finish", "gear")
 
 
 def attach_consumption_photo(
     conn: sqlite3.Connection, cons_id: int, kind: str, raw: bytes, filename: str
 ) -> dict:
     if kind not in BREW_PHOTO_KINDS:
-        raise BadPhoto("只能是 beans（称豆）、bed（粉床）或 finish（冲完）")
+        raise BadPhoto("只能是 beans（称豆）、bed（粉床）、finish（冲完）或 gear（器具）")
     row = conn.execute("SELECT id FROM consumption_event WHERE id = ?", (cons_id,)).fetchone()
     if not row:
         raise BadPhoto("没有这笔冲煮")

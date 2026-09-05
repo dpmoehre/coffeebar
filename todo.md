@@ -7,6 +7,7 @@
 
 ## 2026-09-05
 
+- **冲煮记录加器具照**：过程照多一类 `gear`（称盘、壶、滤杯），接口 `POST /api/consumption/{id}/photos`，手机自己传。老库启动会放宽 CHECK，已有称豆/粉床/冲完不丢。**验收**：`uv run pytest tests/test_photos.py`。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)。
 - **冲煮记录可挂过程照**：每笔消耗可传称豆 / 粉床 / 冲完，豆卡冲煮记录里能看、能放大、能删。瑰夏村绿标036 戚浩辰那杯挂上了当时三张。**验收**：`uv run pytest tests/test_photos.py`；打开豆卡看冲煮记录有三张图。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)。
 - **冲煮指导补水粉比**：各段同时给克数和 `1:x`（本段用水÷粉量、累计用水÷粉量），和方程式称对得上。**验收**：`uv run pytest tests/test_brew.py`；15.9 g / 1:16 → 总水 254 g、累计 1:15.97。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)。
 - **小主机第一次装上并跑通**：Win11 本机 `C:\Users\dp\Documents\coffeebar`，`install.bat` 成功，`start.bat` 开 `http://localhost:8000`；真库从 `D:\data` 覆盖，豆/酒能看到 MATYAZO 等与格兰杰 谜 16年。防火墙 8000 未放行。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)、[docs/002-🚧](docs/002-🚧-豆子档案与小主机架构.md)。

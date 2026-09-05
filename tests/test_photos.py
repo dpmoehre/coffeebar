@@ -439,6 +439,69 @@ def test_brew_photo_needs_the_brew(client):
     assert "没有这笔冲煮" in r.json()["message"]
 
 
+def test_brew_photo_gear_kind(client):
+    """称盘、壶、滤杯走 gear，手机自己传。"""
+    bean = make_bean(client)
+    brew = client.post(
+        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16}
+    ).json()
+    r = client.post(
+        f"/api/consumption/{brew['id']}/photos",
+        files={"file": ("plate.png", png_bytes(), "image/png")},
+        data={"kind": "gear"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["kind"] == "gear"
+    assert client.get(f"/api/beans/{bean['id']}").json()["log"][0]["photos"][0]["kind"] == "gear"
+
+
+def test_migration_relaxes_brew_photo_kind_on_old_db(tmp_path, monkeypatch):
+    """老库过程照 CHECK 只有称豆/粉床/冲完，启动后要能挂器具且旧图不丢。"""
+    import importlib
+
+    monkeypatch.setenv("COFFEEBAR_DATA", str(tmp_path))
+    from app import db as db_mod
+
+    importlib.reload(db_mod)
+    conn = db_mod.connect()
+    db_mod.init_db(conn)
+    bean_id = store.create_bean(conn, {"name": "老豆"})
+    lot_id = store.add_lot(conn, bean_id, {"nominal_g": 200, "price": 80})
+    brew = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16})
+    conn.executescript(
+        """DROP TABLE consumption_photo;
+           CREATE TABLE consumption_photo (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             cons_id INTEGER NOT NULL REFERENCES consumption_event(id) ON DELETE CASCADE,
+             kind TEXT NOT NULL CHECK (kind IN ('beans', 'bed', 'finish')),
+             path TEXT NOT NULL,
+             created_at TEXT NOT NULL);"""
+    )
+    conn.execute(
+        "INSERT INTO consumption_photo (cons_id, kind, path, created_at)"
+        " VALUES (?, 'beans', 'photos/old.jpg', '2026-01-01')",
+        (brew["id"],),
+    )
+    with pytest.raises(Exception):
+        conn.execute(
+            "INSERT INTO consumption_photo (cons_id, kind, path, created_at)"
+            " VALUES (?, 'gear', 'x.jpg', '2026-01-01')",
+            (brew["id"],),
+        )
+
+    db_mod.init_db(conn)
+
+    rows = conn.execute("SELECT cons_id, kind, path FROM consumption_photo").fetchall()
+    assert [tuple(r) for r in rows] == [(brew["id"], "beans", "photos/old.jpg")], "老照片没丢"
+    conn.execute(
+        "INSERT INTO consumption_photo (cons_id, kind, path, created_at)"
+        " VALUES (?, 'gear', 'photos/plate.jpg', '2026-01-02')",
+        (brew["id"],),
+    )
+    assert conn.execute("SELECT COUNT(*) FROM consumption_photo").fetchone()[0] == 2
+    conn.close()
+
+
 def test_migration_is_idempotent(tmp_path, monkeypatch):
     """反复启动不该反复重建表。"""
     import importlib

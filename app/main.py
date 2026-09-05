@@ -260,7 +260,7 @@ async def api_add_consumption_photo(
     kind: str = Form("bed"),
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    """给一笔冲煮挂过程照。beans 称豆 / bed 粉床 / finish 冲完。"""
+    """给一笔冲煮挂过程照。beans 称豆 / bed 粉床 / finish 冲完 / gear 器具。"""
     return photos.attach_consumption_photo(
         conn, cons_id, kind, await file.read(), file.filename or ""
     )

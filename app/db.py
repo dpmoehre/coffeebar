@@ -49,6 +49,8 @@ STALE_CHECKS = {
     "bean_photo": "kind IN ('pack', 'tray')",
     # 老库 lot_id 非空且只指向 bean_lot，酒进同一张消耗表得放宽
     "consumption_event": "lot_id       INTEGER NOT NULL REFERENCES bean_lot",
+    # 冲煮过程照后来加了器具（称盘 / 壶 / 滤杯）
+    "consumption_photo": "kind IN ('beans', 'bed', 'finish')",
 }
 
 
