@@ -47,6 +47,15 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
+/* Tailwind Preflight 把 dialog 的 margin 清成 0。Chrome 的 showModal()
+   靠 margin:auto + inset 居中，清掉就会贴到视口左上角。 */
+dialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  height: fit-content;
+}
+
 dialog::backdrop {
   background: rgb(0 0 0 / 0.6);
 }
