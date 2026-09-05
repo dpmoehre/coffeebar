@@ -2,6 +2,8 @@
 
 用法：服务跑起来后 `uv run python scripts/seed_first_beans.py [端口] [图片目录]`
 
+先备上「谁喝的」常客：戚浩辰、丁瀚舟、孙琦（已有则跳过）。
+
 几包的状态各不相同，正好把几条口径演一遍：
 - 瑰夏村绿标036：227 g / 102 元，已经喝掉一些，现在称出 129.351 g
   → 走**盘点**。若走「开袋实称」会把单价分母从 227 改成 129.351，每克成本虚高 76%。
@@ -25,6 +27,9 @@ from pathlib import Path
 PORT = sys.argv[1] if len(sys.argv) > 1 else "8000"
 PHOTO_DIR = Path(sys.argv[2]) if len(sys.argv) > 2 else None
 BASE = f"http://127.0.0.1:{PORT}"
+
+# 「谁喝的」芯片：人可以随时增删，这三个人是吧台常客，入库时先备上
+DEFAULT_PEOPLE = ["戚浩辰", "丁瀚舟", "孙琦"]
 
 GREEN, YELLOW, DIM, OFF = "\033[32m", "\033[33m", "\033[2m", "\033[0m"
 
@@ -203,6 +208,15 @@ def main() -> int:
     except urllib.error.URLError:
         print(f"连不上 {BASE}，先把服务跑起来。")
         return 1
+
+    _, roster = call("GET", "/api/people?include_inactive=true")
+    have_people = {p["name"] for p in roster.get("people") or []}
+    for name in DEFAULT_PEOPLE:
+        if name in have_people:
+            print(f"{DIM}谁喝的已有「{name}」{OFF}")
+            continue
+        call("POST", "/api/people", {"name": name})
+        print(f"谁喝的备上 {name}")
 
     _, existing = call("GET", "/api/beans?scope=all")
     have = {b["name"] for b in existing["beans"]}
