@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
 import { Bean, Cart, Chart, CupMark, Glass, People } from "./icons.jsx";
-import { Btn, Field, Input, useToast } from "./ui.jsx";
+import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
 import Beans from "./pages/Beans.jsx";
@@ -28,6 +28,10 @@ export default function App() {
   const { toast, oops, node } = useToast();
   const [health, setHealth] = useState(null);
   const [me, setMe] = useState(undefined);
+  const [bye, setBye] = useState(false);
+  const [byeEmail, setByeEmail] = useState("");
+  const [byePass, setByePass] = useState("");
+  const [byeBusy, setByeBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -63,6 +67,30 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setPage(key);
+  };
+
+  const signOut = async () => {
+    try {
+      await api.logout();
+      setMe(null);
+    } catch (e) {
+      oops(e.message);
+    }
+  };
+
+  const wipeAccount = async () => {
+    setByeBusy(true);
+    try {
+      await api.deleteAccount(byeEmail, byePass);
+      setBye(false);
+      setByeEmail("");
+      setByePass("");
+      setMe(null);
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setByeBusy(false);
+    }
   };
 
   const navOn = (key) =>
@@ -153,6 +181,16 @@ export default function App() {
             ))}
           </div>
         </div>
+        {me && (
+          <div className="mt-3 flex gap-4 text-xs text-muted md:hidden">
+            <button className="underline hover:text-amber" onClick={signOut}>
+              退出
+            </button>
+            <button className="underline hover:text-warn" onClick={() => setBye(true)}>
+              注销账号
+            </button>
+          </div>
+        )}
 
         <div className="hidden md:block">
           {NAV.map(({ key, label, Icon }) => {
@@ -174,19 +212,20 @@ export default function App() {
             );
           })}
           {me && (
-            <button
-              className="mt-4 text-left text-sm text-muted underline hover:text-amber"
-              onClick={async () => {
-                try {
-                  await api.logout();
-                  setMe(null);
-                } catch (e) {
-                  oops(e.message);
-                }
-              }}
-            >
-              退出
-            </button>
+            <div className="mt-4 flex flex-col items-start gap-2">
+              <button
+                className="text-left text-sm text-muted underline hover:text-amber"
+                onClick={signOut}
+              >
+                退出
+              </button>
+              <button
+                className="text-left text-sm text-muted underline hover:text-warn"
+                onClick={() => setBye(true)}
+              >
+                注销账号
+              </button>
+            </div>
           )}
         </div>
       </nav>
@@ -206,6 +245,43 @@ export default function App() {
       </main>
 
       {node}
+      <Modal
+        open={bye}
+        onClose={() => !byeBusy && setBye(false)}
+        title="注销账号"
+        sub="会删掉你的豆、酒、照片和流水，不可恢复。别人的库不动。小主机上若这是接手真库存的那个号，注销等于清掉吧台账本。"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setBye(false)} disabled={byeBusy}>
+              取消
+            </Btn>
+            <Btn
+              variant="danger"
+              onClick={wipeAccount}
+              disabled={byeBusy || !byeEmail || byePass.length < 8}
+            >
+              确认注销
+            </Btn>
+          </>
+        }
+      >
+        <Field label="再输入一遍邮箱">
+          <Input
+            type="email"
+            value={byeEmail}
+            onChange={(e) => setByeEmail(e.target.value)}
+            placeholder={me?.email || ""}
+          />
+        </Field>
+        <Field label="密码">
+          <Input
+            type="password"
+            value={byePass}
+            onChange={(e) => setByePass(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && wipeAccount()}
+          />
+        </Field>
+      </Modal>
     </div>
   );
 }

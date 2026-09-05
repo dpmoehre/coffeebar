@@ -124,6 +124,32 @@ def claim_orphans(conn: sqlite3.Connection, account_id: int) -> None:
     conn.execute("UPDATE person SET owner_id = ? WHERE owner_id IS NULL", (account_id,))
 
 
+def delete_account(conn: sqlite3.Connection, account: dict, email: str, password: str) -> None:
+    """注销：核过邮箱和密码后，删掉这个人的豆、酒、人、照片和账号。不可恢复。"""
+    if normalize_email(email) != normalize_email(account["email"]):
+        raise HTTPException(400, "请输入这个账号的邮箱")
+    row = conn.execute("SELECT password_hash FROM account WHERE id = ?", (account["id"],)).fetchone()
+    if not row or not check_password(password, row["password_hash"]):
+        raise HTTPException(401, "密码不对")
+    aid = int(account["id"])
+    from . import photos
+
+    for path in photos.paths_for_owner(conn, aid):
+        photos.remove(path)
+    conn.execute(
+        """DELETE FROM write_lock WHERE resource IN (
+             SELECT 'bean:' || id FROM bean WHERE owner_id = ?
+             UNION
+             SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
+           )""",
+        (aid, aid),
+    )
+    conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
+    conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
+    conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
+    conn.execute("DELETE FROM account WHERE id = ?", (aid,))
+
+
 def issue_session(conn: sqlite3.Connection, account_id: int) -> str:
     token = secrets.token_urlsafe(32)
     now = db.now()

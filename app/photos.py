@@ -216,6 +216,34 @@ def purge_consumption_photos(conn: sqlite3.Connection, cons_id: int) -> int:
     return len(rows)
 
 
+def paths_for_owner(conn: sqlite3.Connection, owner_id: int) -> list[str]:
+    """这个账号名下所有照片路径，注销时先收齐再删文件。"""
+    rows = conn.execute(
+        """
+        SELECT path FROM bean_photo
+         WHERE bean_id IN (SELECT id FROM bean WHERE owner_id = ?)
+        UNION ALL
+        SELECT path FROM restock_photo
+         WHERE bean_id IN (SELECT id FROM bean WHERE owner_id = ?)
+        UNION ALL
+        SELECT path FROM bottle_photo
+         WHERE bottle_id IN (SELECT id FROM bottle WHERE owner_id = ?)
+        UNION ALL
+        SELECT path FROM consumption_photo
+         WHERE cons_id IN (
+           SELECT c.id FROM consumption_event c
+           LEFT JOIN bean_lot l ON l.id = c.lot_id
+           LEFT JOIN bean b ON b.id = l.bean_id
+           LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
+           LEFT JOIN bottle sp ON sp.id = bl.bottle_id
+           WHERE b.owner_id = ? OR sp.owner_id = ?
+         )
+        """,
+        (owner_id, owner_id, owner_id, owner_id, owner_id),
+    ).fetchall()
+    return [r["path"] for r in rows]
+
+
 def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,
                          note: str | None = None) -> dict:
     """补货条目的对照图：货架、截图、上次那袋都行。"""

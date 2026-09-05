@@ -176,6 +176,20 @@ def api_me(account: dict = Depends(current_account)):
     return auth.public_account(account)
 
 
+@app.post("/api/auth/delete")
+def api_delete_me(
+    payload: dict,
+    request: Request,
+    response: Response,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    ratelimit.check(request, "delete", 5)
+    auth.delete_account(conn, account, payload.get("email") or "", payload.get("password") or "")
+    auth.clear_cookie(response)
+    return {"ok": True}
+
+
 # ── 豆子 ────────────────────────────────────────────────────
 
 
@@ -248,12 +262,14 @@ def api_update_bean(
 @app.post("/api/beans/{bean_id}/photos", status_code=201)
 async def api_add_photo(
     bean_id: int,
+    request: Request,
     file: UploadFile = File(...),
     kind: str = Form("pack"),
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
     """挂一张照片。pack 包装 / tray 豆盘，都可以缺。HEIC 会转成 JPEG。"""
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
     auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     return photos.attach_bean_photo(conn, bean_id, kind, await file.read(), file.filename or "")
 
@@ -280,12 +296,14 @@ def api_del_photo(
 @app.post("/api/beans/{bean_id}/restock-photos", status_code=201)
 async def api_add_restock_photo(
     bean_id: int,
+    request: Request,
     file: UploadFile = File(...),
     note: str = Form(""),
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
     """补货条目的对照图：货架、淘宝截图、上次那袋都行。"""
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
     auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     return photos.attach_restock_photo(conn, bean_id, await file.read(), file.filename or "", note or None)
 
@@ -487,12 +505,14 @@ def api_delete_voided(
 @app.post("/api/consumption/{cons_id}/photos", status_code=201)
 async def api_add_consumption_photo(
     cons_id: int,
+    request: Request,
     file: UploadFile = File(...),
     kind: str = Form("bed"),
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
     """给一笔冲煮挂过程照。beans 称豆 / bed 粉床 / finish 冲完 / gear 器具。"""
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
     if conn.execute("SELECT id FROM consumption_event WHERE id = ?", (cons_id,)).fetchone():
         auth.assert_owner(auth.consumption_owner(conn, cons_id), account["id"], "没有这一笔")
     return photos.attach_consumption_photo(
@@ -605,11 +625,13 @@ def api_add_bottle_lot(
 @app.post("/api/spirits/{bottle_id}/photos", status_code=201)
 async def api_add_bottle_photo(
     bottle_id: int,
+    request: Request,
     file: UploadFile = File(...),
     kind: str = Form("pack"),
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
     auth.assert_owner(auth.spirit_owner(conn, bottle_id), account["id"], "没有这支酒")
     return photos.attach_bottle_photo(conn, bottle_id, kind, await file.read(), file.filename or "")
 

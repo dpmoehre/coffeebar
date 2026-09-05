@@ -60,6 +60,7 @@ export const api = {
   register: (email, password) => req("POST", "/api/auth/register", { email, password }),
   login: (email, password) => req("POST", "/api/auth/login", { email, password }),
   logout: () => req("POST", "/api/auth/logout", {}),
+  deleteAccount: (email, password) => req("POST", "/api/auth/delete", { email, password }),
   forgot: (email) => req("POST", "/api/auth/forgot", { email }),
   reset: (token, password) => req("POST", "/api/auth/reset", { token, password }),
   verify: (token) => req("POST", "/api/auth/verify", { token }),

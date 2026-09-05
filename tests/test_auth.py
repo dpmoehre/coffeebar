@@ -184,3 +184,111 @@ def test_cookie_secure_when_forced(client, monkeypatch):
     )
     assert r.status_code == 200
     assert "secure" in r.headers.get("set-cookie", "").lower()
+
+
+def test_delete_account_wipes_only_self(client):
+    from app import db
+    from tests.test_photos import png_bytes
+
+    client.post("/api/beans", json={"name": "A 的豆", "nominal_g": 200})
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "gone@coffeebar.local", "password": "testpass1"},
+    )
+    b_bean = client.post("/api/beans", json={"name": "B 的豆", "nominal_g": 100, "price": 40}).json()
+    photo = client.post(
+        f"/api/beans/{b_bean['id']}/photos",
+        files={"file": ("bag.png", png_bytes(), "image/png")},
+        data={"kind": "pack"},
+    ).json()
+    name = photo["path"].split("/")[-1]
+    assert (db.PHOTO_DIR / name).exists()
+    client.post(
+        "/api/spirits",
+        json={"name": "B 的酒", "kind": "威士忌", "abv": 40, "nominal_ml": 700, "price": 99},
+    )
+    client.post("/api/people", json={"name": "路人"})
+
+    assert (
+        client.post("/api/auth/delete", json={"email": "wrong@x.com", "password": "testpass1"}).status_code
+        == 400
+    )
+    assert (
+        client.post(
+            "/api/auth/delete", json={"email": "gone@coffeebar.local", "password": "nopexxxx"}
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/delete", json={"email": "gone@coffeebar.local", "password": "testpass1"}
+        ).status_code
+        == 200
+    )
+    assert client.get("/api/me").status_code == 401
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "gone@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 401
+    )
+    assert not (db.PHOTO_DIR / name).exists()
+
+    client.post(
+        "/api/auth/login",
+        json={"email": "test@coffeebar.local", "password": "testpass1"},
+    )
+    names = [b["name"] for b in client.get("/api/beans").json()["beans"]]
+    assert "A 的豆" in names
+    assert "B 的豆" not in names
+
+    again = client.post(
+        "/api/auth/register",
+        json={"email": "gone@coffeebar.local", "password": "testpass1"},
+    )
+    assert again.status_code == 201
+    assert client.get("/api/beans").json()["beans"] == []
+
+
+def test_upload_rate_limit(monkeypatch):
+    import importlib
+
+    from fastapi.testclient import TestClient
+
+    from app import db as db_mod
+    from app import main as main_mod
+    from app import ratelimit
+    from tests.test_photos import png_bytes
+
+    tmp = tempfile.mkdtemp(prefix="coffeebar-up-")
+    monkeypatch.setenv("COFFEEBAR_DATA", tmp)
+    monkeypatch.setenv("COFFEEBAR_RATE_LIMIT", "1")
+    importlib.reload(db_mod)
+    ratelimit._hits.clear()
+    importlib.reload(main_mod)
+
+    with TestClient(main_mod.app) as c:
+        assert (
+            c.post(
+                "/api/auth/register",
+                json={"email": "up@coffeebar.local", "password": "testpass1"},
+            ).status_code
+            == 201
+        )
+        bean = c.post("/api/beans", json={"name": "限流豆", "nominal_g": 50}).json()
+        tiny = png_bytes(size=(32, 32))
+        for i in range(20):
+            r = c.post(
+                f"/api/beans/{bean['id']}/photos",
+                files={"file": (f"{i}.png", tiny, "image/png")},
+                data={"kind": "pack"},
+            )
+            assert r.status_code == 201, i
+        blocked = c.post(
+            f"/api/beans/{bean['id']}/photos",
+            files={"file": ("last.png", tiny, "image/png")},
+            data={"kind": "pack"},
+        )
+        assert blocked.status_code == 429

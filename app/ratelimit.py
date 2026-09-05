@@ -15,11 +15,17 @@ def enabled() -> bool:
     return os.environ.get("COFFEEBAR_RATE_LIMIT", "1") != "0"
 
 
-def check(request: Request, name: str, limit: int, window_s: int = 60) -> None:
+def check(
+    request: Request,
+    name: str,
+    limit: int,
+    window_s: int = 60,
+    who: str | None = None,
+) -> None:
     if not enabled():
         return
-    ip = request.client.host if request.client else "unknown"
-    key = f"{name}:{ip}"
+    ident = who or (request.client.host if request.client else "unknown")
+    key = f"{name}:{ident}"
     now = time.monotonic()
     q = _hits[key]
     while q and q[0] <= now - window_s:
