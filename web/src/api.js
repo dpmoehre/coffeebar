@@ -25,6 +25,12 @@ export class ApiError extends Error {
 
 function readBody(text, status) {
   if (!text) return null;
+  const trimmed = text.trim();
+  if (trimmed.startsWith("<!") || trimmed.startsWith("<html")) {
+    throw new ApiError(status, {
+      message: "服务还是旧版本，没接到这个接口。关掉再开一次 start.sh / start.bat。",
+    });
+  }
   try {
     return JSON.parse(text);
   } catch {

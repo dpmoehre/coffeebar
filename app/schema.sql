@@ -223,7 +223,7 @@ CREATE TABLE IF NOT EXISTS consumption_event (
 CREATE INDEX IF NOT EXISTS idx_cons_lot    ON consumption_event(lot_id);
 CREATE INDEX IF NOT EXISTS idx_cons_at     ON consumption_event(at);
 CREATE INDEX IF NOT EXISTS idx_cons_void   ON consumption_event(voided_at);
-CREATE INDEX IF NOT EXISTS idx_cons_serve  ON consumption_event(serve_id);
+-- serve_id 索引放 db.py：老库第一遍执行时这列还没有
 
 -- 改归属人留痕
 CREATE TABLE IF NOT EXISTS consumption_audit (

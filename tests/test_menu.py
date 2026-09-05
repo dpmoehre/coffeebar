@@ -1,5 +1,7 @@
 """推荐酒单：纯饮 / 鸡尾酒一巡、杯数去重、多瓶不自挑、占锁硬拒。"""
 
+import importlib
+
 from app import locks, menu, spirits, stats, store
 from tests.test_spirits import make_spirit
 
@@ -175,3 +177,26 @@ def test_other_account_cannot_see(client):
     client.post("/api/auth/register", json={"email": "other@coffeebar.local", "password": "testpass1"})
     assert client.get("/api/menu").json()["items"] == []
     assert client.get("/api/recipes").json()["recipes"] == []
+
+
+def test_old_db_without_serve_id_can_start(tmp_path, monkeypatch):
+    """小主机老库还没有 serve_id 时，启动不能因为建索引炸掉。"""
+    monkeypatch.setenv("COFFEEBAR_DATA", str(tmp_path))
+    from app import db as db_mod
+
+    importlib.reload(db_mod)
+    conn = db_mod.connect()
+    conn.execute(
+        """CREATE TABLE consumption_event (
+             id INTEGER PRIMARY KEY AUTOINCREMENT,
+             kind TEXT NOT NULL DEFAULT 'coffee',
+             lot_id INTEGER,
+             amount_g REAL,
+             at TEXT NOT NULL,
+             voided_at TEXT
+           )"""
+    )
+    db_mod.init_db(conn)
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(consumption_event)")}
+    assert "serve_id" in cols
+    conn.close()

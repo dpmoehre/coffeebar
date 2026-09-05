@@ -11,6 +11,7 @@
 
 ## 2026-09-06
 
+- **酒单点进去弹出 HTML**：老库没有 `serve_id` 时，启动建索引会炸，旧进程把 `/api/menu` 回成整页。索引改到补列之后。见 [docs/006-🚧](docs/006-🚧-手工验收.md)#1。
 - **推荐酒单（纯饮 + 鸡尾酒）**：侧栏「酒单」；配方 + 上架/下架/排序；倒一巡可改毫升，杯数按巡去重；MCP `list_menu` / `pour_menu` 等。自制基酒仍未做。见 [docs/004-🚧](docs/004-🚧-基酒第一期.md)，手测在 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest` 204 passed。
 - **MCP 红点**：Cursor 的 MCP 进程没有用户 PATH；套 `cmd.exe` 又报路径语法错，且刷新不再拉起进程。改成直接跑 `.venv/Scripts/coffeebar-mcp.exe`。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)。
 - **MCP**：`uv run coffeebar-mcp` 覆盖网页已有能力（豆/酒/人/日历/出表/地图）；网页占锁硬拒绝；酒单以后补。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测在 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest` 196 passed；本对话 50 个工具各跑通一次。
