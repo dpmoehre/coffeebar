@@ -48,6 +48,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
   const [data, setData] = useState(null);
   const [view, setView] = useState("mercator");
   const [scope, setScope] = useState("all");
+  const [layers, setLayers] = useState({ origins: true, beans: true });
   const [selected, setSelected] = useState(focusId || null);
   const [placing, setPlacing] = useState(false);
   const [webgl, setWebgl] = useState(true);
@@ -73,6 +74,10 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
     }
   }, [view, webgl, oops]);
 
+  useEffect(() => {
+    if (placing) setLayers((cur) => ({ ...cur, beans: true }));
+  }, [placing]);
+
   const beans = useMemo(() => collectBeans(data || {}), [data]);
   const visible = useMemo(() => {
     return beans.filter((b) => {
@@ -87,8 +92,19 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
     return (data?.pins || []).filter((p) => ids.has(p.bean_id));
   }, [data, visible]);
 
+  const mapPins = layers.beans ? pins : [];
+  const mapOrigins = layers.origins ? data?.origins || [] : [];
+
   const current = beans.find((b) => b.id === selected);
   const canPlace = placing && selected;
+
+  const toggleLayer = (key) => {
+    setLayers((cur) => {
+      const next = { ...cur, [key]: !cur[key] };
+      if (!next.origins && !next.beans) return cur;
+      return next;
+    });
+  };
 
   const placeAt = async (lat, lng) => {
     if (!selected) return;
@@ -132,6 +148,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
     setSelected(id);
     const b = beans.find((x) => x.id === id);
     setPlacing(!!b && b.places.length === 0);
+    setLayers((cur) => ({ ...cur, beans: true }));
   };
 
   return (
@@ -142,7 +159,11 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           {data
             ? `${beans.length} 支豆 · ${pins.length} 个落点 · ${data.unplaced.length} 支还没定点`
             : "读取中…"}
-          {data ? " · 悬停国家或产区圆环看海拔、豆种、风味和名产" : ""}
+          {data && layers.origins && layers.beans
+            ? " · 悬停国家或产区圆环看海拔、豆种、风味和名产"
+            : ""}
+          {data && layers.origins && !layers.beans ? " · 只看产区产地" : ""}
+          {data && !layers.origins && layers.beans ? " · 只看豆子钉" : ""}
         </p>
       </header>
 
@@ -167,6 +188,13 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
             {label}
           </Chip>
         ))}
+        <span className="mx-1 text-line">|</span>
+        <Chip on={layers.origins} onClick={() => toggleLayer("origins")}>
+          产区产地
+        </Chip>
+        <Chip on={layers.beans} onClick={() => toggleLayer("beans")}>
+          豆子
+        </Chip>
       </div>
 
       {canPlace && (
@@ -180,8 +208,8 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           {view === "globe" && webgl ? (
             <Suspense fallback={<p className="text-muted">地球载入中…</p>}>
               <BeanGlobe
-                pins={pins}
-                origins={data?.origins || []}
+                pins={mapPins}
+                origins={mapOrigins}
                 selectedId={selected}
                 placing={canPlace}
                 onOpen={onOpen}
@@ -191,8 +219,8 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           ) : (
             <WorldMap2d
               kind={view === "equal" ? "equal" : "mercator"}
-              pins={pins}
-              origins={data?.origins || []}
+              pins={mapPins}
+              origins={mapOrigins}
               selectedId={selected}
               placing={canPlace}
               onOpen={onOpen}

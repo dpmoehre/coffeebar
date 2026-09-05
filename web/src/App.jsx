@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Cart, Chart, CupMark, Glass, Globe, People } from "./icons.jsx";
+import { Bean, Cart, Chart, CupMark, Glass, Globe, Log, People } from "./icons.jsx";
 import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
@@ -13,6 +13,7 @@ import Restock from "./pages/Restock.jsx";
 import SpiritCard from "./pages/SpiritCard.jsx";
 import Spirits from "./pages/Spirits.jsx";
 import Stats from "./pages/Stats.jsx";
+import Updates from "./pages/Updates.jsx";
 
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
@@ -21,6 +22,7 @@ const NAV = [
   { key: "stats", label: "统计", Icon: Chart },
   { key: "map", label: "地图", Icon: Globe },
   { key: "people", label: "画像", Icon: People },
+  { key: "updates", label: "更新", Icon: Log },
 ];
 
 export default function App() {
@@ -275,6 +277,7 @@ export default function App() {
           <BeanMap focusId={mapFocus} onOpen={openBean} toast={toast} oops={oops} />
         )}
         {page === "people" && <PeoplePage toast={toast} oops={oops} />}
+        {page === "updates" && <Updates />}
       </main>
 
       {node}
