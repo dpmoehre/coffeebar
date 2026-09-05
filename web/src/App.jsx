@@ -146,7 +146,7 @@ export default function App() {
 
   return (
     <div
-      className={`md:grid md:grid-cols-[252px_1fr] ${
+      className={`w-full md:grid md:grid-cols-[252px_minmax(0,1fr)] ${
         fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-screen"
       }`}
     >
@@ -254,7 +254,7 @@ export default function App() {
         className={
           fill
             ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-4 md:px-10 md:py-6"
-            : "min-w-0 max-w-[1480px] px-5 py-7 md:px-12 md:py-9"
+            : "min-w-0 w-full px-5 py-7 md:px-12 md:py-9"
         }
       >
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
