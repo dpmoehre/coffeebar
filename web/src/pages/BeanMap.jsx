@@ -135,19 +135,17 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
   };
 
   return (
-    <>
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="serif m-0 text-3xl font-semibold">地图</h1>
-          <p className="mt-2 mb-0 text-muted">
-            {data
-              ? `${beans.length} 支豆 · ${pins.length} 个落点 · ${data.unplaced.length} 支还没定点`
-              : "读取中…"}
-          </p>
-        </div>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <header className="shrink-0">
+        <h1 className="serif m-0 text-3xl font-semibold">地图</h1>
+        <p className="mt-2 mb-0 text-muted">
+          {data
+            ? `${beans.length} 支豆 · ${pins.length} 个落点 · ${data.unplaced.length} 支还没定点`
+            : "读取中…"}
+        </p>
       </header>
 
-      <div className="mt-5 flex flex-wrap items-center gap-2">
+      <div className="mt-4 flex shrink-0 flex-wrap items-center gap-2">
         {VIEWS.map(([k, label]) => (
           <Chip
             key={k}
@@ -171,13 +169,13 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
       </div>
 
       {canPlace && (
-        <p className="mt-3 mb-0 text-[13px] text-amber">
+        <p className="mt-3 mb-0 shrink-0 text-[13px] text-amber">
           正在给「{current?.name}」定点：在图上点一下就记下。点错了可以再点，或用词典重猜。
         </p>
       )}
 
-      <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_280px]">
-        <div className="h-[min(62vh,640px)] min-h-[300px]">
+      <div className="mt-4 grid min-h-0 flex-1 grid-rows-[minmax(220px,1fr)_auto] gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(200px,280px)] lg:grid-rows-1">
+        <div className="h-full min-h-[220px] min-w-0">
           {view === "globe" && webgl ? (
             <Suspense fallback={<p className="text-muted">地球载入中…</p>}>
               <BeanGlobe
@@ -200,7 +198,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           )}
         </div>
 
-        <div className="max-h-[min(62vh,640px)] overflow-auto rounded-2xl border border-line bg-panel p-3">
+        <div className="max-h-[36vh] min-h-0 overflow-auto rounded-2xl border border-line bg-panel p-3 lg:max-h-none">
           {current && (
             <div className="mb-3 border-b border-line pb-3">
               <div className="serif text-base">{current.name}</div>
@@ -250,6 +248,6 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           )}
         </div>
       </div>
-    </>
+    </div>
   );
 }

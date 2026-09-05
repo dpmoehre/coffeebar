@@ -140,11 +140,17 @@ export default function App() {
     );
   }
 
+  const fill = page === "map";
+
   return (
-    <div className="min-h-screen md:grid md:grid-cols-[252px_1fr]">
+    <div
+      className={`md:grid md:grid-cols-[252px_1fr] ${
+        fill ? "flex h-dvh flex-col overflow-hidden" : "min-h-screen"
+      }`}
+    >
       <nav
-        className="border-b border-line bg-[#100e0c] px-5 py-4 md:sticky md:top-0 md:h-screen
-          md:border-b-0 md:border-r md:py-7"
+        className={`shrink-0 border-b border-line bg-[#100e0c] px-5 py-4 md:border-b-0 md:border-r md:py-7
+          ${fill ? "md:h-full md:overflow-y-auto" : "md:sticky md:top-0 md:h-screen"}`}
       >
         <div className="mb-0 flex items-center gap-3 md:mb-8 md:flex-col md:gap-0">
           <CupMark className="h-9 w-9 text-amber md:h-12 md:w-12" />
@@ -242,7 +248,13 @@ export default function App() {
         </div>
       </nav>
 
-      <main className="min-w-0 max-w-[1480px] px-5 py-7 md:px-12 md:py-9">
+      <main
+        className={
+          fill
+            ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-4 md:px-10 md:py-6"
+            : "min-w-0 max-w-[1480px] px-5 py-7 md:px-12 md:py-9"
+        }
+      >
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
         {page === "bean" && (
           <BeanCard

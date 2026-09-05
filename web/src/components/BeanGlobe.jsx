@@ -44,7 +44,7 @@ export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPl
   return (
     <div
       ref={wrap}
-      className={`relative h-full min-h-[280px] w-full overflow-hidden rounded-2xl border border-line bg-[#0c0a08] ${
+      className={`relative h-full min-h-0 w-full overflow-hidden rounded-2xl border border-line bg-[#0c0a08] ${
         placing ? "cursor-crosshair" : ""
       }`}
       onMouseMove={(e) => {

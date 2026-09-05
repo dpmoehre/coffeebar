@@ -43,7 +43,7 @@ export default function WorldMap2d({
 
   useEffect(() => {
     setView({ k: 1, x: 0, y: 0 });
-  }, [kind]);
+  }, [kind, size.w, size.h]);
 
   const { w, h } = size;
   const projection = useMemo(() => makeProjection(kind, w, h), [kind, w, h]);
@@ -121,7 +121,7 @@ export default function WorldMap2d({
   return (
     <div
       ref={wrap}
-      className={`relative h-full min-h-[280px] w-full overflow-hidden rounded-2xl border border-line bg-[#0c0a08] ${
+      className={`relative h-full min-h-0 w-full overflow-hidden rounded-2xl border border-line bg-[#0c0a08] ${
         placing ? "cursor-crosshair" : "cursor-grab"
       }`}
       onPointerDown={onPointerDown}
