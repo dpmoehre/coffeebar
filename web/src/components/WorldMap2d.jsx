@@ -16,9 +16,14 @@ function makeProjection(kind, w, h) {
   );
 }
 
+function padIso(id) {
+  return String(id ?? "").padStart(3, "0");
+}
+
 export default function WorldMap2d({
   kind = "mercator",
   pins = [],
+  origins = [],
   selectedId,
   placing,
   onOpen,
@@ -49,8 +54,38 @@ export default function WorldMap2d({
   const projection = useMemo(() => makeProjection(kind, w, h), [kind, w, h]);
   const path = useMemo(() => geoPath(projection), [projection]);
   const graticule = useMemo(() => geoGraticule()(), []);
-  const land = useMemo(() => path(countries), [path]);
   const grid = useMemo(() => path(graticule), [path]);
+
+  const coffeeByIso = useMemo(() => {
+    const m = new Map();
+    for (const o of origins) {
+      if (o.iso) m.set(padIso(o.iso), o);
+    }
+    return m;
+  }, [origins]);
+
+  const countryPaths = useMemo(
+    () =>
+      countries.features
+        .map((f) => {
+          const d = path(f);
+          return d ? { id: padIso(f.id), d, origin: coffeeByIso.get(padIso(f.id)) } : null;
+        })
+        .filter(Boolean),
+    [path, coffeeByIso]
+  );
+
+  const regionDots = useMemo(
+    () =>
+      origins
+        .filter((o) => o.kind === "region")
+        .map((o) => {
+          const xy = projection([o.lng, o.lat]);
+          return xy ? { ...o, x: xy[0], y: xy[1] } : null;
+        })
+        .filter(Boolean),
+    [origins, projection]
+  );
 
   const dots = useMemo(
     () =>
@@ -62,6 +97,20 @@ export default function WorldMap2d({
         .filter(Boolean),
     [pins, projection]
   );
+
+  const localXY = (e) => {
+    const box = wrap.current.getBoundingClientRect();
+    return { x: e.clientX - box.left, y: e.clientY - box.top };
+  };
+
+  const hoverOrigin = (origin, e) => {
+    if (!origin || drag.current?.moved) return;
+    setTip({ origin, ...localXY(e) });
+  };
+
+  const leaveOrigin = (key) => {
+    setTip((t) => (t?.origin?.key === key ? null : t));
+  };
 
   const toLatLng = (clientX, clientY) => {
     const rect = wrap.current.getBoundingClientRect();
@@ -118,6 +167,8 @@ export default function WorldMap2d({
     });
   };
 
+  const activeOrigin = tip?.origin?.key;
+
   return (
     <div
       ref={wrap}
@@ -131,8 +182,47 @@ export default function WorldMap2d({
     >
       <svg width={w} height={h} className="block">
         <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
-          <path d={grid} fill="none" stroke="#2a231c" strokeWidth={0.6} />
-          <path d={land} fill="#1c1814" stroke="#3a3228" strokeWidth={0.7} />
+          <path d={grid} fill="none" stroke="#2a231c" strokeWidth={0.6} pointerEvents="none" />
+          {countryPaths.map((c) => {
+            const on = c.origin && activeOrigin === c.origin.key;
+            return (
+              <path
+                key={c.id}
+                d={c.d}
+                fill={c.origin ? (on ? "#4a3828" : "#2a231c") : "#1c1814"}
+                stroke={c.origin ? "#6b5438" : "#3a3228"}
+                strokeWidth={0.7}
+                className={c.origin && !placing ? "cursor-pointer" : undefined}
+                style={{ pointerEvents: c.origin ? "auto" : "none" }}
+                onPointerEnter={(e) => hoverOrigin(c.origin, e)}
+                onPointerMove={(e) => hoverOrigin(c.origin, e)}
+                onPointerLeave={() => c.origin && leaveOrigin(c.origin.key)}
+              />
+            );
+          })}
+          {regionDots.map((o) => {
+            const on = activeOrigin === o.key;
+            return (
+              <g
+                key={o.key}
+                transform={`translate(${o.x},${o.y})`}
+                className={placing ? undefined : "cursor-pointer"}
+                onPointerEnter={(e) => hoverOrigin(o, e)}
+                onPointerMove={(e) => hoverOrigin(o, e)}
+                onPointerLeave={() => leaveOrigin(o.key)}
+              >
+                <circle r={12} fill="transparent" />
+                <circle
+                  r={on ? 5 : 4}
+                  fill="none"
+                  stroke="#c88d44"
+                  strokeWidth={1.3}
+                  opacity={0.9}
+                />
+                <circle r={1.5} fill="#c88d44" />
+              </g>
+            );
+          })}
           {dots.map((p) => {
             const on = p.bean_id === selectedId || tip?.pin?.place_id === p.place_id;
             const r = on ? 6.5 : 4.5;
@@ -143,15 +233,13 @@ export default function WorldMap2d({
                 className="cursor-pointer"
                 onPointerEnter={(e) => {
                   if (drag.current?.moved) return;
-                  const box = wrap.current.getBoundingClientRect();
-                  setTip({ pin: p, x: e.clientX - box.left, y: e.clientY - box.top });
+                  setTip({ pin: p, ...localXY(e) });
                 }}
                 onPointerMove={(e) => {
                   if (drag.current?.moved) return;
-                  const box = wrap.current.getBoundingClientRect();
-                  setTip({ pin: p, x: e.clientX - box.left, y: e.clientY - box.top });
+                  setTip({ pin: p, ...localXY(e) });
                 }}
-                onPointerLeave={() => setTip(null)}
+                onPointerLeave={() => setTip((t) => (t?.pin?.place_id === p.place_id ? null : t))}
                 onPointerUp={(e) => {
                   e.stopPropagation();
                   if (drag.current?.moved) return;
@@ -178,7 +266,7 @@ export default function WorldMap2d({
           })}
         </g>
       </svg>
-      <PinTip pin={tip?.pin} x={tip?.x} y={tip?.y} box={size} />
+      <PinTip pin={tip?.pin} origin={tip?.origin} x={tip?.x} y={tip?.y} box={size} />
     </div>
   );
 }

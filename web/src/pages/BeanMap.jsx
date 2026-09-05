@@ -142,6 +142,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
           {data
             ? `${beans.length} 支豆 · ${pins.length} 个落点 · ${data.unplaced.length} 支还没定点`
             : "读取中…"}
+          {data ? " · 悬停国家或产区圆环看海拔、豆种、风味和名产" : ""}
         </p>
       </header>
 
@@ -180,6 +181,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
             <Suspense fallback={<p className="text-muted">地球载入中…</p>}>
               <BeanGlobe
                 pins={pins}
+                origins={data?.origins || []}
                 selectedId={selected}
                 placing={canPlace}
                 onOpen={onOpen}
@@ -190,6 +192,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
             <WorldMap2d
               kind={view === "equal" ? "equal" : "mercator"}
               pins={pins}
+              origins={data?.origins || []}
               selectedId={selected}
               placing={canPlace}
               onOpen={onOpen}

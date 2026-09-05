@@ -5,7 +5,18 @@ import Globe from "react-globe.gl";
 import { countries } from "../geo/world.js";
 import PinTip from "./PinTip.jsx";
 
-export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPlace }) {
+function padIso(id) {
+  return String(id ?? "").padStart(3, "0");
+}
+
+export default function BeanGlobe({
+  pins = [],
+  origins = [],
+  selectedId,
+  placing,
+  onOpen,
+  onPlace,
+}) {
   const wrap = useRef(null);
   const globe = useRef(null);
   const hover = useRef(null);
@@ -24,15 +35,33 @@ export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPl
     return () => ro.disconnect();
   }, []);
 
-  const points = useMemo(
-    () =>
-      pins.map((p) => ({
-        ...p,
-        size: p.bean_id === selectedId || tip?.pin?.place_id === p.place_id ? 0.55 : 0.32,
-        color: p.in_stock ? "#c88d44" : "#9c8b74",
-      })),
-    [pins, selectedId, tip?.pin?.place_id]
-  );
+  const coffeeByIso = useMemo(() => {
+    const m = new Map();
+    for (const o of origins) {
+      if (o.iso) m.set(padIso(o.iso), o);
+    }
+    return m;
+  }, [origins]);
+
+  const points = useMemo(() => {
+    const regs = origins
+      .filter((o) => o.kind === "region")
+      .map((o) => ({
+        ...o,
+        _kind: "origin",
+        size: tip?.origin?.key === o.key ? 0.28 : 0.16,
+        color: "#c88d44",
+        alt: 0.006,
+      }));
+    const beans = pins.map((p) => ({
+      ...p,
+      _kind: "pin",
+      size: p.bean_id === selectedId || tip?.pin?.place_id === p.place_id ? 0.55 : 0.32,
+      color: p.in_stock ? "#c88d44" : "#9c8b74",
+      alt: 0.012,
+    }));
+    return [...regs, ...beans];
+  }, [origins, pins, selectedId, tip?.origin?.key, tip?.pin?.place_id]);
 
   useEffect(() => {
     const hit = pins.find((p) => p.bean_id === selectedId);
@@ -40,6 +69,8 @@ export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPl
       globe.current.pointOfView({ lat: hit.lat, lng: hit.lng, altitude: 1.7 }, 600);
     }
   }, [selectedId, pins]);
+
+  const activeIso = tip?.origin?.iso ? padIso(tip.origin.iso) : "";
 
   return (
     <div
@@ -50,7 +81,12 @@ export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPl
       onMouseMove={(e) => {
         const box = wrap.current.getBoundingClientRect();
         mouse.current = { x: e.clientX - box.left, y: e.clientY - box.top };
-        if (hover.current) setTip({ pin: hover.current, ...mouse.current });
+        if (!hover.current) return;
+        if (hover.current._kind === "origin") {
+          setTip({ origin: hover.current, ...mouse.current });
+        } else {
+          setTip({ pin: hover.current, ...mouse.current });
+        }
       }}
     >
       <Globe
@@ -64,30 +100,48 @@ export default function BeanGlobe({ pins = [], selectedId, placing, onOpen, onPl
         atmosphereColor="#c88d44"
         atmosphereAltitude={0.12}
         polygonsData={countries.features}
-        polygonCapColor={() => "rgba(28,24,20,0.25)"}
+        polygonCapColor={(d) => {
+          const iso = padIso(d.id);
+          if (!coffeeByIso.has(iso)) return "rgba(28,24,20,0.25)";
+          return iso === activeIso ? "rgba(74,56,40,0.72)" : "rgba(42,35,28,0.55)";
+        }}
         polygonSideColor={() => "rgba(58,50,40,0.35)"}
-        polygonStrokeColor={() => "#6b5438"}
-        polygonAltitude={0.004}
+        polygonStrokeColor={(d) => (coffeeByIso.has(padIso(d.id)) ? "#8a6a40" : "#6b5438")}
+        polygonAltitude={(d) => {
+          const iso = padIso(d.id);
+          if (!coffeeByIso.has(iso)) return 0.004;
+          return iso === activeIso ? 0.012 : 0.007;
+        }}
         polygonsTransitionDuration={0}
         pointsData={points}
         pointLat="lat"
         pointLng="lng"
-        pointAltitude={0.012}
+        pointAltitude="alt"
         pointRadius="size"
         pointColor="color"
         pointLabel={() => ""}
         onPointHover={(d) => {
           hover.current = d || null;
-          setTip(d ? { pin: d, ...mouse.current } : null);
+          if (!d) {
+            setTip(null);
+            return;
+          }
+          if (d._kind === "origin") setTip({ origin: d, ...mouse.current });
+          else setTip({ pin: d, ...mouse.current });
         }}
         onPointClick={(d) => {
-          if (!placing && onOpen) onOpen(d.bean_id);
+          if (!placing && d?._kind === "pin" && onOpen) onOpen(d.bean_id);
+        }}
+        onPolygonHover={(feat) => {
+          if (hover.current) return;
+          const origin = feat && coffeeByIso.get(padIso(feat.id));
+          setTip(origin ? { origin, ...mouse.current } : null);
         }}
         onGlobeClick={(pos) => {
           if (placing && onPlace && pos) onPlace(pos.lat, pos.lng);
         }}
       />
-      <PinTip pin={tip?.pin} x={tip?.x} y={tip?.y} box={size} />
+      <PinTip pin={tip?.pin} origin={tip?.origin} x={tip?.x} y={tip?.y} box={size} />
     </div>
   );
 }

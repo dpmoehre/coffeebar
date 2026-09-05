@@ -256,6 +256,11 @@ def test_map_pins_from_origin(client):
     assert sidama[0]["roast"] == "浅烘"
     assert "柑橘" in sidama[0]["tags"]
     assert sidama[0]["origin"] == "埃塞俄比亚"
+    eth = next(o for o in data["origins"] if o["key"] == "ethiopia")
+    assert eth["kind"] == "country"
+    assert eth["iso"] == "231"
+    assert eth["altitude"] and eth["beans"] and eth["flavors"] and eth["famous"]
+    assert any(o["key"] == "yirgacheffe" and o["kind"] == "region" for o in data["origins"])
 
 
 def test_map_click_not_overwritten_and_hidden_when_deleted(client):

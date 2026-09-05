@@ -118,6 +118,304 @@ _PLACES: list[dict] = [
      "aliases": ("牙买加", "jamaica", "蓝山", "blue mountain")},
 ]
 
+# 国家 / 大产区百科。iso 是 world-atlas 的 ISO 数字国码（三位），只给国家；
+# 夏威夷不标美国，避免整片北美亮起来。文案是常识级，不调外网。
+_PROFILES: dict[str, dict] = {
+    "ethiopia": {
+        "iso": "231",
+        "altitude": "1500–2200 m",
+        "beans": "原生种 Heirloom、74110、74112、74158",
+        "flavors": "茉莉、柑橘、浆果、红茶",
+        "famous": "耶加雪菲、西达玛、古吉",
+    },
+    "sidama": {
+        "altitude": "1500–2200 m",
+        "beans": "74110、74112、74158、原生种",
+        "flavors": "浆果、柑橘、花香、红茶",
+        "famous": "马森秋、西达摩水洗",
+    },
+    "yirgacheffe": {
+        "altitude": "1700–2200 m",
+        "beans": "原生种 Heirloom、74110、74112",
+        "flavors": "茉莉、柠檬、佛手柑、红茶",
+        "famous": "科契尔、沃卡、科里图",
+    },
+    "guji": {
+        "altitude": "1800–2300 m",
+        "beans": "原生种、74110、74112",
+        "flavors": "浆果、热带水果、花香",
+        "famous": "罕贝拉、沙琪索",
+    },
+    "limu": {
+        "altitude": "1400–2100 m",
+        "beans": "原生种",
+        "flavors": "柑橘、香料、可可、花香",
+        "famous": "利姆水洗",
+    },
+    "illubabor": {
+        "altitude": "1500–2000 m",
+        "beans": "原生种",
+        "flavors": "核果、可可、香料",
+        "famous": "伊鲁巴博林区豆",
+    },
+    "dimma": {
+        "altitude": "1500–1900 m",
+        "beans": "原生种",
+        "flavors": "核果、可可、草本",
+        "famous": "迪马日晒 / 水洗",
+    },
+    "brazil": {
+        "iso": "076",
+        "altitude": "800–1300 m",
+        "beans": "黄波旁、卡杜艾、新世界、蒙多诺沃",
+        "flavors": "坚果、巧克力、焦糖、低酸",
+        "famous": "南米纳斯、塞拉多、圣保罗",
+    },
+    "minas": {
+        "altitude": "800–1300 m",
+        "beans": "黄波旁、卡杜艾、新世界",
+        "flavors": "坚果、巧克力、焦糖",
+        "famous": "南米纳斯、塞拉多矿区",
+    },
+    "sul_de_minas": {
+        "altitude": "900–1300 m",
+        "beans": "黄波旁、卡杜艾、蒙多诺沃",
+        "flavors": "坚果、牛奶巧克力、焦糖",
+        "famous": "南米纳斯合作社豆",
+    },
+    "cerrado": {
+        "altitude": "900–1250 m",
+        "beans": "卡杜艾、黄波旁、托皮西奥",
+        "flavors": "巧克力、坚果、甜感干净",
+        "famous": "塞拉多机械采收庄园",
+    },
+    "colombia": {
+        "iso": "170",
+        "altitude": "1200–2000 m",
+        "beans": "卡杜拉、卡斯蒂优、哥伦比亚、铁皮卡",
+        "flavors": "红糖、柑橘、焦糖、均衡",
+        "famous": "蕙兰、纳里尼奥、安蒂奥基亚",
+    },
+    "huila": {
+        "altitude": "1500–2100 m",
+        "beans": "卡杜拉、卡斯蒂优、铁皮卡",
+        "flavors": "红糖、柑橘、核果、可可",
+        "famous": "蕙兰水洗、SOE 深烘",
+    },
+    "narino": {
+        "altitude": "1800–2300 m",
+        "beans": "卡杜拉、卡斯蒂优、哥伦比亚",
+        "flavors": "柑橘、花香、高甜、明亮",
+        "famous": "纳里尼奥高海拔水洗",
+    },
+    "antioquia": {
+        "altitude": "1300–2000 m",
+        "beans": "卡斯蒂优、哥伦比亚、卡杜拉",
+        "flavors": "红糖、坚果、可可",
+        "famous": "麦德林周边庄园",
+    },
+    "rwanda": {
+        "iso": "646",
+        "altitude": "1500–2200 m",
+        "beans": "波旁、红波旁",
+        "flavors": "红茶、柑橘、红糖、花香",
+        "famous": "西部处理站、Cup of Excellence",
+    },
+    "ngororero": {
+        "altitude": "1600–2000 m",
+        "beans": "红波旁",
+        "flavors": "红茶、柑橘、红糖",
+        "famous": "恩戈罗雷罗处理站",
+    },
+    "honduras": {
+        "iso": "340",
+        "altitude": "1200–1800 m",
+        "beans": "帕卡斯、卡杜艾、帕卡玛拉、波旁",
+        "flavors": "焦糖、核果、可可、柑橘",
+        "famous": "科班、科马亚瓜、弗朗西斯科-莫拉桑",
+    },
+    "francisco_morazan": {
+        "altitude": "1300–1700 m",
+        "beans": "帕卡斯、卡杜艾、波旁",
+        "flavors": "焦糖、核果、可可",
+        "famous": "弗朗西斯科-莫拉桑日晒 / 水洗",
+    },
+    "guatemala": {
+        "iso": "320",
+        "altitude": "1300–2000 m",
+        "beans": "波旁、卡杜拉、卡杜艾、帕卡玛拉",
+        "flavors": "巧克力、香料、柑橘、烟熏",
+        "famous": "安提瓜、韦韦特南戈、阿蒂特兰",
+    },
+    "antigua": {
+        "altitude": "1500–1700 m",
+        "beans": "波旁、卡杜拉",
+        "flavors": "巧克力、香料、柑橘",
+        "famous": "安提瓜火山灰土壤",
+    },
+    "costa_rica": {
+        "iso": "188",
+        "altitude": "1200–1900 m",
+        "beans": "卡杜拉、卡杜艾、维拉萨奇",
+        "flavors": "柑橘、蜂蜜、干净、花香",
+        "famous": "塔拉珠、西部谷、蜜处理",
+    },
+    "tarrazu": {
+        "altitude": "1200–1900 m",
+        "beans": "卡杜拉、卡杜艾",
+        "flavors": "柑橘、蜂蜜、明亮酸质",
+        "famous": "塔拉珠 SHB",
+    },
+    "panama": {
+        "iso": "591",
+        "altitude": "1400–2000 m",
+        "beans": "瑰夏、卡杜艾、帕卡玛拉",
+        "flavors": "茉莉、柑橘、热带水果、红茶",
+        "famous": "波克特瑰夏、沃肯、翡翠庄园",
+    },
+    "boquete": {
+        "altitude": "1400–2000 m",
+        "beans": "瑰夏、卡杜艾",
+        "flavors": "茉莉、柑橘、佛手柑",
+        "famous": "波克特瑰夏、翡翠庄园",
+    },
+    "el_salvador": {
+        "iso": "222",
+        "altitude": "1200–1800 m",
+        "beans": "帕卡斯、帕卡玛拉、波旁",
+        "flavors": "巧克力、坚果、花香、柑橘",
+        "famous": "阿帕内卡、帕卡玛拉",
+    },
+    "nicaragua": {
+        "iso": "558",
+        "altitude": "1100–1700 m",
+        "beans": "卡杜拉、卡杜艾、马拉卡图拉",
+        "flavors": "巧克力、柑橘、核果",
+        "famous": "新塞哥维亚、希诺特加",
+    },
+    "mexico": {
+        "iso": "484",
+        "altitude": "1000–1700 m",
+        "beans": "波旁、铁皮卡、蒙多诺沃、卡杜拉",
+        "flavors": "坚果、巧克力、柑橘、花香",
+        "famous": "恰帕斯、瓦哈卡、韦拉克鲁斯",
+    },
+    "kenya": {
+        "iso": "404",
+        "altitude": "1500–2100 m",
+        "beans": "SL28、SL34、Ruiru 11、Batian",
+        "flavors": "黑加仑、番茄、柑橘、红茶",
+        "famous": "涅里、基里尼亚加、AA / AB",
+    },
+    "nyeri": {
+        "altitude": "1700–2100 m",
+        "beans": "SL28、SL34",
+        "flavors": "黑加仑、柑橘、番茄、花香",
+        "famous": "涅里合作社 AA",
+    },
+    "tanzania": {
+        "iso": "834",
+        "altitude": "1200–2000 m",
+        "beans": "波旁、肯特、N39",
+        "flavors": "黑加仑、柑橘、红茶、可可",
+        "famous": "乞力马扎罗、姆宾加",
+    },
+    "uganda": {
+        "iso": "800",
+        "altitude": "1200–2200 m",
+        "beans": "SL14、SL28、罗布斯塔",
+        "flavors": "红茶、柑橘、花香；罗布斯塔偏可可",
+        "famous": "埃尔贡山、西尼罗罗布斯塔",
+    },
+    "burundi": {
+        "iso": "108",
+        "altitude": "1500–2000 m",
+        "beans": "波旁、杰克逊",
+        "flavors": "红茶、柑橘、红糖、花香",
+        "famous": "卡扬扎、恩戈齐处理站",
+    },
+    "yemen": {
+        "iso": "887",
+        "altitude": "1500–2400 m",
+        "beans": "乌德尼、达瓦里、图法希",
+        "flavors": "葡萄干、香料、可可、酒香",
+        "famous": "摩卡、马塔里、伊斯梅利",
+    },
+    "indonesia": {
+        "iso": "360",
+        "altitude": "1000–1800 m",
+        "beans": "铁皮卡、卡特莫、阿滕戈洛、罗布斯塔",
+        "flavors": "草本、雪松、可可、烟草",
+        "famous": "曼特宁、爪哇、苏拉威西",
+    },
+    "sumatra": {
+        "altitude": "1000–1600 m",
+        "beans": "铁皮卡、卡特莫",
+        "flavors": "草本、雪松、可可、泥土甜",
+        "famous": "林东曼特宁、湿刨 G1",
+    },
+    "java": {
+        "altitude": "900–1600 m",
+        "beans": "铁皮卡、S795",
+        "flavors": "草本、可可、香料、干净",
+        "famous": "爪哇水洗庄园",
+    },
+    "vietnam": {
+        "iso": "704",
+        "altitude": "500–1500 m",
+        "beans": "罗布斯塔为主，少量卡蒂莫 / 阿拉比卡",
+        "flavors": "橡胶、可可、坚果、低酸",
+        "famous": "西原罗布斯塔、达拉特阿拉比卡",
+    },
+    "india": {
+        "iso": "356",
+        "altitude": "800–1600 m",
+        "beans": "S795、肯特、罗布斯塔",
+        "flavors": "香料、雪松、可可、季风豆",
+        "famous": "季风马拉巴尔、卡纳塔克",
+    },
+    "china": {
+        "iso": "156",
+        "altitude": "1000–1800 m",
+        "beans": "卡蒂姆、铁皮卡、波旁",
+        "flavors": "坚果、红糖、花香、茶感",
+        "famous": "云南保山、普洱、德宏",
+    },
+    "yunnan": {
+        "altitude": "1000–1800 m",
+        "beans": "卡蒂姆、铁皮卡、波旁",
+        "flavors": "坚果、红糖、花香、茶感",
+        "famous": "保山、普洱、德宏小粒种",
+    },
+    "peru": {
+        "iso": "604",
+        "altitude": "1200–2000 m",
+        "beans": "铁皮卡、波旁、卡杜拉、卡杜艾",
+        "flavors": "坚果、红糖、柑橘、花香",
+        "famous": "卡哈马卡、库斯科、普诺",
+    },
+    "bolivia": {
+        "iso": "068",
+        "altitude": "1500–2300 m",
+        "beans": "铁皮卡、卡杜拉",
+        "flavors": "柑橘、花香、红糖、干净",
+        "famous": "永加斯、卡拉纳维",
+    },
+    "hawaii": {
+        "altitude": "300–900 m",
+        "beans": "铁皮卡、卡杜艾、摩卡",
+        "flavors": "坚果、蜂蜜、柑橘、干净",
+        "famous": "科纳 Extra Fancy",
+    },
+    "jamaica": {
+        "iso": "388",
+        "altitude": "600–1700 m",
+        "beans": "铁皮卡",
+        "flavors": "坚果、花香、可可、柔酸",
+        "famous": "蓝山 No.1",
+    },
+}
+
 _SPLIT = re.compile(r"\s*[&＋+]\s*|\s*、\s*|\s+and\s+", re.I)
 _BLEND_PREFIX = re.compile(r"^拼配\s*[·.•．.\-—–]?\s*", re.I)
 _SPACE = re.compile(r"[\s·.•．，,。/／\\|\-—–_（）()【】\[\]]+")
@@ -161,6 +459,32 @@ def match_segment(segment: str) -> dict | None:
                 best = place
                 best_key = key
     return best
+
+
+def origin_guides() -> list[dict]:
+    """国家 / 大产区百科，给地图悬停。庄园不单独出面。"""
+    out: list[dict] = []
+    for place in _PLACES:
+        if place["level"] > 1:
+            continue
+        prof = _PROFILES.get(place["key"])
+        if not prof:
+            continue
+        out.append(
+            {
+                "key": place["key"],
+                "label": place["label"],
+                "kind": "country" if place["level"] == 0 else "region",
+                "lat": place["lat"],
+                "lng": place["lng"],
+                "iso": prof.get("iso"),
+                "altitude": prof.get("altitude"),
+                "beans": prof.get("beans"),
+                "flavors": prof.get("flavors"),
+                "famous": prof.get("famous"),
+            }
+        )
+    return out
 
 
 def guess(origin: str | None, producer: str | None = None) -> list[dict]:
@@ -335,4 +659,4 @@ def map_data(conn: sqlite3.Connection, owner_id: int, cover_of) -> dict:
                     "source": p["source"],
                 }
             )
-    return {"pins": pins, "unplaced": unplaced}
+    return {"pins": pins, "unplaced": unplaced, "origins": origin_guides()}

@@ -32,6 +32,26 @@ def test_unknown_origin_empty():
     assert places.guess(None, None) == []
 
 
+def test_origin_guides_cover_countries_and_regions():
+    keys = {p["key"] for p in places._PLACES if p["level"] <= 1}
+    guides = {o["key"]: o for o in places.origin_guides()}
+    assert keys == set(guides)
+    eth = guides["ethiopia"]
+    assert eth["kind"] == "country"
+    assert eth["iso"] == "231"
+    assert "1500" in eth["altitude"]
+    assert "Heirloom" in eth["beans"]
+    assert "茉莉" in eth["flavors"]
+    assert "耶加雪菲" in eth["famous"]
+    yir = guides["yirgacheffe"]
+    assert yir["kind"] == "region"
+    assert yir.get("iso") in (None, "")
+    assert "科契尔" in yir["famous"]
+    assert guides["brazil"]["iso"] == "076"
+    assert guides["hawaii"].get("iso") in (None, "")
+    assert all(o["key"] != "matyazo" for o in places.origin_guides())
+
+
 def test_click_survives_origin_change(conn):
     bean_id = store.create_bean(conn, {"name": "手点豆", "origin": "肯尼亚"})
     assert [p["source"] for p in places.list_places(conn, bean_id)] == ["gazetteer"]
