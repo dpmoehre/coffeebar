@@ -1,0 +1,23 @@
+# Render Blueprint。磁盘上的豆库和照片在重新部署后还在。
+# 免费 Web 没有持久盘，真库存请用 Starter + Disk。
+services:
+  - type: web
+    name: coffeebar
+    runtime: docker
+    plan: starter
+    healthCheckPath: /api/health
+    disk:
+      name: coffeebar-data
+      mountPath: /data
+      sizeGB: 2
+    envVars:
+      - key: COFFEEBAR_DATA
+        value: /data
+      - key: COFFEEBAR_COOKIE_SECURE
+        value: "1"
+      - key: COFFEEBAR_PUBLIC_URL
+        sync: false
+      - key: COFFEEBAR_INVITE_CODE
+        sync: false
+      - key: COFFEEBAR_RESTORE_KEY
+        sync: false

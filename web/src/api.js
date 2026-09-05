@@ -84,7 +84,9 @@ async function download(path, filename) {
 export const api = {
   me: () => req("GET", "/api/me"),
   health: () => req("GET", "/api/health"),
-  register: (email, password) => req("POST", "/api/auth/register", { email, password }),
+  authConfig: () => req("GET", "/api/auth/config"),
+  register: (email, password, invite) =>
+    req("POST", "/api/auth/register", { email, password, invite }),
   login: (email, password) => req("POST", "/api/auth/login", { email, password }),
   logout: () => req("POST", "/api/auth/logout", {}),
   deleteAccount: (email, password) => req("POST", "/api/auth/delete", { email, password }),

@@ -360,6 +360,12 @@ function Gate({ onIn, oops, toast }) {
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState("");
   const [devLink, setDevLink] = useState("");
+  const [invite, setInvite] = useState("");
+  const [inviteRequired, setInviteRequired] = useState(false);
+
+  useEffect(() => {
+    api.authConfig().then((c) => setInviteRequired(Boolean(c.invite_required))).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (mode !== "verify" || !q.verify) return;
@@ -406,7 +412,7 @@ function Gate({ onIn, oops, toast }) {
       }
       const user =
         mode === "register"
-          ? await api.register(email, password)
+          ? await api.register(email, password, invite)
           : await api.login(email, password);
       if (user.verify_url) {
         toast?.("本机没配邮箱，打开验证链接即可");
@@ -429,7 +435,9 @@ function Gate({ onIn, oops, toast }) {
   }[mode];
   const sub = {
     login: "每人一份私库。豆、酒、进价只给自己看。",
-    register: "第一个注册的人会接手这台机器上已有的豆和酒。",
+    register: inviteRequired
+      ? "云上要填邀请码。第一个注册的人会接手这份豆和酒。"
+      : "第一个注册的人会接手这台机器上已有的豆和酒。",
     forgot: "填注册时的邮箱。有这个账号就发重设链接。",
     reset: "新密码至少 8 个字符。改完要重新登录。",
     verify: "请稍等。",
@@ -440,7 +448,7 @@ function Gate({ onIn, oops, toast }) {
       ? Boolean(email)
       : mode === "reset"
         ? password.length >= 8 && password === password2
-        : Boolean(email) && password.length >= 8;
+        : Boolean(email) && password.length >= 8 && (mode !== "register" || !inviteRequired || invite.trim());
 
   return (
     <div className="grid min-h-screen place-items-center p-8">
@@ -458,6 +466,13 @@ function Gate({ onIn, oops, toast }) {
               autoFocus
             />
           </Field>
+        )}
+        {mode === "register" && inviteRequired && (
+          <div className="mt-3">
+            <Field label="邀请码" hint="云上才需要，问部署的人要">
+              <Input value={invite} onChange={(e) => setInvite(e.target.value)} />
+            </Field>
+          </div>
         )}
         {(mode === "login" || mode === "register" || mode === "reset") && (
           <div className={mode === "reset" ? "" : "mt-3"}>

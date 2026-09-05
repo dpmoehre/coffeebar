@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, brew as brew_mod
-from . import db, ledger, locks, menu, photos, places, ratelimit, spirits, stats, store
+from . import db, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -60,6 +60,11 @@ async def _bad_photo(request: Request, exc: photos.BadPhoto):
 # ── 账号 ────────────────────────────────────────────────────
 
 
+@app.get("/api/auth/config")
+def api_auth_config():
+    return {"invite_required": auth.invite_required()}
+
+
 def _mail_or_url(to: str, subject: str, url: str, out: dict, key: str) -> None:
     sent = auth.maybe_send(to, subject, f"点开这个链接（{auth.TOKEN_HOURS} 小时内有效）：\n{url}")
     if not sent:
@@ -74,7 +79,12 @@ def api_register(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     ratelimit.check(request, "register", 5)
-    account = auth.register(conn, payload.get("email") or "", payload.get("password") or "")
+    account = auth.register(
+        conn,
+        payload.get("email") or "",
+        payload.get("password") or "",
+        payload.get("invite"),
+    )
     token = auth.issue_session(conn, account["id"])
     auth.set_cookie(response, token, request)
     out = {
@@ -1107,6 +1117,16 @@ def api_health(conn: sqlite3.Connection = Depends(get_conn)):
     beans = conn.execute("SELECT COUNT(*) FROM bean").fetchone()[0]
     bottles = conn.execute("SELECT COUNT(*) FROM bottle").fetchone()[0]
     return {"ok": True, "beans": beans, "spirits": bottles, "db": str(db.db_path())}
+
+
+@app.post("/api/ops/restore")
+async def api_restore(
+    file: UploadFile = File(...),
+    x_restore_key: str | None = Header(default=None, alias="X-Restore-Key"),
+):
+    """把 backup.bat 的 zip 解到数据盘。上传后请在 Render 里手动重启一次。"""
+    restore.require_key(x_restore_key)
+    return restore.apply_zip(file)
 
 
 # ── 照片与前端构建产物（放最后，别盖住 /api） ───────────────

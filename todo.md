@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-05
+
+- **Render 上云包装**：Docker + 邀请码注册 + 备份 zip 恢复。真库存走持久盘，不能用 GitHub Pages。点击步骤见 [docs/009-🚧](docs/009-🚧-上云Render.md)。**验收**：`uv run pytest` 207 passed。
+
 ## 2026-09-06
 
 - **推荐酒单（纯饮 + 鸡尾酒）**：侧栏「酒单」；配方 + 上架/下架/排序；倒一巡可改毫升，杯数按巡去重；MCP `list_menu` / `pour_menu` 等。自制基酒仍未做。见 [docs/004-🚧](docs/004-🚧-基酒第一期.md)，手测在 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest` 204 passed。

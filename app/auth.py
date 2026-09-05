@@ -73,7 +73,26 @@ def get_account(conn: sqlite3.Connection, account_id: int) -> dict | None:
     return dict(row) if row else None
 
 
-def register(conn: sqlite3.Connection, email: str, password: str) -> dict:
+def invite_required() -> bool:
+    return bool((os.environ.get("COFFEEBAR_INVITE_CODE") or "").strip())
+
+
+def require_invite(invite: str | None) -> None:
+    expected = (os.environ.get("COFFEEBAR_INVITE_CODE") or "").strip()
+    if not expected:
+        return
+    got = (invite or "").strip()
+    if len(got) != len(expected) or not hmac.compare_digest(got, expected):
+        raise HTTPException(403, "邀请码不对")
+
+
+def register(
+    conn: sqlite3.Connection,
+    email: str,
+    password: str,
+    invite: str | None = None,
+) -> dict:
+    require_invite(invite)
     email = normalize_email(email)
     if "@" not in email or "." not in email.split("@")[-1]:
         raise HTTPException(400, "邮箱不像邮箱")

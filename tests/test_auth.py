@@ -362,3 +362,39 @@ def test_upload_rate_limit(monkeypatch):
             data={"kind": "pack"},
         )
         assert blocked.status_code == 429
+
+
+def test_auth_config_invite_flag(client, monkeypatch):
+    assert client.get("/api/auth/config").json()["invite_required"] is False
+    monkeypatch.setenv("COFFEEBAR_INVITE_CODE", "only-us")
+    assert client.get("/api/auth/config").json()["invite_required"] is True
+
+
+def test_register_needs_invite_when_set(client, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_INVITE_CODE", "only-us")
+    client.post("/api/auth/logout")
+    denied = client.post(
+        "/api/auth/register",
+        json={"email": "stranger@coffeebar.local", "password": "testpass1"},
+    )
+    assert denied.status_code == 403
+    ok = client.post(
+        "/api/auth/register",
+        json={
+            "email": "friend@coffeebar.local",
+            "password": "testpass1",
+            "invite": "only-us",
+        },
+    )
+    assert ok.status_code == 201
+    assert ok.json()["email"] == "friend@coffeebar.local"
+
+
+def test_restore_rejects_bad_key(client, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_RESTORE_KEY", "restore-me")
+    r = client.post(
+        "/api/ops/restore",
+        files={"file": ("x.zip", b"not-a-zip", "application/zip")},
+        headers={"X-Restore-Key": "wrong"},
+    )
+    assert r.status_code == 403

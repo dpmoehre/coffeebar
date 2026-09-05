@@ -19,6 +19,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-05",
+    title: "云上要邀请码才能注册",
+    notes: [
+      "公网打开后，注册会多一栏邀请码，避免路人先注册接手豆和酒。",
+      "小主机没配邀请码时，还是原来的样子。",
+    ],
+  },
+  {
     date: "2026-09-06",
     title: "侧栏有酒单了，能倒鸡尾酒",
     notes: [
