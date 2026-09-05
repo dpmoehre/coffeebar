@@ -491,12 +491,13 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
     person_id = data.get("person_id") or ensure_person(conn, data.get("person"))
     ts = data.get("at") or db.now()
     stages = data.get("brew_stages")
+    as_cup = 0 if data.get("as_cup") in (0, False, "0") else 1
 
     cur = conn.execute(
         """INSERT INTO consumption_event
              (kind, lot_id, person_id, amount_g, unit_cost, brew_method, brew_ratio,
-              brew_total_s, brew_stages, note, at)
-           VALUES ('coffee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              brew_total_s, brew_stages, note, as_cup, at)
+           VALUES ('coffee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             lot["id"],
             person_id,
@@ -507,6 +508,7 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
             data.get("brew_total_s"),
             json.dumps(stages, ensure_ascii=False) if stages else None,
             data.get("note"),
+            as_cup,
             ts,
         ),
     )
@@ -525,9 +527,71 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
         "lot_id": lot["id"],
         "amount_g": amount,
         "cost": (amount * lot["unit_cost"]) if lot["unit_cost"] else None,
+        "as_cup": as_cup,
         "balance_g": after["balance_g"],
         "near_empty": after["balance_g"] < amount,
     }
+
+
+def record_writeoff(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> dict:
+    """整袋补录：克重和钱进统计，不算一杯、不算到人。已关袋只要账面还在也能写。"""
+    lot = get_lot(conn, lot_id)
+    if not lot:
+        raise Conflict("没有这一袋")
+    amount = lot["balance_g"]
+    if amount <= 0:
+        raise Conflict("这袋账面已经是 0，没有可补录的克重")
+    already = conn.execute(
+        """SELECT id FROM consumption_event
+           WHERE lot_id = ? AND as_cup = 0 AND voided_at IS NULL""",
+        (lot_id,),
+    ).fetchone()
+    if already:
+        raise Conflict("这袋已经补录过整袋消耗")
+    closed = lot["closed_at"]
+    if closed:
+        conn.execute("UPDATE bean_lot SET closed_at = NULL WHERE id = ?", (lot_id,))
+    try:
+        return record_brew(
+            conn,
+            {
+                "lot_id": lot_id,
+                "amount_g": amount,
+                "as_cup": 0,
+                "note": note or "补录：已喝光，克重和钱进统计，不算到人",
+            },
+        )
+    finally:
+        if closed:
+            conn.execute("UPDATE bean_lot SET closed_at = ? WHERE id = ?", (closed, lot_id))
+
+
+def retarget_finished_lot(
+    conn: sqlite3.Connection, lot_id: int, nominal_g: float, price: float, note: str | None = None
+) -> dict:
+    """改已关袋的标称和价钱，清掉关袋偏差，再按新克重整袋补录。"""
+    lot = get_lot(conn, lot_id)
+    if not lot:
+        raise Conflict("没有这一袋")
+    conn.execute(
+        "UPDATE bean_lot SET nominal_g = ?, price = ? WHERE id = ?",
+        (float(nominal_g), float(price), lot_id),
+    )
+    conn.execute(
+        "UPDATE stock_event SET delta_g = 0, note = ? WHERE lot_id = ? AND kind = 'close_lot'",
+        ("关袋（整袋消耗已另记）", lot_id),
+    )
+    conn.execute(
+        "UPDATE stock_event SET note = ? WHERE lot_id = ? AND kind = 'intake'",
+        (f"入库 标称 {float(nominal_g):g} g", lot_id),
+    )
+    closed = lot["closed_at"]
+    if closed:
+        conn.execute("UPDATE bean_lot SET closed_at = NULL WHERE id = ?", (lot_id,))
+    out = record_writeoff(conn, lot_id, note)
+    if closed:
+        close_lot(conn, lot_id, "关袋（整袋消耗已另记）")
+    return out
 
 
 def void_consumption(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) -> dict:

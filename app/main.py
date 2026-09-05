@@ -185,6 +185,12 @@ def api_close(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection
     return {"deviation_g": round(diff, 1), "lot": store.get_lot(conn, lot_id)}
 
 
+@app.post("/api/lots/{lot_id}/writeoff", status_code=201)
+def api_writeoff(lot_id: int, payload: dict | None = None, conn: sqlite3.Connection = Depends(get_conn)):
+    """整袋补录：克重和钱进统计，不算一杯、不算到人。"""
+    return store.record_writeoff(conn, lot_id, (payload or {}).get("note"))
+
+
 # ── 冲煮 ────────────────────────────────────────────────────
 
 

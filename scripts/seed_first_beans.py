@@ -124,10 +124,11 @@ BEANS = [
             "brew_note": "V60 16 g / 92–94°C / 240 g（1:15）。闷蒸 30 g 30 s；"
                          "1:00 注到 100 g；1:45 中心注到 240 g。"
                          "聪明杯 20 g / 90–93°C / 300 g；法压 15 g / 92°C / 225 g。",
-            "nominal_g": 200,
-            "price": 80,
+            "nominal_g": 500,
+            "price": 102,
         },
         "opened": True,
+        "writeoff": True,
         "closed": True,
         "stocktake_g": None,
         "photo": None,
@@ -149,10 +150,11 @@ BEANS = [
                          "约 1:00 注到 130 g；约 2:00 到 225 g。"
                          "聪明杯 20 g / 90°C / 300 g；法压 15 g / 92°C / 225 g；"
                          "意式 15–18 g / 91–93°C / 1.5–2 倍液重 / 9 bar / 25–30 s。",
-            "nominal_g": 200,
-            "price": 80,
+            "nominal_g": 500,
+            "price": 102,
         },
         "opened": True,
+        "writeoff": True,
         "closed": True,
         "stocktake_g": None,
         "photo": None,
@@ -232,11 +234,19 @@ def main() -> int:
                 )
                 print(f"   盘点到 {entry['stocktake_g']} g（差 {out['delta_g']:+.1f} g 记成校正）")
 
+            if entry.get("writeoff"):
+                _, out = call(
+                    "POST",
+                    f"/api/lots/{lot['id']}/writeoff",
+                    {"note": "补录：已喝光，克重和钱进统计，不算到人"},
+                )
+                print(f"   整袋补录 {out.get('amount_g')} g（不算杯）")
+
             if entry.get("closed"):
                 _, out = call(
                     "POST",
                     f"/api/lots/{lot['id']}/close",
-                    {"note": "补录：入库时已经喝光，未逐杯记账"},
+                    {"note": "关袋（整袋消耗已另记）"},
                 )
                 print(f"   关袋进历史（结清 {out.get('deviation_g')} g）")
 

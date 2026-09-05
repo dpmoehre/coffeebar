@@ -40,6 +40,7 @@ ADDED_COLUMNS = [
     ("bean", "altitude", "TEXT"),
     ("brew_guide", "note", "TEXT"),
     ("bottle", "kind", "TEXT"),
+    ("consumption_event", "as_cup", "INTEGER NOT NULL DEFAULT 1"),
 ]
 
 

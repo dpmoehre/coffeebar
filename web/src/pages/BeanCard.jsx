@@ -208,7 +208,9 @@ export default function BeanCard({ id, onBack, toast, oops }) {
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <div className={r.voided_at ? "line-through" : ""}>
-                      <span className="text-cream">{r.person_name || "没记"}</span>
+                      <span className="text-cream">
+                        {r.as_cup === 0 ? "整袋补录" : r.person_name || "没记"}
+                      </span>
                       <span className="mx-2 text-muted">·</span>
                       <span className="text-amber">{r.amount_g} g</span>
                       {r.unit_cost ? (

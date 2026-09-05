@@ -125,6 +125,7 @@ CREATE TABLE IF NOT EXISTS consumption_event (
   brew_total_s  INTEGER,
   brew_stages   TEXT,
   note          TEXT,
+  as_cup        INTEGER NOT NULL DEFAULT 1,              -- 0：整袋补录，克重和钱进统计，不算杯
   at            TEXT    NOT NULL,
   voided_at     TEXT,
   void_reason   TEXT,

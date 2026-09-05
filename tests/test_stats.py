@@ -94,6 +94,49 @@ def test_summary_excludes_voided(conn):
     assert sum(p["cups"] for p in s["by_person"]) == 1
 
 
+def test_writeoff_counts_weight_and_money_not_cups_or_people(conn):
+    """整袋补录：克重和钱进总数，不算杯、不算到人，也不拉高平均粉量。"""
+    _, lot_id = make_bean(conn, nominal=500, price=102.0)
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16, "person": "戚浩辰"})
+    store.record_writeoff(conn, lot_id)
+
+    s = stats.summary(conn, "all")
+    assert s["beans_g"] == pytest.approx(500)
+    assert s["spent"] == pytest.approx(102.0)
+    assert s["cups"] == 1
+    assert s["avg_dose"]["avg_g"] == pytest.approx(16.0)
+    assert s["bought"] == pytest.approx(102.0)
+    assert [p["name"] for p in s["by_person"]] == ["戚浩辰"]
+    assert s["by_person"][0]["beans_g"] == pytest.approx(16)
+    beans = {b["name"]: b for b in s["by_bean"]}
+    assert beans["西达摩"]["beans_g"] == pytest.approx(500)
+    assert beans["西达摩"]["cups"] == 1
+    assert stats.average_dose(conn)["avg_g"] == pytest.approx(16.0)
+
+
+def test_retarget_finished_lot_then_writeoff(conn):
+    """已经关袋的补录可以改标称价钱，再整袋进统计。"""
+    bean_id, lot_id = make_bean(conn, name="墨白", nominal=200, price=80.0)
+    store.close_lot(conn, lot_id, "先关了")
+    out = store.retarget_finished_lot(conn, lot_id, 500, 102)
+    assert out["amount_g"] == pytest.approx(500)
+    assert out["as_cup"] == 0
+
+    lot = store.get_lot(conn, lot_id)
+    assert lot["nominal_g"] == pytest.approx(500)
+    assert lot["price"] == pytest.approx(102)
+    assert lot["balance_g"] == pytest.approx(0)
+    assert lot["closed_at"]
+
+    s = stats.summary(conn, "all")
+    assert s["beans_g"] == pytest.approx(500)
+    assert s["spent"] == pytest.approx(102.0)
+    assert s["cups"] == 0
+    assert s["bought"] == pytest.approx(102.0)
+    assert s["by_person"] == []
+    assert store.list_beans(conn, "history")[0]["id"] == bean_id
+
+
 def test_summary_separates_spent_from_bought(conn):
     """喝掉的钱和买进来的钱是两笔，不能混。"""
     _, lot_id = make_bean(conn, nominal=200, price=128.0)

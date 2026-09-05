@@ -50,7 +50,7 @@ export default function Stats() {
               label="咖啡豆"
               value={s.beans_g >= 1000 ? (s.beans_g / 1000).toFixed(2) : Math.round(s.beans_g)}
               unit={s.beans_g >= 1000 ? "kg" : "g"}
-              hint={`${Math.round(s.beans_g)} g · ${s.cups} 杯`}
+              hint={`${Math.round(s.beans_g)} g · ${s.cups} 杯（整袋补录只计克重）`}
             />
             <Kpi
               label="平均每杯粉量"
@@ -66,7 +66,7 @@ export default function Stats() {
               label="喝掉的钱"
               value={money(s.spent).replace("¥", "")}
               unit="¥"
-              hint="按每笔冻结的单价摊"
+              hint="按每笔冻结的单价摊，含未记到人的整袋"
             />
             <Kpi
               label="买进来的钱"

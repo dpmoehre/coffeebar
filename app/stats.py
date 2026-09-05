@@ -51,7 +51,8 @@ def _avg_from(conn: sqlite3.Connection, where: str, args: tuple, window: int) ->
     cur = conn.execute(
         f"""SELECT amount_g FROM consumption_event c
             JOIN bean_lot l ON l.id = c.lot_id
-            WHERE c.kind = 'coffee' AND c.voided_at IS NULL AND {where}
+            WHERE c.kind = 'coffee' AND c.voided_at IS NULL
+              AND COALESCE(c.as_cup, 1) = 1 AND {where}
             ORDER BY c.at DESC, c.id DESC LIMIT ?""",
         (*args, window),
     )
@@ -96,13 +97,15 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
 
     row = conn.execute(
         f"""SELECT COALESCE(SUM(c.amount_g), 0) AS beans_g,
-                   COUNT(*)                     AS cups,
+                   COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups,
+                   COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN c.amount_g ELSE 0 END), 0)
+                       AS cup_g,
                    COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
             FROM consumption_event c WHERE {where}""",
         args,
     ).fetchone()
 
-    beans_g, cups, spent = row[0], row[1], row[2]
+    beans_g, cups, cup_g, spent = row[0], row[1], row[2], row[3]
 
     # 买进来的钱：期间新建批次的买入价合计，和「喝掉的钱」分开
     bought_where = "1 = 1"
@@ -157,13 +160,14 @@ def summary(conn: sqlite3.Connection, period: str = "month") -> dict:
 
     dose = average_dose(conn)
     if cups:
+        cup_where = f"{where} AND COALESCE(c.as_cup, 1) = 1"
         dose = {
-            "avg_g": round(beans_g / cups, 1),
+            "avg_g": round(cup_g / cups, 1),
             "lo_g": conn.execute(
-                f"SELECT MIN(c.amount_g) FROM consumption_event c WHERE {where}", args
+                f"SELECT MIN(c.amount_g) FROM consumption_event c WHERE {cup_where}", args
             ).fetchone()[0],
             "hi_g": conn.execute(
-                f"SELECT MAX(c.amount_g) FROM consumption_event c WHERE {where}", args
+                f"SELECT MAX(c.amount_g) FROM consumption_event c WHERE {cup_where}", args
             ).fetchone()[0],
             "cups": cups,
             "source": "period",
@@ -195,7 +199,7 @@ def by_person(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
                    COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
             FROM consumption_event c
             LEFT JOIN person p ON p.id = c.person_id
-            WHERE {where}
+            WHERE {where} AND COALESCE(c.as_cup, 1) = 1
             GROUP BY c.person_id ORDER BY beans_g DESC""",
         args,
     )
@@ -213,7 +217,7 @@ def by_bean(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
     cur = conn.execute(
         f"""SELECT b.id, b.name,
                    COALESCE(SUM(c.amount_g), 0) AS beans_g,
-                   COUNT(*) AS cups,
+                   COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups,
                    COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
             FROM consumption_event c
             JOIN bean_lot l ON l.id = c.lot_id
@@ -233,7 +237,7 @@ def daily_series(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict
     cur = conn.execute(
         f"""SELECT date(c.at, '-{db.DAY_CUTOFF_HOURS} hours') AS day,
                    COALESCE(SUM(c.amount_g), 0) AS beans_g,
-                   COUNT(*) AS cups
+                   COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups
             FROM consumption_event c WHERE {where}
             GROUP BY day ORDER BY day""",
         args,
@@ -298,7 +302,10 @@ def person_profile(conn: sqlite3.Connection, person_id: int) -> dict:
     person = conn.execute("SELECT * FROM person WHERE id = ?", (person_id,)).fetchone()
     if not person:
         return {}
-    where = "c.voided_at IS NULL AND c.kind = 'coffee' AND c.person_id = ?"
+    where = (
+        "c.voided_at IS NULL AND c.kind = 'coffee' AND c.person_id = ?"
+        " AND COALESCE(c.as_cup, 1) = 1"
+    )
     args = (person_id,)
 
     row = conn.execute(
