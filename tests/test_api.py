@@ -67,6 +67,18 @@ def test_void_and_unvoid_via_api(client):
     assert client.get(f"/api/beans/{bean['id']}").json()["balance_g"] == pytest.approx(184)
 
 
+def test_delete_voided_via_api(client):
+    bean = new_bean(client)
+    lot = bean["lots"][0]["id"]
+    brew = client.post("/api/brews", json={"lot_id": lot, "amount_g": 16}).json()
+
+    assert client.delete(f"/api/consumption/{brew['id']}").status_code == 409
+    assert client.post(f"/api/consumption/{brew['id']}/void").status_code == 200
+    assert client.delete(f"/api/consumption/{brew['id']}").status_code == 200
+    assert client.get("/api/consumption").json()["rows"] == []
+    assert client.get(f"/api/beans/{bean['id']}").json()["balance_g"] == pytest.approx(200)
+
+
 def test_reassign_person_via_api(client):
     bean = new_bean(client)
     brew = client.post(

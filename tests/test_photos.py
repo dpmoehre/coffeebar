@@ -416,6 +416,25 @@ def test_brew_photo_on_consumption(client):
     assert client.get(f"/api/beans/{bean['id']}").json()["log"][0]["photos"] == []
 
 
+def test_delete_voided_also_removes_brew_photos(client):
+    bean = make_bean(client)
+    brew = client.post(
+        "/api/brews", json={"lot_id": bean["lots"][0]["id"], "amount_g": 16}
+    ).json()
+    body = client.post(
+        f"/api/consumption/{brew['id']}/photos",
+        files={"file": ("bed.png", png_bytes(), "image/png")},
+        data={"kind": "bed"},
+    ).json()
+    name = body["path"].split("/")[-1]
+    assert (db.PHOTO_DIR / name).exists()
+
+    assert client.post(f"/api/consumption/{brew['id']}/void").status_code == 200
+    assert client.delete(f"/api/consumption/{brew['id']}").status_code == 200
+    assert not (db.PHOTO_DIR / name).exists()
+    assert client.get(f"/api/beans/{bean['id']}").json()["log"] == []
+
+
 def test_brew_photo_rejects_bad_kind(client):
     bean = make_bean(client)
     brew = client.post(

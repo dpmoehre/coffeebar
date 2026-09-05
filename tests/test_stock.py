@@ -137,6 +137,43 @@ def test_unvoid_restores(conn):
     assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(184)
 
 
+def test_delete_voided_removes_row_keeps_balance(conn):
+    """彻底删只抹掉已撤回的行，账面不再动。"""
+    _, lot_id = make_bean(conn, nominal=200)
+    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16})
+    store.void_consumption(conn, res["id"])
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(200)
+
+    store.delete_voided_consumption(conn, res["id"])
+    assert store.list_consumption(conn, limit=10) == []
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(200)
+
+
+def test_delete_active_rejected(conn):
+    _, lot_id = make_bean(conn)
+    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15})
+    with pytest.raises(store.Conflict, match="先撤回再删"):
+        store.delete_voided_consumption(conn, res["id"])
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(185)
+
+
+def test_delete_voided_on_closed_lot_keeps_adjust(conn):
+    """已关袋撤回留下的当天调整还在，删记录不改那袋账面。"""
+    _, lot_id = make_bean(conn, nominal=200)
+    res = store.record_brew(conn, {"lot_id": lot_id, "amount_g": 16})
+    store.close_lot(conn, lot_id)
+    store.void_consumption(conn, res["id"])
+    store.delete_voided_consumption(conn, res["id"])
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(0)
+    kinds = [
+        r[0]
+        for r in conn.execute(
+            "SELECT kind FROM stock_event WHERE lot_id = ? ORDER BY id", (lot_id,)
+        ).fetchall()
+    ]
+    assert kinds == ["intake", "close_lot", "adjust"]
+
+
 def test_multiple_lots_are_chosen_explicitly(conn):
     """同一支豆几袋并存，扣哪袋由调用方指定，不自动 FIFO。"""
     bean_id, first = make_bean(conn, nominal=200, price=118.0)

@@ -205,6 +205,17 @@ def delete_consumption_photo(conn: sqlite3.Connection, photo_id: int) -> None:
     conn.execute("DELETE FROM consumption_photo WHERE id = ?", (photo_id,))
 
 
+def purge_consumption_photos(conn: sqlite3.Connection, cons_id: int) -> int:
+    """删掉一笔消耗上的过程照文件和行。删记录前调用，避免盘上留下孤儿图。"""
+    rows = conn.execute(
+        "SELECT id, path FROM consumption_photo WHERE cons_id = ?", (cons_id,)
+    ).fetchall()
+    for r in rows:
+        remove(r["path"])
+        conn.execute("DELETE FROM consumption_photo WHERE id = ?", (r["id"],))
+    return len(rows)
+
+
 def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,
                          note: str | None = None) -> dict:
     """补货条目的对照图：货架、截图、上次那袋都行。"""

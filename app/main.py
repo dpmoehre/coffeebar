@@ -259,6 +259,12 @@ def api_unvoid(cons_id: int, conn: sqlite3.Connection = Depends(get_conn)):
     return {"ok": True}
 
 
+@app.delete("/api/consumption/{cons_id}")
+def api_delete_voided(cons_id: int, conn: sqlite3.Connection = Depends(get_conn)):
+    """彻底删：只接受已经撤回的行，库存不再动。"""
+    return store.delete_voided_consumption(conn, cons_id)
+
+
 @app.post("/api/consumption/{cons_id}/photos", status_code=201)
 async def api_add_consumption_photo(
     cons_id: int,

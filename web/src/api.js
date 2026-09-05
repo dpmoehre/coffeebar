@@ -88,6 +88,7 @@ export const api = {
   consumption: (params = "") => req("GET", `/api/consumption${params}`),
   voidBrew: (id, reason) => req("POST", `/api/consumption/${id}/void`, { reason }),
   unvoidBrew: (id) => req("POST", `/api/consumption/${id}/unvoid`),
+  deleteBrew: (id) => req("DELETE", `/api/consumption/${id}`),
   reassign: (id, person) => req("POST", `/api/consumption/${id}/person`, { person }),
   addBrewPhoto: (consId, file, kind = "bed") => {
     const fd = new FormData();

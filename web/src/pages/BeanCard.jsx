@@ -6,7 +6,7 @@ import BrewPlan from "../components/BrewPlan.jsx";
 import OpenBag from "../components/OpenBag.jsx";
 import Photos from "../components/Photos.jsx";
 import Radar from "../components/Radar.jsx";
-import { Plus, Undo } from "../icons.jsx";
+import { Plus, Trash, Undo } from "../icons.jsx";
 import { Bar, Btn, Chip, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
 
 export default function BeanCard({ id, onBack, toast, oops }) {
@@ -17,6 +17,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
   const [lotOpen, setLotOpen] = useState(false);
   const [opening, setOpening] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
+  const [wipe, setWipe] = useState(null);
 
   const load = useCallback(
     () => api.bean(id).then(setBean).catch((e) => oops(e.message)),
@@ -192,7 +193,7 @@ export default function BeanCard({ id, onBack, toast, oops }) {
       <Panel className="mt-5">
         <div className="serif text-lg">冲煮记录</div>
         <p className="mt-1 mb-3 text-[13px] text-muted">
-          每次怎么冲都留在这支豆上，称豆、粉床、冲完、器具（称盘、壶、滤杯）的照片也可以挂上。记错了可以撤回，撤回只划掉、不删记录。
+          每次怎么冲都留在这支豆上，称豆、粉床、冲完、器具（称盘、壶、滤杯）的照片也可以挂上。记错了先撤回（只划掉、库存加回去）；划掉的那笔可以再点彻底删除。
         </p>
         {bean.log.length === 0 ? (
           <p className="text-muted">还没冲过。</p>
@@ -224,31 +225,43 @@ export default function BeanCard({ id, onBack, toast, oops }) {
                     </div>
                     {r.note ? <div className="mt-1 text-[13px] text-muted">{r.note}</div> : null}
                   </div>
-                  <button
-                    className="inline-flex items-center gap-1 text-xs text-muted underline
-                      hover:text-amber"
-                    onClick={async () => {
-                      try {
-                        if (r.voided_at) {
-                          await api.unvoidBrew(r.id);
-                          toast("已恢复这一笔");
-                        } else {
-                          const out = await api.voidBrew(r.id, "记错了");
-                          toast(
-                            out.closed_lot_adjusted
-                              ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
-                              : `已撤回，${r.amount_g} g 加回库存`
-                          );
+                  <div className="flex shrink-0 flex-col items-end gap-1">
+                    <button
+                      className="inline-flex items-center gap-1 text-xs text-muted underline
+                        hover:text-amber"
+                      onClick={async () => {
+                        try {
+                          if (r.voided_at) {
+                            await api.unvoidBrew(r.id);
+                            toast("已恢复这一笔");
+                          } else {
+                            const out = await api.voidBrew(r.id, "记错了");
+                            toast(
+                              out.closed_lot_adjusted
+                                ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
+                                : `已撤回，${r.amount_g} g 加回库存`
+                            );
+                          }
+                          load();
+                        } catch (e) {
+                          oops(e.message);
                         }
-                        load();
-                      } catch (e) {
-                        oops(e.message);
-                      }
-                    }}
-                  >
-                    <Undo className="h-3.5 w-3.5" />
-                    {r.voided_at ? "恢复" : "撤回"}
-                  </button>
+                      }}
+                    >
+                      <Undo className="h-3.5 w-3.5" />
+                      {r.voided_at ? "恢复" : "撤回"}
+                    </button>
+                    {r.voided_at ? (
+                      <button
+                        className="inline-flex items-center gap-1 text-xs text-muted underline
+                          hover:text-warn"
+                        onClick={() => setWipe(r)}
+                      >
+                        <Trash className="h-3.5 w-3.5" />
+                        彻底删除
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
                 <BrewHistory stages={parseStages(r.brew_stages)} />
                 <BrewPhotos
@@ -263,6 +276,39 @@ export default function BeanCard({ id, onBack, toast, oops }) {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={!!wipe}
+        onClose={() => setWipe(null)}
+        title="彻底删掉这笔划掉的记录？"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setWipe(null)}>
+              不删了
+            </Btn>
+            <Btn
+              variant="danger"
+              onClick={async () => {
+                const row = wipe;
+                setWipe(null);
+                try {
+                  await api.deleteBrew(row.id);
+                  toast("已彻底删除");
+                  load();
+                } catch (e) {
+                  oops(e.message);
+                }
+              }}
+            >
+              彻底删除
+            </Btn>
+          </>
+        }
+      >
+        <p className="text-muted">
+          撤回时库存已经加回去了，删除不会再改克重和钱。过程照会一起从盘上清掉，恢复不了。
+        </p>
+      </Modal>
 
       <BrewOnce
         open={brewOpen}

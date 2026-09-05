@@ -3,7 +3,7 @@
 三条硬口径（见 docs/002）：
 1. 账面剩余 = 可用克重 + Σ stock_event.delta_g − Σ 未撤回消耗.amount_g
 2. 写消耗时冻结 unit_cost 快照，统计只读快照，历史金额不回溯改写
-3. 撤回只写 voided_at，不物理删；已关袋批次的差额补一笔当天的 adjust
+3. 撤回只写 voided_at，不物理删；已撤回的才能彻底删（库存不再动）；已关袋批次的差额补一笔当天的 adjust
 """
 
 from __future__ import annotations
@@ -647,6 +647,18 @@ def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
         "UPDATE consumption_event SET voided_at = NULL, void_reason = NULL WHERE id = ?",
         (cons_id,),
     )
+
+
+def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
+    """彻底删掉已经撤回的一笔。库存在撤回时已经加回去，这里不再动账。"""
+    row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
+    if not row:
+        raise Conflict("没有这条记录")
+    if not row["voided_at"]:
+        raise Conflict("先撤回再删。没撤回的记录还在账上，不能直接抹掉")
+    n = photos.purge_consumption_photos(conn, cons_id)
+    conn.execute("DELETE FROM consumption_event WHERE id = ?", (cons_id,))
+    return {"ok": True, "id": cons_id, "photos_removed": n}
 
 
 def reassign_person(conn: sqlite3.Connection, cons_id: int, person: str | None) -> None:

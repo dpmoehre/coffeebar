@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import Photos from "../components/Photos.jsx";
-import { Plus, Undo } from "../icons.jsx";
+import { Plus, Trash, Undo } from "../icons.jsx";
 import { Bar, Btn, Field, Input, Modal, Panel, money } from "../ui.jsx";
 
 export default function SpiritCard({ id, onBack, toast, oops }) {
@@ -11,6 +11,7 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
   const [people, setPeople] = useState([]);
   const [pourOpen, setPourOpen] = useState(false);
   const [lotOpen, setLotOpen] = useState(false);
+  const [wipe, setWipe] = useState(null);
 
   const load = useCallback(
     () => api.spirit(id).then(setSpirit).catch((e) => oops(e.message)),
@@ -128,26 +129,37 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
                       {r.unit_cost ? money(r.cost) : "—"}
                     </td>
                     <td className="border-b border-line px-2 py-2 text-right">
-                      <button
-                        className="inline-flex items-center gap-1 text-xs text-muted hover:text-amber"
-                        onClick={async () => {
-                          try {
-                            if (r.voided_at) {
-                              await api.unvoidBrew(r.id);
-                              toast("已恢复这一笔");
-                            } else {
-                              await api.voidBrew(r.id, "记错了");
-                              toast(`已撤回，${r.amount_ml} ml 加回库存`);
+                      <div className="flex flex-col items-end gap-1">
+                        <button
+                          className="inline-flex items-center gap-1 text-xs text-muted hover:text-amber"
+                          onClick={async () => {
+                            try {
+                              if (r.voided_at) {
+                                await api.unvoidBrew(r.id);
+                                toast("已恢复这一笔");
+                              } else {
+                                await api.voidBrew(r.id, "记错了");
+                                toast(`已撤回，${r.amount_ml} ml 加回库存`);
+                              }
+                              load();
+                            } catch (e) {
+                              oops(e.message);
                             }
-                            load();
-                          } catch (e) {
-                            oops(e.message);
-                          }
-                        }}
-                      >
-                        <Undo className="h-3.5 w-3.5" />
-                        {r.voided_at ? "恢复" : "撤回"}
-                      </button>
+                          }}
+                        >
+                          <Undo className="h-3.5 w-3.5" />
+                          {r.voided_at ? "恢复" : "撤回"}
+                        </button>
+                        {r.voided_at ? (
+                          <button
+                            className="inline-flex items-center gap-1 text-xs text-muted hover:text-warn"
+                            onClick={() => setWipe(r)}
+                          >
+                            <Trash className="h-3.5 w-3.5" />
+                            彻底删除
+                          </button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -156,6 +168,39 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={!!wipe}
+        onClose={() => setWipe(null)}
+        title="彻底删掉这笔划掉的记录？"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setWipe(null)}>
+              不删了
+            </Btn>
+            <Btn
+              variant="danger"
+              onClick={async () => {
+                const row = wipe;
+                setWipe(null);
+                try {
+                  await api.deleteBrew(row.id);
+                  toast("已彻底删除");
+                  load();
+                } catch (e) {
+                  oops(e.message);
+                }
+              }}
+            >
+              彻底删除
+            </Btn>
+          </>
+        }
+      >
+        <p className="text-muted">
+          撤回时毫升已经加回去了，删除不会再改库存和钱。恢复不了。
+        </p>
+      </Modal>
 
       <PourOnce
         open={pourOpen}
