@@ -2,10 +2,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Cart, Chart, CupMark, Glass, People } from "./icons.jsx";
+import { Bean, Cart, Chart, CupMark, Glass, Globe, People } from "./icons.jsx";
 import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
+import BeanMap from "./pages/BeanMap.jsx";
 import Beans from "./pages/Beans.jsx";
 import PeoplePage from "./pages/People.jsx";
 import Restock from "./pages/Restock.jsx";
@@ -18,6 +19,7 @@ const NAV = [
   { key: "spirits", label: "酒水", Icon: Glass },
   { key: "restock", label: "补货", Icon: Cart },
   { key: "stats", label: "统计", Icon: Chart },
+  { key: "map", label: "地图", Icon: Globe },
   { key: "people", label: "画像", Icon: People },
 ];
 
@@ -25,6 +27,7 @@ export default function App() {
   const [page, setPage] = useState("beans");
   const [beanId, setBeanId] = useState(null);
   const [spiritId, setSpiritId] = useState(null);
+  const [mapFocus, setMapFocus] = useState(null);
   const { toast, oops, node } = useToast();
   const [health, setHealth] = useState(null);
   const [me, setMe] = useState(undefined);
@@ -54,7 +57,15 @@ export default function App() {
   const openBean = useCallback((id) => {
     setBeanId(id);
     setSpiritId(null);
+    setMapFocus(null);
     setPage("bean");
+  }, []);
+
+  const openMap = useCallback((id) => {
+    setBeanId(null);
+    setSpiritId(null);
+    setMapFocus(id || null);
+    setPage("map");
   }, []);
 
   const openSpirit = useCallback((id) => {
@@ -66,6 +77,7 @@ export default function App() {
   const go = (key) => {
     setBeanId(null);
     setSpiritId(null);
+    setMapFocus(null);
     setPage(key);
   };
 
@@ -233,7 +245,13 @@ export default function App() {
       <main className="min-w-0 max-w-[1480px] px-5 py-7 md:px-12 md:py-9">
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
         {page === "bean" && (
-          <BeanCard id={beanId} onBack={() => go("beans")} toast={toast} oops={oops} />
+          <BeanCard
+            id={beanId}
+            onBack={() => go("beans")}
+            onOpenMap={openMap}
+            toast={toast}
+            oops={oops}
+          />
         )}
         {page === "spirits" && <Spirits onOpen={openSpirit} toast={toast} oops={oops} />}
         {page === "spirit" && (
@@ -241,6 +259,9 @@ export default function App() {
         )}
         {page === "restock" && <Restock onOpen={openBean} />}
         {page === "stats" && <Stats onOpenPerson={() => go("people")} />}
+        {page === "map" && (
+          <BeanMap focusId={mapFocus} onOpen={openBean} toast={toast} oops={oops} />
+        )}
         {page === "people" && <PeoplePage toast={toast} oops={oops} />}
       </main>
 

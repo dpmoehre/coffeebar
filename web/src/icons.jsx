@@ -73,6 +73,13 @@ export const Undo = ({ className = "" }) => (
   </svg>
 );
 
+export const Globe = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <circle cx="12" cy="12" r="8.2" />
+    <path d="M3.8 12h16.4M12 3.8c2.4 2.4 3.6 5.2 3.6 8.2s-1.2 5.8-3.6 8.2M12 3.8C9.6 6.2 8.4 9 8.4 12s1.2 5.8 3.6 8.2" />
+  </svg>
+);
+
 export const Trash = ({ className = "" }) => (
   <svg {...base} className={className}>
     <path d="M4.5 7h15" />

@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, brew as brew_mod
-from . import db, locks, photos, ratelimit, spirits, stats, store
+from . import db, locks, photos, places, ratelimit, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -21,6 +21,7 @@ async def lifespan(app: FastAPI):
     conn = db.connect()
     db.init_db(conn)
     spirits.backfill_kinds(conn)
+    places.backfill(conn)
     conn.close()
     yield
 
@@ -258,6 +259,52 @@ def api_update_bean(
     locks.check(conn, f"bean:{bean_id}", x_session, x_source)
     store.update_bean(conn, bean_id, payload)
     return store.get_bean(conn, bean_id, owner_id=account["id"])
+
+
+@app.get("/api/map")
+def api_map(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    def cover_of(bean_id: int):
+        return photos.cover(photos.list_bean_photos(conn, bean_id))
+
+    return places.map_data(conn, account["id"], cover_of)
+
+
+@app.put("/api/beans/{bean_id}/places")
+def api_set_places(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    try:
+        pins = places.set_click_places(conn, bean_id, payload.get("places") or [])
+    except places.Conflict as exc:
+        raise store.Conflict(str(exc)) from exc
+    return {"places": pins}
+
+
+@app.post("/api/beans/{bean_id}/places/guess")
+def api_guess_places(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    bean = store.get_bean(conn, bean_id, owner_id=account["id"])
+    if not bean:
+        raise HTTPException(404, "没有这支豆")
+    pins = places.guess_again(conn, bean_id, bean.get("origin"), bean.get("producer"))
+    return {"places": pins}
 
 
 @app.delete("/api/beans/{bean_id}")

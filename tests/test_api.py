@@ -234,6 +234,65 @@ def test_delete_bean_of_other_account(client):
     assert client.delete(f"/api/beans/{bean['id']}").status_code == 404
 
 
+def test_map_pins_from_origin(client):
+    new_bean(client, name="西达玛豆")
+    blend = client.post(
+        "/api/beans",
+        json={
+            "name": "晨曦焦糖",
+            "origin": "拼配 · 埃塞俄比亚 耶加雪菲 & 巴西 米纳斯吉拉斯 & "
+            "卢旺达 恩戈罗雷罗 & 洪都拉斯 弗朗西斯科-莫拉桑",
+        },
+    ).json()
+    mystery = client.post("/api/beans", json={"name": "虚构日晒", "origin": "【测试】无此地"}).json()
+    data = client.get("/api/map").json()
+    labels = {p["label"] for p in data["pins"] if p["bean_id"] == blend["id"]}
+    assert "耶加雪菲" in "".join(labels) or any("耶加雪菲" in (p["label"] or "") for p in data["pins"])
+    assert sum(1 for p in data["pins"] if p["bean_id"] == blend["id"]) == 4
+    assert any(u["id"] == mystery["id"] for u in data["unplaced"])
+    sidama = [p for p in data["pins"] if p["name"] == "西达玛豆"]
+    assert sidama and sidama[0]["source"] == "gazetteer"
+
+
+def test_map_click_not_overwritten_and_hidden_when_deleted(client):
+    bean = new_bean(client, name="要手点")
+    r = client.put(
+        f"/api/beans/{bean['id']}/places",
+        json={"places": [{"lat": 35.6, "lng": 139.7, "label": "东京"}]},
+    )
+    assert r.status_code == 200, r.text
+    client.patch(f"/api/beans/{bean['id']}", json={"origin": "哥伦比亚 蕙兰 Huila"})
+    pins = client.get("/api/map").json()["pins"]
+    mine = [p for p in pins if p["bean_id"] == bean["id"]]
+    assert len(mine) == 1
+    assert mine[0]["source"] == "click"
+    assert mine[0]["lat"] == pytest.approx(35.6)
+
+    client.post(f"/api/beans/{bean['id']}/places/guess")
+    guessed = [p for p in client.get("/api/map").json()["pins"] if p["bean_id"] == bean["id"]]
+    assert guessed[0]["source"] == "gazetteer"
+    assert "蕙兰" in (guessed[0]["label"] or "")
+
+    client.delete(f"/api/beans/{bean['id']}")
+    left = client.get("/api/map").json()
+    assert all(p["bean_id"] != bean["id"] for p in left["pins"])
+    assert all(u["id"] != bean["id"] for u in left["unplaced"])
+
+
+def test_map_of_other_account(client):
+    bean = new_bean(client, name="A 的产地豆")
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "mapnosy@coffeebar.local", "password": "testpass1"},
+    )
+    assert client.get("/api/map").json()["pins"] == []
+    assert client.put(
+        f"/api/beans/{bean['id']}/places",
+        json={"places": [{"lat": 1, "lng": 2}]},
+    ).status_code == 404
+
+
 def test_delete_bean_blocked_by_other_session(client):
     bean = new_bean(client)
     client.post(

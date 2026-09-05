@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import db, photos
+from . import db, photos, places
 
 # 可用克重：开袋实称有则用之，否则用包装标称（刚拆袋不会称，默认走标称）
 USABLE = "COALESCE(l.measured_g, l.nominal_g)"
@@ -116,6 +116,7 @@ def create_bean(conn: sqlite3.Connection, data: dict) -> int:
         ),
     )
     set_tags(conn, bean_id, data.get("tags") or [])
+    places.sync_gazetteer(conn, bean_id, data.get("origin"), data.get("producer"))
     return bean_id
 
 
@@ -135,6 +136,10 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         conn.execute(f"UPDATE bean SET {', '.join(sets)} WHERE id = ?", vals)
     if "tags" in data:
         set_tags(conn, bean_id, data["tags"] or [])
+    if "origin" in data or "producer" in data:
+        row = _row(conn.execute("SELECT origin, producer FROM bean WHERE id = ?", (bean_id,)))
+        if row:
+            places.sync_gazetteer(conn, bean_id, row["origin"], row["producer"])
 
 
 def delete_bean(conn: sqlite3.Connection, bean_id: int, mode: str | None = None) -> dict:
@@ -289,6 +294,7 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
             "SELECT method, dose_g, ratio, note FROM brew_guide WHERE bean_id = ?", (bean_id,)
         )
     ) or {"method": "v60", "dose_g": 15, "ratio": 16, "note": None}
+    bean["places"] = places.list_places(conn, bean_id)
     return bean
 
 

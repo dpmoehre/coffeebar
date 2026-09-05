@@ -9,7 +9,7 @@ import Radar from "../components/Radar.jsx";
 import { Plus, Trash, Undo } from "../icons.jsx";
 import { Bar, Btn, Chip, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
 
-export default function BeanCard({ id, onBack, toast, oops }) {
+export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
   const [bean, setBean] = useState(null);
   const [people, setPeople] = useState([]);
   const [brewOpen, setBrewOpen] = useState(false);
@@ -120,6 +120,20 @@ export default function BeanCard({ id, onBack, toast, oops }) {
           {(bean.producer || bean.note) && (
             <p className="mt-1 mb-0 text-[13px] text-muted">
               {[bean.producer, bean.note].filter(Boolean).join(" · ")}
+            </p>
+          )}
+          {onOpenMap && (
+            <p className="mt-1 mb-0 text-[13px] text-muted">
+              {bean.places?.length
+                ? `地图上：${bean.places.map((p) => p.label).join("、")}`
+                : "地图上还没定点"}
+              <button
+                type="button"
+                className="ml-2 text-amber underline hover:text-amber2"
+                onClick={() => onOpenMap(bean.id)}
+              >
+                去地图上点
+              </button>
             </p>
           )}
         </div>

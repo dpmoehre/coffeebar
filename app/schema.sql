@@ -251,6 +251,19 @@ CREATE TABLE IF NOT EXISTS restock_rule (
   min_days  REAL NOT NULL DEFAULT 3
 );
 
+-- 豆子在地图上的落点。一张卡可有多个（拼配、庄园另标）。
+-- source=gazetteer 词典推测；source=click 人在图上点的。有手定点就不再被改产地冲掉。
+CREATE TABLE IF NOT EXISTS bean_place (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  bean_id    INTEGER NOT NULL REFERENCES bean(id) ON DELETE CASCADE,
+  lat        REAL    NOT NULL,
+  lng        REAL    NOT NULL,
+  label      TEXT,
+  source     TEXT    NOT NULL CHECK (source IN ('gazetteer', 'click')),
+  created_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_place_bean ON bean_place(bean_id);
+
 -- ── 写锁：网页之间软锁可接管，非网页来源硬拒绝 ──────────────
 
 CREATE TABLE IF NOT EXISTS write_lock (

@@ -145,6 +145,9 @@ export const api = {
 
   stats: (period = "month") => req("GET", `/api/stats?period=${period}`),
   restock: () => req("GET", "/api/restock"),
+  map: () => req("GET", "/api/map"),
+  setPlaces: (id, places) => req("PUT", `/api/beans/${id}/places`, { places }),
+  guessPlaces: (id) => req("POST", `/api/beans/${id}/places/guess`, {}),
 
   lock: (resource, takeOver = false) =>
     req("POST", `/api/locks/${resource}`, { holder: holderName(), take_over: takeOver }),
