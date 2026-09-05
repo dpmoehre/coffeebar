@@ -86,12 +86,27 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 
 想用 `http://coffee` 这种短地址而不是带端口的，再加 Caddy：`caddy run --config scripts/Caddyfile`。
 
-### 在 Mac / Linux 上开发
+### 在 Mac / Linux（含这台开发机）
+
+和小主机同一套用法，只是脚本换了后缀：
 
 ```bash
-uv sync                                    # 后端依赖
-uv run uvicorn app.main:app --reload       # API 在 :8000
-cd web && npm install && npm run dev       # 前端在 :5173，自动代理 /api
+bash scripts/install.sh    # 装一次：uv sync + 前端构建
+bash scripts/start.sh      # 日常用：http://localhost:8000 ，会打开浏览器
+```
+
+改前端源码要热更新时：
+
+```bash
+bash scripts/dev.sh        # 网页 http://localhost:5173 ，API 仍在 :8000
+```
+
+也可以手敲：
+
+```bash
+uv sync
+uv run uvicorn app.main:app --reload
+cd web && npm install && npm run dev
 ```
 
 跑测试与端到端自检：
