@@ -2,12 +2,11 @@
   "mcpServers": {
     "coffeebar": {
       "type": "stdio",
-      "command": "${userHome}/.local/bin/uv.exe",
-      "args": ["run", "--directory", "${workspaceFolder}", "coffeebar-mcp"],
+      "command": "cmd.exe",
+      "args": ["/d", "/c", "C:\\Users\\dp\\Documents\\coffeebar\\scripts\\coffeebar-mcp.cmd"],
       "env": {
         "COFFEEBAR_URL": "http://127.0.0.1:8000"
-      },
-      "envFile": "${workspaceFolder}/.env"
+      }
     }
   }
 }
