@@ -142,6 +142,8 @@ def test_restock_photo(client):
     client.post(f"/api/lots/{bean['lots'][0]['id']}/adjust", json={"actual_g": 5})
     item = client.get("/api/restock").json()["items"][0]
     assert len(item["photos"]) == 1
+    assert item["photos"][0]["thumb"].startswith("/")
+    assert item["photos"][0]["url"].startswith("/")
 
 
 # ── 开封 ────────────────────────────────────────────────────

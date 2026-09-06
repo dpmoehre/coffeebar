@@ -219,6 +219,30 @@ def drop_all_sessions(conn: sqlite3.Connection, account_id: int) -> None:
     conn.execute("DELETE FROM auth_session WHERE account_id = ?", (account_id,))
 
 
+def drop_other_sessions(conn: sqlite3.Connection, account_id: int, keep_token: str | None) -> None:
+    if keep_token:
+        conn.execute(
+            "DELETE FROM auth_session WHERE account_id = ? AND token != ?",
+            (account_id, keep_token),
+        )
+    else:
+        drop_all_sessions(conn, account_id)
+
+
+def change_password(conn: sqlite3.Connection, account: dict, old: str, new: str) -> None:
+    if len(new or "") < 8:
+        raise HTTPException(400, "密码至少 8 个字符")
+    row = conn.execute("SELECT password_hash FROM account WHERE id = ?", (account["id"],)).fetchone()
+    if not row or not check_password(old or "", row["password_hash"]):
+        raise HTTPException(401, "现在的密码不对")
+    if check_password(new, row["password_hash"]):
+        raise HTTPException(400, "新密码要和现在的不一样")
+    conn.execute(
+        "UPDATE account SET password_hash = ? WHERE id = ?",
+        (hash_password(new), account["id"]),
+    )
+
+
 def issue_token(conn: sqlite3.Connection, account_id: int, purpose: str) -> str:
     token = secrets.token_urlsafe(32)
     now = db.now()

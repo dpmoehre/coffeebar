@@ -42,6 +42,11 @@ export default function App() {
   const [byeEmail, setByeEmail] = useState("");
   const [byePass, setByePass] = useState("");
   const [byeBusy, setByeBusy] = useState(false);
+  const [pwd, setPwd] = useState(false);
+  const [pwdOld, setPwdOld] = useState("");
+  const [pwdNew, setPwdNew] = useState("");
+  const [pwdNew2, setPwdNew2] = useState("");
+  const [pwdBusy, setPwdBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -103,6 +108,26 @@ export default function App() {
       setMe(null);
     } catch (e) {
       oops(e.message);
+    }
+  };
+
+  const changePwd = async () => {
+    if (pwdNew !== pwdNew2) {
+      oops("两次新密码不一样");
+      return;
+    }
+    setPwdBusy(true);
+    try {
+      await api.changePassword(pwdOld, pwdNew);
+      setPwd(false);
+      setPwdOld("");
+      setPwdNew("");
+      setPwdNew2("");
+      toast("密码改好了。别的设备要重新登录");
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setPwdBusy(false);
     }
   };
 
@@ -199,24 +224,26 @@ export default function App() {
               </div>
             )}
           </div>
-          <div className="ml-auto flex flex-wrap justify-end gap-1 md:hidden">
-            {NAV.map(({ key, Icon }) => (
-              <button
-                key={key}
-                onClick={() => go(key)}
-                className={`rounded-xl p-2 ${
-                  navOn(key)
-                    ? "bg-amber text-[#1a120a]"
-                    : "text-muted"
-                }`}
-              >
-                <Icon className="h-5 w-5" />
-              </button>
-            ))}
-          </div>
+        </div>
+        <div className="-mx-1 mt-3 flex gap-0.5 overflow-x-auto pb-1 md:hidden">
+          {NAV.map(({ key, label, Icon }) => (
+            <button
+              key={key}
+              title={label}
+              onClick={() => go(key)}
+              className={`shrink-0 rounded-xl p-2 ${
+                navOn(key) ? "bg-amber text-[#1a120a]" : "text-muted"
+              }`}
+            >
+              <Icon className="h-5 w-5" />
+            </button>
+          ))}
         </div>
         {me && (
           <div className="mt-3 flex gap-4 text-xs text-muted md:hidden">
+            <button className="underline hover:text-amber" onClick={() => setPwd(true)}>
+              改密码
+            </button>
             <button className="underline hover:text-amber" onClick={signOut}>
               退出
             </button>
@@ -247,6 +274,12 @@ export default function App() {
           })}
           {me && (
             <div className="mt-4 flex flex-col items-start gap-2">
+              <button
+                className="text-left text-sm text-muted underline hover:text-amber"
+                onClick={() => setPwd(true)}
+              >
+                改密码
+              </button>
               <button
                 className="text-left text-sm text-muted underline hover:text-amber"
                 onClick={signOut}
@@ -286,7 +319,9 @@ export default function App() {
           <SpiritCard id={spiritId} onBack={() => go("spirits")} toast={toast} oops={oops} />
         )}
         {page === "menu" && <Menu onOpenSpirit={openSpirit} toast={toast} oops={oops} />}
-        {page === "restock" && <Restock onOpen={openBean} />}
+        {page === "restock" && (
+          <Restock onOpen={openBean} onOpenSpirit={openSpirit} toast={toast} oops={oops} />
+        )}
         {page === "stats" && <Stats toast={toast} oops={oops} />}
         {page === "calendar" && (
           <Calendar personId={calendarPerson} toast={toast} oops={oops} />
@@ -301,6 +336,48 @@ export default function App() {
       </main>
 
       {node}
+      <Modal
+        open={pwd}
+        onClose={() => !pwdBusy && setPwd(false)}
+        title="改密码"
+        sub="这台继续登着。别的已经登录的设备会被踢出去。"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setPwd(false)} disabled={pwdBusy}>
+              取消
+            </Btn>
+            <Btn
+              onClick={changePwd}
+              disabled={pwdBusy || pwdOld.length < 1 || pwdNew.length < 8}
+            >
+              改好
+            </Btn>
+          </>
+        }
+      >
+        <Field label="现在的密码">
+          <Input
+            type="password"
+            value={pwdOld}
+            onChange={(e) => setPwdOld(e.target.value)}
+          />
+        </Field>
+        <Field label="新密码" hint="至少 8 个字符">
+          <Input
+            type="password"
+            value={pwdNew}
+            onChange={(e) => setPwdNew(e.target.value)}
+          />
+        </Field>
+        <Field label="再输入一遍新密码">
+          <Input
+            type="password"
+            value={pwdNew2}
+            onChange={(e) => setPwdNew2(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && changePwd()}
+          />
+        </Field>
+      </Modal>
       <Modal
         open={bye}
         onClose={() => !byeBusy && setBye(false)}

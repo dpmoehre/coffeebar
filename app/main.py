@@ -198,6 +198,23 @@ def api_me(account: dict = Depends(current_account)):
     return auth.public_account(account)
 
 
+@app.post("/api/auth/password")
+def api_change_password(
+    payload: dict,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    account = auth.require_account(request, conn)
+    try:
+        auth.change_password(conn, account, payload.get("old") or "", payload.get("new") or "")
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            ratelimit.check(request, "password", ratelimit.LOGIN_TRIES, who=ratelimit.client_who(request))
+        raise
+    auth.drop_other_sessions(conn, account["id"], auth.cookie_token(request))
+    return {"ok": True}
+
+
 @app.post("/api/auth/delete")
 def api_delete_me(
     payload: dict,
@@ -1025,7 +1042,10 @@ def api_restock(
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
-    return {"items": stats.restock_list(conn, owner_id=account["id"])}
+    return {
+        "items": stats.restock_list(conn, owner_id=account["id"]),
+        "spirits": stats.restock_spirits(conn, owner_id=account["id"]),
+    }
 
 
 @app.get("/api/calendar")

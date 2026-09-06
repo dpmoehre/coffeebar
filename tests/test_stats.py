@@ -266,3 +266,15 @@ def test_restock_flags_not_enough_for_one_cup(conn):
     assert len(items) == 1
     assert "不够一杯了" in items[0]["reasons"]
     assert items[0]["cups_left"] == 0
+
+
+def test_restock_flags_low_spirit(conn):
+    from app import spirits
+
+    bottle_id = spirits.create_spirit(conn, {"name": "【测试】见底金酒", "kind": "金酒"})
+    lot_id = spirits.add_lot(conn, bottle_id, {"nominal_ml": 700, "price": 80})
+    spirits.record_drink(conn, {"lot_id": lot_id, "amount_ml": 680, "person": "丁瀚舟"})
+    items = stats.restock_spirits(conn)
+    assert len(items) == 1
+    assert "不够一杯了" in items[0]["reasons"]
+    assert items[0]["pours_left"] == 0

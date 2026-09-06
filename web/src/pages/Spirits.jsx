@@ -78,6 +78,7 @@ export default function Spirits({ onOpen, toast, oops }) {
   const [scope, setScope] = useState("stock");
   const [kind, setKind] = useState("");
   const [sort, setSort] = useState("recent");
+  const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
 
   const load = () => api.spirits(scope).then(setData).catch((e) => oops(e.message));
@@ -90,6 +91,14 @@ export default function Spirits({ onOpen, toast, oops }) {
   const items = useMemo(() => {
     let list = [...(data?.spirits || [])];
     if (kind) list = list.filter((s) => (s.kind || "其他") === kind);
+    const needle = q.trim().toLowerCase();
+    if (needle) {
+      list = list.filter((s) =>
+        [s.name, s.kind, s.category, s.flavor, ...(s.tags || [])]
+          .filter(Boolean)
+          .some((x) => String(x).toLowerCase().includes(needle)),
+      );
+    }
     const by = {
       recent: (a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""),
       size: (a, b) => byNum(a, b, "last_ml", false),
@@ -102,7 +111,7 @@ export default function Spirits({ onOpen, toast, oops }) {
       cost_desc: (a, b) => byNum(a, b, "unit_cost", true),
     };
     return list.sort(by[sort] || by.recent);
-  }, [data, kind, sort]);
+  }, [data, kind, sort, q]);
 
   // 没选大类、又是默认排序时按威士忌 / 金酒分组，一眼能分开
   const groups = useMemo(() => {
@@ -145,6 +154,12 @@ export default function Spirits({ onOpen, toast, oops }) {
           </Chip>
         ))}
         <span className="mx-1 h-5 w-px bg-line" />
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜酒名、风味…"
+          className="w-44 py-1.5 text-sm"
+        />
         <Select value={sort} onChange={(e) => setSort(e.target.value)} className="py-1.5 text-sm">
           {SORTS.map((s) => (
             <option key={s.key} value={s.key}>
@@ -184,9 +199,11 @@ export default function Spirits({ onOpen, toast, oops }) {
         <Empty>
           {scope === "history"
             ? "还没有喝完的基酒。"
-            : kind
-              ? `还没有「${kind}」。`
-              : "酒库是空的。右上角新建一支，填酒名、买入价和酒精度。"}
+            : q.trim()
+              ? "没有对得上的酒。"
+              : kind
+                ? `还没有「${kind}」。`
+                : "酒库是空的。右上角新建一支，填酒名、买入价和酒精度。"}
         </Empty>
       )}
 

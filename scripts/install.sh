@@ -30,4 +30,5 @@ echo "  [3/3] 装前端依赖并构建..."
 
 echo
 echo "  装好了。开发机日常跑：  bash scripts/start.sh"
+echo "  备份库和照片：          bash scripts/backup.sh"
 echo

@@ -192,6 +192,48 @@ def test_login_rate_limit(monkeypatch):
         assert "5 次" in (blocked.json().get("detail") or "")
 
 
+def test_change_password_keeps_this_session(client):
+    bad = client.post("/api/auth/password", json={"old": "nopexxxx", "new": "newpass12"})
+    assert bad.status_code == 401
+    short = client.post("/api/auth/password", json={"old": "testpass1", "new": "short"})
+    assert short.status_code == 400
+    same = client.post("/api/auth/password", json={"old": "testpass1", "new": "testpass1"})
+    assert same.status_code == 400
+    ok = client.post("/api/auth/password", json={"old": "testpass1", "new": "newpass12"})
+    assert ok.status_code == 200
+    assert client.get("/api/me").status_code == 200
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "test@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 401
+    )
+    assert (
+        client.post(
+            "/api/auth/login",
+            json={"email": "test@coffeebar.local", "password": "newpass12"},
+        ).status_code
+        == 200
+    )
+
+
+def test_change_password_kicks_other_device(client):
+    from app import auth, db as db_mod
+
+    conn = db_mod.connect()
+    row = conn.execute("SELECT id FROM account WHERE email = ?", ("test@coffeebar.local",)).fetchone()
+    other = auth.issue_session(conn, row["id"])
+    conn.close()
+
+    assert client.post("/api/auth/password", json={"old": "testpass1", "new": "newpass12"}).status_code == 200
+    conn = db_mod.connect()
+    assert auth.account_from_token(conn, other) is None
+    conn.close()
+    assert client.get("/api/me").status_code == 200
+
+
 def test_cookie_secure_when_forced(client, monkeypatch):
     monkeypatch.setenv("COFFEEBAR_COOKIE_SECURE", "1")
     r = client.post(

@@ -386,9 +386,11 @@ def test_restock_endpoint(client):
     client.post("/api/brews", json={"lot_id": lot, "amount_g": 16})
     client.post(f"/api/lots/{lot}/adjust", json={"actual_g": 8})
 
-    items = client.get("/api/restock").json()["items"]
+    data = client.get("/api/restock").json()
+    items = data["items"]
     assert len(items) == 1
     assert items[0]["cups_left"] == 0
+    assert data["spirits"] == []
 
 
 # ── 写锁 ────────────────────────────────────────────────────

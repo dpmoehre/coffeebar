@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import db
+from . import db, photos
 
 FALLBACK_DOSE = 15.0   # 一杯都还没冲过时的兜底
 BEAN_WINDOW = 20       # 这支豆看最近多少杯
@@ -332,12 +332,76 @@ def restock_list(conn: sqlite3.Connection, owner_id: int | None = None) -> list[
         d["days_left"] = round(days, 1) if days is not None else None
         d["reasons"] = reasons
         d["photos"] = [
-            dict(r)
+            {
+                **dict(r),
+                "url": f"/{r['path']}",
+                "thumb": photos.thumb_url(r["path"]),
+            }
             for r in conn.execute(
                 "SELECT id, path, note FROM restock_photo WHERE bean_id = ? ORDER BY created_at DESC",
                 (d["id"],),
             ).fetchall()
         ]
+        out.append(d)
+    return out
+
+
+FALLBACK_POUR = 30.0
+
+
+def daily_drink_rate(conn: sqlite3.Connection, bottle_id: int, days: int = 14) -> float:
+    cur = conn.execute(
+        """SELECT COALESCE(SUM(c.amount_ml), 0) FROM consumption_event c
+           JOIN bottle_lot l ON l.id = c.bottle_lot_id
+           WHERE l.bottle_id = ? AND c.voided_at IS NULL
+             AND c.at >= datetime('now', 'localtime', ?)""",
+        (bottle_id, f"-{days} days"),
+    )
+    total = cur.fetchone()[0] or 0
+    return total / days
+
+
+def restock_spirits(conn: sqlite3.Connection, owner_id: int | None = None) -> list[dict]:
+    """不够一杯（默认 30 ml）、瓶子都关了、或照喝法撑不了几天的酒。"""
+    from .spirits import BALANCE
+
+    bottles = conn.execute(
+        f"""SELECT b.id, b.name, b.kind,
+                   COALESCE((SELECT SUM({BALANCE}) FROM bottle_lot l
+                              WHERE l.bottle_id = b.id AND l.closed_at IS NULL), 0) AS balance_ml,
+                   (SELECT COUNT(*) FROM bottle_lot l
+                     WHERE l.bottle_id = b.id AND l.closed_at IS NULL) AS open_lots,
+                   (SELECT COUNT(*) FROM bottle_lot l WHERE l.bottle_id = b.id) AS all_lots,
+                   (SELECT price FROM bottle_lot l WHERE l.bottle_id = b.id
+                     ORDER BY l.created_at DESC LIMIT 1) AS last_price
+            FROM bottle b
+            WHERE (? IS NULL OR b.owner_id = ?)
+              AND b.deleted_at IS NULL""",
+        (owner_id, owner_id),
+    ).fetchall()
+
+    out = []
+    for b in bottles:
+        d = dict(b)
+        if d["all_lots"] == 0:
+            continue
+        rate = daily_drink_rate(conn, d["id"])
+        days = (d["balance_ml"] / rate) if rate > 0 else None
+        reasons = []
+        if d["open_lots"] == 0:
+            reasons.append("在库没有了")
+        else:
+            if d["balance_ml"] < FALLBACK_POUR:
+                reasons.append("不够一杯了")
+            if days is not None and days < 3:
+                reasons.append(f"照这个喝法只够 {days:.1f} 天")
+        if not reasons:
+            continue
+        pours = int(d["balance_ml"] // FALLBACK_POUR) if FALLBACK_POUR else 0
+        d["balance_ml"] = round(d["balance_ml"], 1)
+        d["pours_left"] = pours
+        d["days_left"] = round(days, 1) if days is not None else None
+        d["reasons"] = reasons
         out.append(d)
     return out
 
