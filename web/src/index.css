@@ -63,6 +63,25 @@ input[type="number"] {
   -moz-appearance: textfield;
 }
 
+/* 深色底上系统默认的日历图标近乎黑色。图标本身换成实心奶油琥珀日历。 */
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  opacity: 1;
+  width: 1.4rem;
+  height: 1.4rem;
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='16' rx='2.5' fill='%23f3e6d0'/%3E%3Crect x='3' y='5' width='18' height='5.5' rx='2.5' fill='%23e0a85a'/%3E%3Crect x='3' y='8.2' width='18' height='2.3' fill='%23e0a85a'/%3E%3Crect x='7' y='3' width='2.2' height='5' rx='1' fill='%23f3e6d0'/%3E%3Crect x='14.8' y='3' width='2.2' height='5' rx='1' fill='%23f3e6d0'/%3E%3Ccircle cx='8.5' cy='14.2' r='1.15' fill='%2312100e'/%3E%3Ccircle cx='12' cy='14.2' r='1.15' fill='%2312100e'/%3E%3Ccircle cx='15.5' cy='14.2' r='1.15' fill='%2312100e'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: 1.35rem 1.35rem;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Crect x='3' y='5' width='18' height='16' rx='2.5' fill='%23ffffff'/%3E%3Crect x='3' y='5' width='18' height='5.5' rx='2.5' fill='%23e0a85a'/%3E%3Crect x='3' y='8.2' width='18' height='2.3' fill='%23e0a85a'/%3E%3Crect x='7' y='3' width='2.2' height='5' rx='1' fill='%23ffffff'/%3E%3Crect x='14.8' y='3' width='2.2' height='5' rx='1' fill='%23ffffff'/%3E%3Ccircle cx='8.5' cy='14.2' r='1.15' fill='%2312100e'/%3E%3Ccircle cx='12' cy='14.2' r='1.15' fill='%2312100e'/%3E%3Ccircle cx='15.5' cy='14.2' r='1.15' fill='%2312100e'/%3E%3C/svg%3E");
+}
+
 /* Tailwind Preflight 把 dialog 的 margin 清成 0。Chrome 的 showModal()
    靠 margin:auto + inset 居中，清掉就会贴到视口左上角。 */
 dialog {

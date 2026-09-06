@@ -22,6 +22,13 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "日期格子右边的日历能看清了",
+    notes: [
+      "填购入日、烘焙日时，右边那个小日历不再和黑底糊在一起，改成奶油琥珀色，点一下就能打开。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "豆库封面会一张张出来",
     notes: [
       "走外网打开豆库、器具、酒水时，卡片上的字会先出来，封面再一张张补上，不用等全部图传完。",
