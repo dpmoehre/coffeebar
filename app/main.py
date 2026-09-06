@@ -681,6 +681,21 @@ def api_update_spirit(
     return spirits.get_spirit(conn, bottle_id, owner_id=account["id"])
 
 
+@app.delete("/api/spirits/{bottle_id}")
+def api_delete_spirit(
+    bottle_id: int,
+    mode: str | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    """从酒库拿掉一张卡。有未撤回倒酒时带 mode=keep（留下花掉的钱）或 wipe（连记录一起抹）。"""
+    auth.assert_owner(auth.spirit_owner(conn, bottle_id), account["id"], "没有这支酒")
+    locks.check(conn, f"bottle:{bottle_id}", x_session, x_source)
+    return spirits.delete_spirit(conn, bottle_id, mode=mode)
+
+
 @app.post("/api/spirits/{bottle_id}/lots", status_code=201)
 def api_add_bottle_lot(
     bottle_id: int,

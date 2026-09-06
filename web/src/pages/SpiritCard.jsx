@@ -12,6 +12,7 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
   const [pourOpen, setPourOpen] = useState(false);
   const [lotOpen, setLotOpen] = useState(false);
   const [wipe, setWipe] = useState(null);
+  const [killCard, setKillCard] = useState(false);
 
   const load = useCallback(
     () => api.spirit(id).then(setSpirit).catch((e) => oops(e.message)),
@@ -39,6 +40,17 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
 
   const openLots = spirit.lots.filter((l) => !l.closed_at);
   const current = openLots[0];
+  const liveDrinks = (spirit.log || []).filter((r) => !r.voided_at).length;
+  const removeCard = async (mode, done) => {
+    setKillCard(false);
+    try {
+      await api.deleteSpirit(id, mode);
+      toast(done);
+      onBack();
+    } catch (e) {
+      oops(e.message);
+    }
+  };
 
   return (
     <>
@@ -70,6 +82,10 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
           <Btn variant="ghost" onClick={() => setLotOpen(true)}>
             <Plus className="h-4 w-4" />
             再入一瓶
+          </Btn>
+          <Btn variant="danger" onClick={() => setKillCard(true)}>
+            <Trash className="h-4 w-4" />
+            删除酒卡
           </Btn>
         </div>
       </header>
@@ -179,6 +195,55 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
           </div>
         )}
       </Panel>
+
+      <Modal
+        open={killCard}
+        onClose={() => setKillCard(false)}
+        title={`删掉「${spirit.name}」这张酒卡？`}
+        wide={liveDrinks > 0}
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setKillCard(false)}>
+              不删了
+            </Btn>
+            {liveDrinks > 0 ? (
+              <>
+                <Btn
+                  onClick={() =>
+                    removeCard("keep", `已从酒库收起「${spirit.name}」，花掉的钱还在统计里`)
+                  }
+                >
+                  留下花掉的钱
+                </Btn>
+                <Btn
+                  variant="danger"
+                  onClick={() =>
+                    removeCard("wipe", `已删掉「${spirit.name}」，记录和钱也一起抹了`)
+                  }
+                >
+                  连记录一起抹
+                </Btn>
+              </>
+            ) : (
+              <Btn variant="danger" onClick={() => removeCard(null, `已删掉「${spirit.name}」`)}>
+                删掉酒卡
+              </Btn>
+            )}
+          </>
+        }
+      >
+        {liveDrinks > 0 ? (
+          <p className="text-muted">
+            这张卡还有 {liveDrinks} 笔没撤回的倒酒，不用先去撤回。
+            真喝过就选「留下花掉的钱」：酒库里没这张卡了，统计里杯数和钱还在。
+            建错的测试卡选「连记录一起抹」，那几笔也不进账。
+          </p>
+        ) : (
+          <p className="text-muted">
+            瓶子、库存事件、照片和酒单里这支酒的条目一起删，恢复不了。
+          </p>
+        )}
+      </Modal>
 
       <Modal
         open={!!wipe}

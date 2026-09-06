@@ -469,6 +469,12 @@ def update_spirit(
 
 
 @mcp.tool()
+def delete_spirit(bottle_id: int, mode: str | None = None) -> Any:
+    """删整张酒卡。有未撤回倒酒必须人指定 mode=keep（留下钱）或 wipe（连记录抹）。"""
+    return _call(client().delete_spirit, bottle_id, mode)
+
+
+@mcp.tool()
 def add_spirit_photo(bottle_id: int, path: str, kind: str = "pack") -> Any:
     """给酒瓶挂本地图片。"""
     return _call(client().add_spirit_photo, bottle_id, path, kind)
@@ -561,6 +567,24 @@ def reorder_menu(ids: list[int]) -> Any:
 
 
 @mcp.tool()
+def delete_menu_item(item_id: int) -> Any:
+    """从酒单拿掉一条。配方还在，只是不摆了。"""
+    return _call(client().delete_menu_item, item_id)
+
+
+@mcp.tool()
+def list_recipes() -> Any:
+    """查所有鸡尾酒配方（含没摆上酒单的）。"""
+    return _call(client().list_recipes)
+
+
+@mcp.tool()
+def get_recipe(recipe_id: int) -> Any:
+    """看一款配方和里面的基酒。"""
+    return _call(client().get_recipe, recipe_id)
+
+
+@mcp.tool()
 def create_recipe(name: str, lines_json: str, steps: str | None = None, note: str | None = None) -> Any:
     """建鸡尾酒配方。lines_json 是 JSON 数组，每项 {spirit_id, amount_ml}。"""
     return _call(client().create_recipe, name, lines_json, steps, note)
@@ -574,8 +598,14 @@ def update_recipe(
     steps: str | None = None,
     note: str | None = None,
 ) -> Any:
-    """改鸡尾酒配方。网页占锁时会被拒。"""
+    """改鸡尾酒配方：名字、步骤、基酒和默认毫升。lines_json 是整份材料 JSON 数组 [{spirit_id, amount_ml}]，一次换掉。已经倒过的巡不跟着改。网页占锁时会被拒。"""
     return _call(client().update_recipe, recipe_id, name, lines_json, steps, note)
+
+
+@mcp.tool()
+def delete_recipe(recipe_id: int) -> Any:
+    """删掉一款配方。还有没撤回的出品用过它时会拒。必须人明确说要删。"""
+    return _call(client().delete_recipe, recipe_id)
 
 
 @mcp.tool()

@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS bottle (
   abv        REAL,                      -- 酒精度 % vol
   flavor     TEXT,                      -- 风味类型：柑橘甜、泥煤、香草焦糖
   note       TEXT,
+  deleted_at TEXT,                      -- 非空 = 从酒库收起；流水和花掉的钱还在统计里
   created_at TEXT    NOT NULL,
   updated_at TEXT    NOT NULL
 );

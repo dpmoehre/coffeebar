@@ -47,6 +47,7 @@ ADDED_COLUMNS = [
     # 老账号补列当已验证，免得小主机升级后全员变成「没验证」
     ("account", "email_verified", "INTEGER NOT NULL DEFAULT 1"),
     ("bean", "deleted_at", "TEXT"),
+    ("bottle", "deleted_at", "TEXT"),
     ("consumption_event", "serve_id", "INTEGER"),
 ]
 

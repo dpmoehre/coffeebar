@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import db, store
+from . import db, photos, store
 
 ETHANOL = 0.789  # 酒精密度，毫升 × (%vol/100) × 0.789 = 大约克数
 
@@ -99,6 +99,9 @@ def create_spirit(conn: sqlite3.Connection, data: dict) -> int:
 
 
 def update_spirit(conn: sqlite3.Connection, bottle_id: int, data: dict) -> None:
+    hidden = conn.execute("SELECT deleted_at FROM bottle WHERE id = ?", (bottle_id,)).fetchone()
+    if hidden and hidden["deleted_at"]:
+        raise store.Conflict("这张卡已经不在酒库里了")
     fields = ["name", "kind", "category", "origin", "abv", "flavor", "note"]
     sets, args = [], []
     for f in fields:
@@ -161,6 +164,7 @@ def list_spirits(conn: sqlite3.Connection, scope: str = "stock", owner_id: int |
                  ORDER BY l.created_at DESC, l.id DESC LIMIT 1) AS last_ml
         FROM bottle b
         WHERE (? IS NULL OR b.owner_id = ?)
+          AND b.deleted_at IS NULL
         ORDER BY b.updated_at DESC
         """,
         (owner_id, owner_id),
@@ -185,6 +189,8 @@ def get_spirit(conn: sqlite3.Connection, bottle_id: int, owner_id: int | None = 
     if not bottle:
         return None
     if owner_id is not None and bottle.get("owner_id") != owner_id:
+        return None
+    if bottle.get("deleted_at"):
         return None
     bottle["kind"] = normalize_kind(bottle.get("kind"), bottle.get("category"), bottle.get("name"))
     bottle["tags"] = spirit_tags(conn, bottle_id)
@@ -228,6 +234,9 @@ def get_lot(conn: sqlite3.Connection, lot_id: int | None) -> dict | None:
 
 
 def add_lot(conn: sqlite3.Connection, bottle_id: int, data: dict) -> int:
+    hidden = conn.execute("SELECT deleted_at FROM bottle WHERE id = ?", (bottle_id,)).fetchone()
+    if hidden and hidden["deleted_at"]:
+        raise store.Conflict("这张卡已经不在酒库里了")
     nominal = float(data.get("nominal_ml") or 0)
     if nominal <= 0:
         raise store.Conflict("标称容量要大于 0")
@@ -309,6 +318,9 @@ def record_drink(conn: sqlite3.Connection, data: dict) -> dict:
         raise store.Conflict("没有这一瓶")
     if lot["closed_at"]:
         raise store.Conflict("这瓶已经关了，换一瓶")
+    parent = conn.execute("SELECT deleted_at FROM bottle WHERE id = ?", (lot["bottle_id"],)).fetchone()
+    if parent and parent["deleted_at"]:
+        raise store.Conflict("这张卡已经不在酒库里了")
 
     amount = float(data["amount_ml"])
     if amount <= 0:
@@ -346,6 +358,102 @@ def record_drink(conn: sqlite3.Connection, data: dict) -> dict:
         "balance_ml": after["balance_ml"],
         "near_empty": after["balance_ml"] < amount,
     }
+
+
+def _detach_menu(conn: sqlite3.Connection, bottle_id: int) -> None:
+    """卡不在酒库了，纯饮和含这支酒的鸡尾酒条目一起拿掉，免得再倒。"""
+    conn.execute("DELETE FROM menu_item WHERE kind = 'neat' AND spirit_id = ?", (bottle_id,))
+    conn.execute(
+        """DELETE FROM menu_item WHERE kind = 'cocktail' AND recipe_id IN (
+             SELECT recipe_id FROM recipe_line WHERE spirit_id = ?
+           )""",
+        (bottle_id,),
+    )
+
+
+def _wipe_spirit(conn: sqlite3.Connection, bottle_id: int) -> None:
+    for path in photos.paths_for_bottle(conn, bottle_id):
+        photos.remove(path)
+
+    cons = conn.execute(
+        """SELECT c.id, c.serve_id FROM consumption_event c
+           JOIN bottle_lot l ON l.id = c.bottle_lot_id WHERE l.bottle_id = ?""",
+        (bottle_id,),
+    ).fetchall()
+    serve_ids = {r["serve_id"] for r in cons if r["serve_id"]}
+    cons_ids = [r["id"] for r in cons]
+    if cons_ids:
+        q = ",".join("?" * len(cons_ids))
+        conn.execute(f"DELETE FROM consumption_photo WHERE cons_id IN ({q})", cons_ids)
+        conn.execute(f"DELETE FROM consumption_audit WHERE cons_id IN ({q})", cons_ids)
+        conn.execute(f"DELETE FROM consumption_event WHERE id IN ({q})", cons_ids)
+    for sid in serve_ids:
+        left = conn.execute(
+            "SELECT COUNT(*) FROM consumption_event WHERE serve_id = ?", (sid,)
+        ).fetchone()[0]
+        if left == 0:
+            conn.execute("DELETE FROM drink_serve WHERE id = ?", (sid,))
+
+    _detach_menu(conn, bottle_id)
+    rids = [
+        r[0]
+        for r in conn.execute(
+            "SELECT DISTINCT recipe_id FROM recipe_line WHERE spirit_id = ?", (bottle_id,)
+        )
+    ]
+    conn.execute("DELETE FROM recipe_line WHERE spirit_id = ?", (bottle_id,))
+    for rid in rids:
+        left = conn.execute(
+            "SELECT COUNT(*) FROM recipe_line WHERE recipe_id = ?", (rid,)
+        ).fetchone()[0]
+        if left == 0:
+            conn.execute("DELETE FROM recipe WHERE id = ?", (rid,))
+    conn.execute("DELETE FROM write_lock WHERE resource = ?", (f"bottle:{bottle_id}",))
+    conn.execute("DELETE FROM bottle WHERE id = ?", (bottle_id,))
+
+
+def delete_spirit(conn: sqlite3.Connection, bottle_id: int, mode: str | None = None) -> dict:
+    """从酒库拿掉一张卡。
+
+    没未撤回倒酒：整张物理删（瓶子、照片、酒单引用一起走）。
+    有未撤回倒酒时必须带 mode：
+    - keep：只从酒库收起（deleted_at），花掉的钱和杯数留在统计里（钱不回溯）
+    - wipe：连流水一起物理删，统计里那几笔钱和杯也没了
+    不带 mode 仍 409，避免旧客户端一键抹掉账。
+    """
+    row = _row(conn.execute("SELECT * FROM bottle WHERE id = ?", (bottle_id,)))
+    if not row:
+        raise store.Conflict("没有这支酒")
+    if row.get("deleted_at"):
+        raise store.Conflict("这张卡已经不在酒库里了")
+
+    live = conn.execute(
+        """SELECT COUNT(*) FROM consumption_event c
+           JOIN bottle_lot l ON l.id = c.bottle_lot_id
+           WHERE l.bottle_id = ? AND c.voided_at IS NULL""",
+        (bottle_id,),
+    ).fetchone()[0]
+    if live and mode not in ("keep", "wipe"):
+        raise store.Conflict(
+            f"这支酒还有 {live} 笔没撤回的记录。删卡时选留下花掉的钱，或连记录一起抹掉"
+        )
+
+    if live and mode == "keep":
+        now = db.now()
+        conn.execute(
+            "UPDATE bottle_lot SET closed_at = ? WHERE bottle_id = ? AND closed_at IS NULL",
+            (now, bottle_id),
+        )
+        conn.execute(
+            "UPDATE bottle SET deleted_at = ?, updated_at = ? WHERE id = ?",
+            (now, now, bottle_id),
+        )
+        _detach_menu(conn, bottle_id)
+        conn.execute("DELETE FROM write_lock WHERE resource = ?", (f"bottle:{bottle_id}",))
+        return {"ok": True, "id": bottle_id, "name": row["name"], "kept_spend": True, "live": live}
+
+    _wipe_spirit(conn, bottle_id)
+    return {"ok": True, "id": bottle_id, "name": row["name"]}
 
 
 def void_drink_if_needed(conn: sqlite3.Connection, row: dict, ts: str) -> bool:

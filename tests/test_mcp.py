@@ -75,6 +75,7 @@ def test_tool_catalog_covers_bar():
         "get_spirit",
         "create_spirit",
         "update_spirit",
+        "delete_spirit",
         "add_spirit_photo",
         "create_bottle_lot",
         "open_bottle",
@@ -87,6 +88,10 @@ def test_tool_catalog_covers_bar():
         "reorder_menu",
         "create_recipe",
         "update_recipe",
+        "list_recipes",
+        "get_recipe",
+        "delete_recipe",
+        "delete_menu_item",
         "pour_menu",
         "list_restock",
         "add_restock_photo",
@@ -167,3 +172,33 @@ def test_photo_calendar_stats_spirit(client, tmp_path):
     assert poured["kind"] == "cocktail"
     mapped = c.get_map()
     assert "beans" in mapped or "pins" in mapped or "places" in mapped or "origins" in mapped
+
+
+def test_mcp_recipe_can_swap_spirits(client):
+    """先选配方，再换里面的基酒，一次改掉。"""
+    c = _mcp(client)
+    gin = c.create_spirit({"name": "【测试】MCP金", "kind": "金酒", "abv": 40, "nominal_ml": 700, "price": 80})
+    rum = c.create_spirit({"name": "【测试】MCP朗姆", "kind": "朗姆", "abv": 40, "nominal_ml": 700, "price": 90})
+    rec = c.create_recipe("【测试】MCP可换基酒", json.dumps([{"spirit_id": gin["id"], "amount_ml": 30}]))
+    listed = c.add_menu_item({"kind": "cocktail", "recipe_id": rec["id"]})
+    assert listed["lines"][0]["spirit_id"] == gin["id"]
+
+    got = c.get_recipe(rec["id"])
+    assert got["name"] == "【测试】MCP可换基酒"
+    names = [r["name"] for r in c.list_recipes()["recipes"]]
+    assert "【测试】MCP可换基酒" in names
+
+    updated = c.update_recipe(
+        rec["id"],
+        lines_json=json.dumps(
+            [{"spirit_id": rum["id"], "amount_ml": 40}, {"spirit_id": gin["id"], "amount_ml": 15}]
+        ),
+    )
+    assert [ln["spirit_name"] for ln in updated["lines"]] == ["【测试】MCP朗姆", "【测试】MCP金"]
+    menu_row = next(it for it in c.list_menu(False)["items"] if it["id"] == listed["id"])
+    assert [ln["spirit_name"] for ln in menu_row["lines"]] == ["【测试】MCP朗姆", "【测试】MCP金"]
+
+    c.delete_menu_item(listed["id"])
+    assert all(it["id"] != listed["id"] for it in c.list_menu(False)["items"])
+    c.delete_recipe(rec["id"])
+    assert all(r["id"] != rec["id"] for r in c.list_recipes()["recipes"])

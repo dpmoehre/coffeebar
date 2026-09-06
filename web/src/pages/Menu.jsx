@@ -14,6 +14,7 @@ function linePreview(item) {
 export default function Menu({ onOpenSpirit, toast, oops }) {
   const [items, setItems] = useState(null);
   const [spirits, setSpirits] = useState([]);
+  const [recipes, setRecipes] = useState([]);
   const [people, setPeople] = useState([]);
   const [edit, setEdit] = useState(false);
   const [pour, setPour] = useState(null);
@@ -22,36 +23,44 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
   const [editing, setEditing] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
   const holding = useRef(false);
+  const heldRecipe = useRef(null);
 
-  function releaseRecipe(recipeId) {
-    if (!recipeId || !holding.current) return;
+  function releaseHeld() {
+    const rid = heldRecipe.current;
+    if (!rid || !holding.current) return;
     holding.current = false;
-    api.unlock(`recipe:${recipeId}`).catch(() => {});
+    heldRecipe.current = null;
+    api.unlock(`recipe:${rid}`).catch(() => {});
   }
 
   useEffect(() => {
-    const rid = editing?.recipe_id;
-    if (!rid) return undefined;
-    const res = `recipe:${rid}`;
     const t = setInterval(async () => {
-      if (!holding.current) return;
+      const rid = heldRecipe.current;
+      if (!holding.current || !rid) return;
       try {
-        await api.heartbeat(res);
+        await api.heartbeat(`recipe:${rid}`);
       } catch (e) {
         holding.current = false;
+        heldRecipe.current = null;
         if (e.status === 409) oops(e.message);
       }
     }, 60000);
     return () => {
       clearInterval(t);
-      releaseRecipe(rid);
+      releaseHeld();
     };
-  }, [editing?.recipe_id, oops]);
+  }, [oops]);
+
+  async function lockRecipe(rid) {
+    if (heldRecipe.current && heldRecipe.current !== rid) releaseHeld();
+    await api.lock(`recipe:${rid}`);
+    holding.current = true;
+    heldRecipe.current = rid;
+  }
 
   async function openEdit(item) {
     try {
-      await api.lock(`recipe:${item.recipe_id}`);
-      holding.current = true;
+      await lockRecipe(item.recipe_id);
       setEditing(item);
     } catch (e) {
       if (e.isLocked && e.body.can_take_over) {
@@ -63,18 +72,19 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
   }
 
   function closeRecipe() {
-    releaseRecipe(editing?.recipe_id);
+    releaseHeld();
     setEditing(null);
     setRecipeOpen(false);
   }
 
   const load = useCallback(() => {
     api.menu(false).then((d) => setItems(d.items)).catch((e) => oops(e.message));
+    api.recipes().then((d) => setRecipes(d.recipes || [])).catch((e) => oops(e.message));
   }, [oops]);
 
   useEffect(() => {
     load();
-    api.spirits("stock").then((d) => setSpirits(d.spirits || [])).catch((e) => oops(e.message));
+    api.spirits("all").then((d) => setSpirits(d.spirits || [])).catch((e) => oops(e.message));
     api.people().then((d) => setPeople(d.people || [])).catch((e) => oops(e.message));
   }, [load, oops]);
 
@@ -240,6 +250,15 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
         open={recipeOpen || !!editing}
         item={editing}
         spirits={spirits}
+        recipes={recipes}
+        listedRecipeIds={new Set((items || []).filter((it) => it.kind === "cocktail").map((it) => it.recipe_id))}
+        onLockRecipe={async (rid) => {
+          if (!rid) {
+            releaseHeld();
+            return;
+          }
+          await lockRecipe(rid);
+        }}
         onClose={closeRecipe}
         onDone={(row) => {
           if (editing) {
@@ -247,9 +266,9 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
             closeRecipe();
             load();
           } else {
-            setItems((cur) => [...(cur || []), row]);
             setRecipeOpen(false);
             toast(`「${row.name}」摆上酒单了`);
+            load();
           }
         }}
         oops={oops}
@@ -271,6 +290,7 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
                 try {
                   await api.lock(`recipe:${item.recipe_id}`, true);
                   holding.current = true;
+                  heldRecipe.current = item.recipe_id;
                   setEditing(item);
                 } catch (e) {
                   oops(e.message);
@@ -333,39 +353,106 @@ function AddNeat({ open, unused, onClose, onDone, oops }) {
   );
 }
 
-function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
+function fillLines(src) {
+  const rows = src || [];
+  if (!rows.length) return [{ spirit_id: "", spirit_name: "", amount_ml: "30" }];
+  return rows.map((ln) => ({
+    spirit_id: ln.spirit_id ? String(ln.spirit_id) : "",
+    spirit_name: ln.spirit_name || "",
+    amount_ml: String(ln.amount_ml ?? 30),
+  }));
+}
+
+function spiritChoices(spirits, lines) {
+  const seen = new Set();
+  const out = [];
+  for (const s of spirits || []) {
+    if (seen.has(s.id)) continue;
+    seen.add(s.id);
+    out.push(s);
+  }
+  for (const ln of lines || []) {
+    const id = Number(ln.spirit_id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: ln.spirit_name || `酒 #${id}` });
+  }
+  return out;
+}
+
+function RecipeModal({
+  open,
+  item,
+  spirits,
+  recipes = [],
+  listedRecipeIds = new Set(),
+  onLockRecipe,
+  onClose,
+  onDone,
+  oops,
+}) {
   const [name, setName] = useState("");
   const [steps, setSteps] = useState("");
-  const [lines, setLines] = useState([{ spirit_id: "", amount_ml: "30" }]);
+  const [lines, setLines] = useState([{ spirit_id: "", spirit_name: "", amount_ml: "30" }]);
+  const [pickedId, setPickedId] = useState("");
   const editing = !!item;
+  const unusedRecipes = (recipes || []).filter((r) => !listedRecipeIds.has(r.id));
+  const choices = spiritChoices(spirits, [
+    ...lines,
+    ...(item?.lines || []),
+    ...unusedRecipes.flatMap((r) => r.lines || []),
+  ]);
 
   useEffect(() => {
     if (!open) return;
+    setPickedId("");
     if (item) {
       setName(item.name || "");
       setSteps(item.steps || "");
-      setLines(
-        (item.lines || []).map((ln) => ({
-          spirit_id: String(ln.spirit_id),
-          amount_ml: String(ln.amount_ml),
-        }))
-      );
+      setLines(fillLines(item.lines));
       return;
     }
     setName("");
     setSteps("");
-    setLines([{ spirit_id: spirits[0]?.id ? String(spirits[0].id) : "", amount_ml: "30" }]);
-  }, [open, item, spirits]);
+    setLines([{ spirit_id: "", spirit_name: "", amount_ml: "30" }]);
+  }, [open, item]);
+
+  async function pickRecipe(id) {
+    if (!id) {
+      setPickedId("");
+      setName("");
+      setSteps("");
+      setLines([{ spirit_id: "", spirit_name: "", amount_ml: "30" }]);
+      try {
+        await onLockRecipe?.(null);
+      } catch (e) {
+        oops(e.message);
+      }
+      return;
+    }
+    const rec = recipes.find((r) => String(r.id) === id);
+    if (!rec) return;
+    try {
+      await onLockRecipe?.(rec.id);
+      setPickedId(id);
+      setName(rec.name || "");
+      setSteps(rec.steps || "");
+      setLines(fillLines(rec.lines));
+    } catch (e) {
+      oops(e.message);
+    }
+  }
 
   return (
     <Modal
       open={open}
       onClose={onClose}
+      wide
       title={editing ? "改配方" : "上架鸡尾酒"}
       sub={
         editing
-          ? "改名字、步骤和默认毫升。已经倒过的巡不会跟着改。"
-          : "选基酒、写默认毫升。冰块汤力写在步骤里，不扣库存。"
+          ? "名字、步骤、基酒和默认毫升都能改，一次保存。已经倒过的巡不会跟着改。"
+          : "可以先选已有配方，再换里面的基酒，一起保存摆上酒单。冰块汤力写在步骤里，不扣库存。"
       }
       footer={
         <>
@@ -389,6 +476,11 @@ function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
                   onDone(await api.updateRecipe(item.recipe_id, payload));
                   return;
                 }
+                if (pickedId) {
+                  await api.updateRecipe(Number(pickedId), payload);
+                  onDone(await api.addMenuItem({ kind: "cocktail", recipe_id: Number(pickedId) }));
+                  return;
+                }
                 const rec = await api.createRecipe(payload);
                 onDone(await api.addMenuItem({ kind: "cocktail", recipe_id: rec.id }));
               } catch (e) {
@@ -402,6 +494,19 @@ function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
       }
     >
       <div className="space-y-3">
+        {!editing && unusedRecipes.length > 0 && (
+          <Field label="用已有配方" hint="选了之后下面的基酒都能换，保存时一起改掉。">
+            <Select className="w-full" value={pickedId} onChange={(e) => pickRecipe(e.target.value)}>
+              <option value="">写新的</option>
+              {unusedRecipes.map((r) => (
+                <option key={r.id} value={r.id}>
+                  {r.name}
+                  {r.lines?.length ? ` · ${linePreview(r)}` : ""}
+                </option>
+              ))}
+            </Select>
+          </Field>
+        )}
         <Field label="名字">
           <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="威士忌酸" />
         </Field>
@@ -410,22 +515,24 @@ function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
         </Field>
         {lines.map((ln, i) => (
           <div key={i} className="grid grid-cols-[1fr_90px_auto] items-end gap-2">
-            <Field label={i === 0 ? "基酒" : ""}>
+            <Field label={`基酒 ${lines.length > 1 ? i + 1 : ""}`.trim()}>
               <Select
+                className="w-full"
                 value={ln.spirit_id}
                 onChange={(e) =>
                   setLines((cur) => cur.map((x, j) => (j === i ? { ...x, spirit_id: e.target.value } : x)))
                 }
               >
                 <option value="">选一支</option>
-                {spirits.map((s) => (
+                {choices.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.name}
+                    {s.balance_ml != null ? ` · 剩 ${Math.round(s.balance_ml)} ml` : ""}
                   </option>
                 ))}
               </Select>
             </Field>
-            <Field label={i === 0 ? "毫升" : ""}>
+            <Field label="毫升">
               <Input
                 type="number"
                 min="1"
@@ -450,9 +557,7 @@ function RecipeModal({ open, item, spirits, onClose, onDone, oops }) {
         ))}
         <button
           className="text-sm text-amber underline"
-          onClick={() =>
-            setLines((cur) => [...cur, { spirit_id: spirits[0]?.id ? String(spirits[0].id) : "", amount_ml: "20" }])
-          }
+          onClick={() => setLines((cur) => [...cur, { spirit_id: "", spirit_name: "", amount_ml: "20" }])}
         >
           再加一支基酒
         </button>

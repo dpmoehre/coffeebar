@@ -146,7 +146,10 @@ def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | Non
         "l.closed_at IS NULL AND l.price IS NOT NULL"
         " AND EXISTS (SELECT 1 FROM bean b WHERE b.id = l.bean_id AND b.deleted_at IS NULL)"
     )
-    on_hand_bottle_where = "l.closed_at IS NULL AND l.price IS NOT NULL"
+    on_hand_bottle_where = (
+        "l.closed_at IS NULL AND l.price IS NOT NULL"
+        " AND EXISTS (SELECT 1 FROM bottle b WHERE b.id = l.bottle_id AND b.deleted_at IS NULL)"
+    )
     on_hand_bean_args: list = []
     on_hand_bottle_args: list = []
     if owner_id is not None:

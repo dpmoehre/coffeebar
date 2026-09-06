@@ -308,6 +308,10 @@ class Client:
     def update_spirit(self, bottle_id: int, data: dict):
         return self.request("PATCH", f"/api/spirits/{bottle_id}", json=data)
 
+    def delete_spirit(self, bottle_id: int, mode: str | None = None):
+        q = f"?mode={mode}" if mode else ""
+        return self.request("DELETE", f"/api/spirits/{bottle_id}{q}")
+
     def add_spirit_photo(self, bottle_id: int, file_path: str, kind: str = "pack"):
         return self.upload(f"/api/spirits/{bottle_id}/photos", file_path, {"kind": kind})
 
@@ -358,6 +362,18 @@ class Client:
 
     def reorder_menu(self, ids: list[int]):
         return self.request("PUT", "/api/menu/order", json={"ids": ids})
+
+    def list_recipes(self):
+        return self.request("GET", "/api/recipes")
+
+    def get_recipe(self, recipe_id: int):
+        return self.request("GET", f"/api/recipes/{recipe_id}")
+
+    def delete_recipe(self, recipe_id: int):
+        return self.request("DELETE", f"/api/recipes/{recipe_id}")
+
+    def delete_menu_item(self, item_id: int):
+        return self.request("DELETE", f"/api/menu/{item_id}")
 
     def create_recipe(self, name: str, lines_json: str, steps: str | None = None, note: str | None = None):
         data = {"name": name, "lines": json.loads(lines_json)}

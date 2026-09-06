@@ -158,6 +158,8 @@ export const api = {
   spirit: (id) => req("GET", `/api/spirits/${id}`),
   createSpirit: (data) => req("POST", "/api/spirits", data),
   updateSpirit: (id, data) => req("PATCH", `/api/spirits/${id}`, data),
+  deleteSpirit: (id, mode) =>
+    req("DELETE", `/api/spirits/${id}${mode ? `?mode=${encodeURIComponent(mode)}` : ""}`),
   addBottleLot: (id, data) => req("POST", `/api/spirits/${id}/lots`, data),
   addBottlePhoto: (id, file, kind = "pack") => {
     const fd = new FormData();

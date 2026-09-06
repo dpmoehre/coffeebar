@@ -111,8 +111,11 @@ def _replace_lines(conn: sqlite3.Connection, recipe_id: int, lines: list[dict]) 
         ml = float(ln.get("amount_ml") or 0)
         if ml <= 0:
             raise store.Conflict("配方用量要大于 0")
-        if not conn.execute("SELECT id FROM bottle WHERE id = ?", (sid,)).fetchone():
+        bottle = conn.execute("SELECT id, deleted_at FROM bottle WHERE id = ?", (sid,)).fetchone()
+        if not bottle:
             raise store.Conflict("没有这支基酒")
+        if bottle["deleted_at"]:
+            raise store.Conflict("这张卡已经不在酒库里了，换一支")
         conn.execute(
             "INSERT INTO recipe_line (recipe_id, spirit_id, amount_ml, sort) VALUES (?, ?, ?, ?)",
             (recipe_id, sid, ml, int(ln.get("sort") or i)),

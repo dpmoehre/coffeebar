@@ -199,6 +199,46 @@ def test_multi_people_refuses_if_not_enough_for_all(conn):
     assert stats.summary(conn, "all")["drink_cups"] == 0
 
 
+def test_update_recipe_swaps_spirits(client):
+    """选了配方之后，里面的基酒能一起改掉。"""
+    gin = client.post(
+        "/api/spirits",
+        json={"name": "【测试】配方金", "kind": "金酒", "abv": 40, "nominal_ml": 700, "price": 80},
+    ).json()
+    rum = client.post(
+        "/api/spirits",
+        json={"name": "【测试】配方朗姆", "kind": "朗姆", "abv": 40, "nominal_ml": 700, "price": 90},
+    ).json()
+    rec = client.post(
+        "/api/recipes",
+        json={
+            "name": "【测试】金改朗姆",
+            "lines": [{"spirit_id": gin["id"], "amount_ml": 30}],
+        },
+    )
+    assert rec.status_code == 201, rec.text
+    listed = client.post("/api/menu", json={"kind": "cocktail", "recipe_id": rec.json()["id"]})
+    assert listed.status_code == 201, listed.text
+
+    r = client.patch(
+        f"/api/recipes/{rec.json()['id']}",
+        json={
+            "name": "【测试】金改朗姆",
+            "lines": [
+                {"spirit_id": rum["id"], "amount_ml": 40},
+                {"spirit_id": gin["id"], "amount_ml": 15},
+            ],
+        },
+    )
+    assert r.status_code == 200, r.text
+    names = [ln["spirit_name"] for ln in r.json()["lines"]]
+    assert names == ["【测试】配方朗姆", "【测试】配方金"]
+    assert [ln["amount_ml"] for ln in r.json()["lines"]] == [40, 15]
+
+    menu_row = next(it for it in client.get("/api/menu").json()["items"] if it["kind"] == "cocktail")
+    assert [ln["spirit_name"] for ln in menu_row["lines"]] == names
+
+
 def test_unlist_hidden_from_listed_only(conn):
     bottle_id, _ = make_spirit(conn)
     item = _item(conn, bottle_id)

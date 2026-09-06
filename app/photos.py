@@ -216,6 +216,24 @@ def purge_consumption_photos(conn: sqlite3.Connection, cons_id: int) -> int:
     return len(rows)
 
 
+def paths_for_bottle(conn: sqlite3.Connection, bottle_id: int) -> list[str]:
+    """一支酒名下所有照片路径：瓶盒 / 酒标、各瓶流水的过程照。"""
+    rows = conn.execute(
+        """
+        SELECT path FROM bottle_photo WHERE bottle_id = ?
+        UNION ALL
+        SELECT path FROM consumption_photo
+         WHERE cons_id IN (
+           SELECT c.id FROM consumption_event c
+           JOIN bottle_lot l ON l.id = c.bottle_lot_id
+           WHERE l.bottle_id = ?
+         )
+        """,
+        (bottle_id, bottle_id),
+    ).fetchall()
+    return [r["path"] for r in rows]
+
+
 def paths_for_bean(conn: sqlite3.Connection, bean_id: int) -> list[str]:
     """一支豆名下所有照片路径：包装/豆盘/豆卡、补货对照图、各袋流水的过程照。"""
     rows = conn.execute(
