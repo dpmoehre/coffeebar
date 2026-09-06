@@ -107,7 +107,7 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
         "roast": row["roast"],
         "note": row["note"],
         "updated_at": row["updated_at"],
-        "cover": shots[-1] if shots else None,
+        "cover": photos.with_list(shots[-1]) if shots else None,
         "avg": _avg(scores),
         "cups": len(scores),
         "favorites": favs,

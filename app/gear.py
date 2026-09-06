@@ -105,7 +105,7 @@ def _public_gear(conn: sqlite3.Connection, row: sqlite3.Row) -> dict:
     out["family_label"] = fam.get(out["family"]) if out.get("family") else None
     out["collected"] = bool(out.get("catalog_id"))
     out["photos"] = _photos_of(conn, "user_gear_photo", "gear_id", out["id"])
-    out["cover"] = out["photos"][-1] if out["photos"] else None
+    out["cover"] = photos.with_list(out["photos"][-1]) if out["photos"] else None
     out["catalog"] = _catalog_brief(conn, out.get("catalog_id"))
     out["visibility"] = out.get("visibility") or "private"
     if out["kind"] == "filter":
@@ -127,7 +127,7 @@ def _public_catalog(conn: sqlite3.Connection, row: sqlite3.Row, *, owners: bool 
     fam = FAMILIES.get(out["kind"], {})
     out["family_label"] = fam.get(out["family"]) if out.get("family") else None
     out["photos"] = _photos_of(conn, "gear_catalog_photo", "catalog_id", out["id"])
-    out["cover"] = out["photos"][-1] if out["photos"] else None
+    out["cover"] = photos.with_list(out["photos"][-1]) if out["photos"] else None
     if owners:
         out["owners"] = conn.execute(
             "SELECT COUNT(*) FROM user_gear WHERE catalog_id = ?", (out["id"],)

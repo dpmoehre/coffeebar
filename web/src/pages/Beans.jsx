@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { freshnessLine } from "../freshness.js";
 import { Plus } from "../icons.jsx";
-import { Bar, Btn, Chip, Empty, Field, Input, Modal, Select, g, perG } from "../ui.jsx";
+import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, g, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近动过" },
@@ -181,9 +181,11 @@ export default function Beans({ onOpen, toast, oops }) {
       )}
 
       <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-        {beans.map((b) => (
-          <Card key={b.id} bean={b} onClick={() => onOpen(b.id)} />
-        ))}
+        {!data
+          ? [0, 1, 2, 3].map((i) => <CardSkeleton key={i} delay={i} />)
+          : beans.map((b, i) => (
+              <Card key={b.id} bean={b} delay={i} onClick={() => onOpen(b.id)} />
+            ))}
       </div>
 
       {data && beans.length === 0 && (
@@ -210,26 +212,31 @@ export default function Beans({ onOpen, toast, oops }) {
   );
 }
 
-function Card({ bean, onClick }) {
+function CardSkeleton({ delay = 0 }) {
+  return (
+    <div
+      className="rise overflow-hidden rounded-2xl border border-line bg-panel"
+      style={{ animationDelay: `${Math.min(delay, 12) * 45}ms` }}
+    >
+      <Cover className="h-48 w-full" />
+      <div className="p-5">
+        <div className="h-5 w-2/3 rounded bg-line" />
+        <div className="mt-3 h-3 w-1/2 rounded bg-line" />
+      </div>
+    </div>
+  );
+}
+
+function Card({ bean, delay = 0, onClick }) {
   const pct = bean.usable_g ? (bean.balance_g / bean.usable_g) * 100 : 0;
   return (
     <article
       onClick={onClick}
       className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
         bg-panel transition hover:border-amber"
+      style={{ animationDelay: `${Math.min(delay, 12) * 45}ms` }}
     >
-      {/* 缩略图优先豆盘，没有就用包装，都没有才用底纹 */}
-      {bean.cover ? (
-        <img src={bean.cover.thumb} alt="" className="h-48 w-full object-cover" />
-      ) : (
-        <div
-          className="h-48"
-          style={{
-            background:
-              "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
-          }}
-        />
-      )}
+      <Cover src={coverSrc(bean.cover)} className="h-48 w-full" />
       <div className="p-5">
         <div className="flex items-baseline justify-between gap-2">
           <div className="serif truncate text-lg">{bean.name}</div>

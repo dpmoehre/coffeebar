@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus } from "../icons.jsx";
-import { Btn, Chip, Empty, Field, Input, Modal, Select, money } from "../ui.jsx";
+import { Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, money } from "../ui.jsx";
 
 const KINDS = ["威士忌", "金酒", "朗姆", "伏特加", "龙舌兰", "白兰地", "利口酒", "其他"];
 
@@ -54,11 +54,7 @@ function SpiritRow({ s, onOpen }) {
       className="rise flex cursor-pointer items-center gap-4 rounded-2xl border border-line
         bg-panel p-4 transition hover:border-amber"
     >
-      {s.cover ? (
-        <img src={s.cover.thumb} alt="" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
-      ) : (
-        <div className="h-16 w-16 shrink-0 rounded-xl bg-[#3a2618]" />
-      )}
+      <Cover src={coverSrc(s.cover)} className="h-16 w-16 shrink-0 rounded-xl" />
       <div className="min-w-0 flex-1">
         <div className="serif truncate text-lg">{s.name}</div>
         <div className="mt-1 truncate text-[13px] text-muted">{lineOf(s)}</div>

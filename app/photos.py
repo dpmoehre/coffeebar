@@ -31,7 +31,8 @@ except ImportError:  # 没装也能跑，只是传 HEIC 会被挡下
     HEIC_OK = False
 
 MAX_EDGE = 1600      # 长边上限：吧台屏和手机都够看，不留原始大图
-THUMB_EDGE = 900     # 缩略图铺满整列，Retina 上放到 ~400 px 还得清楚
+THUMB_EDGE = 900     # 详情页缩略图
+LIST_EDGE = 480      # 列表封面：卡片大约 192px，Retina 也够，cpolar 少传一截
 QUALITY = 86
 MAX_BYTES = 25 * 1024 * 1024
 
@@ -68,6 +69,7 @@ def save(raw: bytes, filename: str = "") -> str:
     thumb = img.copy()
     thumb.thumbnail((THUMB_EDGE, THUMB_EDGE), Image.LANCZOS)
     thumb.save(db.PHOTO_DIR / f"t_{name}", "JPEG", quality=80, optimize=True)
+    _write_list_thumb(thumb, name)
 
     return f"photos/{name}"
 
@@ -75,12 +77,50 @@ def save(raw: bytes, filename: str = "") -> str:
 def remove(rel_path: str) -> None:
     """删文件；缩略图跟着删。文件不在了也不报错。"""
     name = Path(rel_path).name
-    for p in (db.PHOTO_DIR / name, db.PHOTO_DIR / f"t_{name}"):
+    for p in (db.PHOTO_DIR / name, db.PHOTO_DIR / f"t_{name}", db.PHOTO_DIR / f"s_{name}"):
         p.unlink(missing_ok=True)
 
 
 def thumb_url(rel_path: str) -> str:
     return f"/{Path(rel_path).parent}/t_{Path(rel_path).name}"
+
+
+def _write_list_thumb(img: Image.Image, name: str) -> None:
+    small = img.copy()
+    if small.mode not in ("RGB", "L"):
+        small = small.convert("RGB")
+    small.thumbnail((LIST_EDGE, LIST_EDGE), Image.LANCZOS)
+    db.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
+    small.save(db.PHOTO_DIR / f"s_{name}", "JPEG", quality=74, optimize=True)
+
+
+def ensure_list_thumb(rel_path: str) -> None:
+    """老图没有列表封面时补一张。已经有就不动。"""
+    name = Path(rel_path).name
+    dest = db.PHOTO_DIR / f"s_{name}"
+    if dest.exists():
+        return
+    src = db.PHOTO_DIR / f"t_{name}"
+    if not src.exists():
+        src = db.PHOTO_DIR / name
+    if not src.exists():
+        return
+    with Image.open(src) as img:
+        _write_list_thumb(img, name)
+
+
+def list_url(rel_path: str) -> str:
+    ensure_list_thumb(rel_path)
+    return f"/{Path(rel_path).parent}/s_{Path(rel_path).name}"
+
+
+def with_list(shot: dict | None) -> dict | None:
+    """给列表封面补一档更小的图。没有 path 就原样返回。"""
+    if not shot or not shot.get("path"):
+        return shot
+    out = dict(shot)
+    out["list"] = list_url(out["path"])
+    return out
 
 
 def attach_bean_photo(conn: sqlite3.Connection, bean_id: int, kind: str, raw: bytes, filename: str) -> dict:
@@ -109,11 +149,15 @@ def cover(photos: list[dict]) -> dict | None:
     """豆库缩略图优先豆盘，再包装；豆卡缩下去只剩一片字，只在都没有时才用。"""
     if not photos:
         return None
+    picked = None
     for kind in ("tray", "pack"):
         hit = [p for p in photos if p["kind"] == kind]
         if hit:
-            return hit[-1]
-    return photos[-1]
+            picked = hit[-1]
+            break
+    if picked is None:
+        picked = photos[-1]
+    return with_list(picked)
 
 
 def delete_bean_photo(conn: sqlite3.Connection, photo_id: int) -> None:
@@ -300,6 +344,11 @@ def copy_file(rel_path: str) -> str:
     thumb = db.PHOTO_DIR / f"t_{name}"
     if thumb.exists():
         shutil.copy2(thumb, db.PHOTO_DIR / f"t_{new}")
+    small = db.PHOTO_DIR / f"s_{name}"
+    if small.exists():
+        shutil.copy2(small, db.PHOTO_DIR / f"s_{new}")
+    else:
+        ensure_list_thumb(f"photos/{new}")
     return f"photos/{new}"
 
 

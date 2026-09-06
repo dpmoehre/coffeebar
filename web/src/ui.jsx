@@ -130,6 +130,77 @@ export function Empty({ children }) {
   );
 }
 
+export function coverSrc(cover) {
+  return cover?.list || cover?.thumb || cover?.url || "";
+}
+
+let coverInflight = 0;
+const coverWait = [];
+const COVER_AT_ONCE = 2;
+
+function takeCoverSlot() {
+  return new Promise((resolve) => {
+    const run = () => {
+      coverInflight += 1;
+      let done = false;
+      resolve(() => {
+        if (done) return;
+        done = true;
+        coverInflight -= 1;
+        const next = coverWait.shift();
+        if (next) next();
+      });
+    };
+    if (coverInflight < COVER_AT_ONCE) run();
+    else coverWait.push(run);
+  });
+}
+
+export function Cover({ src, className = "" }) {
+  const [shown, setShown] = useState("");
+
+  useEffect(() => {
+    if (!src) {
+      setShown("");
+      return undefined;
+    }
+    let release;
+    let dead = false;
+    const img = new Image();
+    takeCoverSlot().then((rel) => {
+      release = rel;
+      if (dead) {
+        rel();
+        return;
+      }
+      img.onload = img.onerror = () => {
+        if (!dead) setShown(src);
+        rel();
+      };
+      img.src = src;
+    });
+    return () => {
+      dead = true;
+      img.onload = img.onerror = null;
+      if (release) release();
+    };
+  }, [src]);
+
+  return (
+    <div
+      className={`relative overflow-hidden ${className}`}
+      style={{
+        background:
+          "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
+      }}
+    >
+      {shown ? (
+        <img src={shown} alt="" className="fade-in h-full w-full object-cover" />
+      ) : null}
+    </div>
+  );
+}
+
 export const g = (n) => (n == null ? "—" : `${Math.round(n)} g`);
 export const ml = (n) => (n == null ? "—" : `${Math.round(n)} ml`);
 export const money = (n) => (n == null ? "—" : `¥${Number(n).toFixed(n < 10 ? 1 : 0)}`);

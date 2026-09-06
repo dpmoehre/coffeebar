@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus, Trash } from "../icons.jsx";
-import { Btn, Chip, Empty, Field, Input, Modal, Panel, Select, money } from "../ui.jsx";
+import { Btn, Chip, Cover, Empty, Field, Input, Modal, Panel, Select, coverSrc, money } from "../ui.jsx";
 
 const KIND_LABEL = {
   dripper: "滤杯",
@@ -110,7 +110,21 @@ export default function Gear({ toast, oops, focusId }) {
       )}
 
       {!mine ? (
-        <p className="mt-6 text-muted">读取中…</p>
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="rise overflow-hidden rounded-2xl border border-line bg-panel"
+              style={{ animationDelay: `${i * 45}ms` }}
+            >
+              <Cover className="h-40 w-full" />
+              <div className="p-5">
+                <div className="h-5 w-2/3 rounded bg-line" />
+                <div className="mt-3 h-3 w-1/2 rounded bg-line" />
+              </div>
+            </div>
+          ))}
+        </div>
       ) : shown.length === 0 ? (
         <div className="mt-6">
           <Empty>
@@ -121,24 +135,15 @@ export default function Gear({ toast, oops, focusId }) {
         </div>
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {shown.map((g) => (
+          {shown.map((g, i) => (
             <article
               key={g.id}
               onClick={() => setPicked(g)}
               className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
                 bg-panel transition hover:border-amber"
+              style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}
             >
-              {g.cover ? (
-                <img src={g.cover.thumb} alt="" className="h-40 w-full object-cover" />
-              ) : (
-                <div
-                  className="h-40"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 40% 35%, #5a3d28, transparent 46%), linear-gradient(135deg, #3a2618, #1a120e)",
-                  }}
-                />
-              )}
+              <Cover src={coverSrc(g.cover)} className="h-40 w-full" />
               <div className="p-5">
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="serif truncate text-lg">{g.name}</div>

@@ -37,11 +37,14 @@ def test_upload_converts_to_jpeg_and_makes_thumb(client):
     name = body["path"].split("/")[-1]
     assert (db.PHOTO_DIR / name).exists()
     assert (db.PHOTO_DIR / f"t_{name}").exists(), "缩略图跟着生成"
+    assert (db.PHOTO_DIR / f"s_{name}").exists(), "列表封面更小的一档"
 
     with Image.open(db.PHOTO_DIR / name) as im:
         assert max(im.size) <= photos.MAX_EDGE, "长边压到 1600 以内"
     with Image.open(db.PHOTO_DIR / f"t_{name}") as im:
         assert max(im.size) <= photos.THUMB_EDGE
+    with Image.open(db.PHOTO_DIR / f"s_{name}") as im:
+        assert max(im.size) <= photos.LIST_EDGE
 
 
 def test_photo_is_served(client):
@@ -52,6 +55,9 @@ def test_photo_is_served(client):
     ).json()
     assert client.get(p["url"]).status_code == 200
     assert client.get(p["thumb"]).status_code == 200
+    cover = client.get("/api/beans").json()["beans"][0]["cover"]
+    assert cover["list"].endswith(f"/s_{p['path'].split('/')[-1]}")
+    assert client.get(cover["list"]).status_code == 200
 
 
 def test_bean_detail_carries_photos(client):

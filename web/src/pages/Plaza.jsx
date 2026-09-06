@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import Radar from "../components/Radar.jsx";
 import { scoreFreshnessLine } from "../freshness.js";
-import { Btn, Chip, Empty, Input, Panel, Select, g, money, perG } from "../ui.jsx";
+import { Btn, Chip, Cover, Empty, Input, Panel, Select, coverSrc, g, money, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近公开" },
@@ -267,24 +267,15 @@ function PlazaList({ onOpen, oops }) {
       ) : (
         <>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {shown.map((b) => (
+            {shown.map((b, i) => (
               <article
                 key={b.id}
                 onClick={() => onOpen(b.id)}
                 className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
                   bg-panel transition hover:border-amber"
+                style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}
               >
-                {b.cover ? (
-                  <img src={b.cover.thumb || b.cover.url} alt="" className="h-48 w-full object-cover" />
-                ) : (
-                  <div
-                    className="h-48"
-                    style={{
-                      background:
-                        "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
-                    }}
-                  />
-                )}
+                <Cover src={coverSrc(b.cover)} className="h-48 w-full" />
                 <div className="p-5">
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="serif truncate text-lg">{b.name}</div>
@@ -552,24 +543,15 @@ function PlazaGearList({ onOpen, oops }) {
         </div>
       ) : (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-          {items.map((g) => (
+          {items.map((g, i) => (
             <article
               key={g.id}
               onClick={() => onOpen(g.id)}
               className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
                 bg-panel transition hover:border-amber"
+              style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}
             >
-              {g.cover ? (
-                <img src={g.cover.thumb || g.cover.url} alt="" className="h-40 w-full object-cover" />
-              ) : (
-                <div
-                  className="h-40"
-                  style={{
-                    background:
-                      "radial-gradient(circle at 40% 35%, #5a3d28, transparent 46%), linear-gradient(135deg, #3a2618, #1a120e)",
-                  }}
-                />
-              )}
+              <Cover src={coverSrc(g.cover)} className="h-40 w-full" />
               <div className="p-5">
                 <div className="serif truncate text-lg">{g.name}</div>
                 <div className="mt-1 truncate text-[13px] text-muted">

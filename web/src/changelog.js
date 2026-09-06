@@ -22,6 +22,13 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "豆库封面会一张张出来",
+    notes: [
+      "走外网打开豆库、器具、酒水时，卡片上的字会先出来，封面再一张张补上，不用等全部图传完。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "滤纸开一包才开始算钱",
     notes: [
       "器具里滤纸可以记新开的一包有多少张、多少钱。冲一杯扣一张，这杯的钱会加上纸钱。",

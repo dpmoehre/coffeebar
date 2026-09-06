@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import Radar from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
-import { Btn, Chip, Empty, Field, Input, Panel } from "../ui.jsx";
+import { Btn, Chip, Cover, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
 
 const DIMS = [
   ["dry", "干香"],
@@ -83,24 +83,15 @@ function KingdomList({ onOpen, oops }) {
       ) : (
         <>
           <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-            {shown.map((b) => (
+            {shown.map((b, i) => (
               <article
                 key={b.id}
                 onClick={() => onOpen(b.id)}
                 className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
                   bg-panel transition hover:border-amber"
+                style={{ animationDelay: `${Math.min(i, 12) * 45}ms` }}
               >
-                {b.cover ? (
-                  <img src={b.cover.thumb || b.cover.url} alt="" className="h-48 w-full object-cover" />
-                ) : (
-                  <div
-                    className="h-48"
-                    style={{
-                      background:
-                        "radial-gradient(circle at 35% 30%, #6a4024, transparent 48%), linear-gradient(135deg, #3a2618, #1a120e)",
-                    }}
-                  />
-                )}
+                <Cover src={coverSrc(b.cover)} className="h-48 w-full" />
                 <div className="p-5">
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="serif truncate text-lg">{b.name}</div>
