@@ -36,7 +36,8 @@ def serve_owner(conn: sqlite3.Connection, serve_id: int) -> int | None:
 def _lines_of(conn: sqlite3.Connection, recipe_id: int) -> list[dict]:
     return _rows(
         conn.execute(
-            """SELECT rl.id, rl.spirit_id, rl.amount_ml, rl.sort, b.name AS spirit_name, b.abv
+            """SELECT rl.id, rl.spirit_id, rl.amount_ml, rl.sort,
+                      b.name AS spirit_name, b.abv, b.kind, b.owner_id AS spirit_owner_id
                FROM recipe_line rl JOIN bottle b ON b.id = rl.spirit_id
                WHERE rl.recipe_id = ? ORDER BY rl.sort, rl.id""",
             (recipe_id,),
@@ -44,13 +45,39 @@ def _lines_of(conn: sqlite3.Connection, recipe_id: int) -> list[dict]:
     )
 
 
+def _alts_same_kind(conn: sqlite3.Connection, kind: str, owner_id: int | None) -> list[dict]:
+    """同一大类、还在库的酒。倒的时候可换支，不自挑第几瓶。"""
+    if not kind:
+        return []
+    out = []
+    for s in spirits.list_spirits(conn, "stock", owner_id):
+        if s.get("kind") != kind or s.get("pending"):
+            continue
+        lots = [l for l in spirits.list_lots(conn, s["id"]) if not l.get("closed_at")]
+        out.append(
+            {
+                "spirit_id": s["id"],
+                "spirit_name": s["name"],
+                "balance_ml": round(float(s.get("balance_ml") or 0), 1),
+                "open_lots": [
+                    {"lot_id": l["id"], "seq": l.get("seq"), "balance_ml": l.get("balance_ml")}
+                    for l in lots
+                ],
+            }
+        )
+    return out
+
+
 def _attach_stock(conn: sqlite3.Connection, line: dict) -> dict:
+    kind = spirits.normalize_kind(line.get("kind"), None, line.get("spirit_name"))
+    line["kind"] = kind
     lots = [l for l in spirits.list_lots(conn, line["spirit_id"]) if not l.get("closed_at")]
     line["open_lots"] = [
         {"lot_id": l["id"], "seq": l.get("seq"), "balance_ml": l.get("balance_ml")} for l in lots
     ]
     line["balance_ml"] = round(sum(l["balance_ml"] for l in lots), 1)
     line["enough"] = line["balance_ml"] >= float(line["amount_ml"] or 0)
+    line["alts"] = _alts_same_kind(conn, kind, line.get("spirit_owner_id"))
     return line
 
 
@@ -157,6 +184,8 @@ def _item_view(conn: sqlite3.Connection, item: dict) -> dict:
                 "amount_ml": NEAT_DEFAULT_ML,
                 "sort": 0,
                 "abv": bottle.get("abv") if bottle else None,
+                "kind": bottle.get("kind") if bottle else None,
+                "spirit_owner_id": bottle.get("owner_id") if bottle else None,
             },
         )
         item["name"] = name
@@ -259,6 +288,22 @@ def delete_menu_item(conn: sqlite3.Connection, item_id: int) -> None:
     conn.execute("DELETE FROM menu_item WHERE id = ?", (item_id,))
 
 
+def _chosen_spirit(conn: sqlite3.Connection, spec: dict, raw: dict, owner_id: int | None) -> int:
+    """配方写死一支；倒的时候可换成同一大类的另一支（金酒换金酒），不能跨类。"""
+    chosen = int(raw["spirit_id"])
+    if chosen == int(spec["spirit_id"]):
+        return chosen
+    alt = spirits.get_spirit(conn, chosen, owner_id)
+    if not alt:
+        raise store.Conflict("没有这支基酒")
+    want = spec.get("kind") or spirits.normalize_kind(None, None, spec.get("spirit_name"))
+    if alt["kind"] != want:
+        raise store.Conflict(f"「{alt['name']}」不是{want}，换同一类的酒")
+    if not alt.get("in_stock"):
+        raise store.Conflict(f"「{alt['name']}」没有未关的瓶子")
+    return chosen
+
+
 def _pick_lot(conn: sqlite3.Connection, spirit_id: int, lot_id: int | None) -> dict | dict:
     lots = [l for l in spirits.list_lots(conn, spirit_id) if not l.get("closed_at")]
     if not lots:
@@ -340,7 +385,7 @@ def pour(
     session_id: str = "anon",
     source: str = "web",
 ) -> dict:
-    """从酒单倒一巡。多选人就是一人一杯。lines 可改实际毫升。多瓶未关不自挑。有锁整巡不写。"""
+    """从酒单倒一巡。多选人就是一人一杯。lines 可改毫升，同类可换支。同一支多瓶未关不自挑。有锁整巡不写。"""
     item = get_item(conn, int(data["menu_item_id"]), data.get("owner_id"))
     if not item:
         raise store.Conflict("没有这条酒单")
@@ -356,12 +401,13 @@ def pour(
     resolved = []
     remaining: dict[int, float] = {}
     for spec, raw in zip(item["lines"], incoming):
-        if int(raw["spirit_id"]) != spec["spirit_id"]:
-            raise store.Conflict("材料和配方对不上")
+        chosen_id = _chosen_spirit(conn, spec, raw, data.get("owner_id"))
+        chosen = spirits.get_spirit(conn, chosen_id, data.get("owner_id")) or spec
+        label = chosen.get("name") or spec["spirit_name"]
         amount = float(raw.get("amount_ml") or 0)
         if amount <= 0:
-            raise store.Conflict(f"{spec['spirit_name']} 的毫升要大于 0")
-        picked = _pick_lot(conn, spec["spirit_id"], raw.get("lot_id"))
+            raise store.Conflict(f"{label} 的毫升要大于 0")
+        picked = _pick_lot(conn, chosen_id, raw.get("lot_id"))
         if isinstance(picked, dict) and picked.get("error"):
             needs.append(picked)
             continue
@@ -370,15 +416,15 @@ def pour(
         if need > left:
             who = f"{cups} 人 × {amount:g} ml" if cups > 1 else f"{amount:g} ml"
             raise store.Conflict(
-                f"{spec['spirit_name']} 只剩 {left:.0f} ml，不够 {who}。"
-                "换一瓶、改用量，或先盘点"
+                f"{label} 只剩 {left:.0f} ml，不够 {who}。"
+                "换一支同类、改用量，或先盘点"
             )
         remaining[picked["id"]] = left - need
         resolved.append((spec, amount, picked))
     if needs:
         return {"error": "有多瓶未关，请指定 lot_id，我不自己挑", "needs": needs}
 
-    bottles = {spec["spirit_id"] for spec, _, _ in resolved}
+    bottles = {lot["bottle_id"] for _, _, lot in resolved}
     for bid in bottles:
         locks.check(conn, f"bottle:{bid}", session_id, source)
 

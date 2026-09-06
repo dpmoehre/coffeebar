@@ -59,6 +59,44 @@ def test_cocktail_two_spirits_is_one_cup(conn):
     assert stats.summary(conn, "all")["drink_cups"] == 1
 
 
+def test_pour_can_use_another_gin(conn):
+    a_id, a_lot = make_spirit(conn, name="【测试】金酒甲", ml=700, price=100, abv=40)
+    b_id, b_lot = make_spirit(conn, name="【测试】金酒乙", ml=700, price=120, abv=47)
+    assert spirits.get_spirit(conn, a_id)["kind"] == "金酒"
+    assert spirits.get_spirit(conn, b_id)["kind"] == "金酒"
+    item = _item(conn, a_id)
+    alts = [a["spirit_id"] for a in item["lines"][0]["alts"]]
+    assert a_id in alts and b_id in alts
+    serve = menu.pour(
+        conn,
+        {
+            "menu_item_id": item["id"],
+            "lines": [{"spirit_id": b_id, "lot_id": b_lot, "amount_ml": 30}],
+        },
+    )
+    assert serve["lines"][0]["spirit_id"] == b_id
+    assert spirits.get_lot(conn, a_lot)["balance_ml"] == 700
+    assert spirits.get_lot(conn, b_lot)["balance_ml"] == 670
+
+
+def test_pour_rejects_other_kind(conn):
+    gin_id, _ = make_spirit(conn, name="【测试】金酒", ml=700, price=100, abv=40)
+    _wh_id, wh_lot = make_spirit(conn)
+    item = _item(conn, gin_id)
+    try:
+        menu.pour(
+            conn,
+            {
+                "menu_item_id": item["id"],
+                "lines": [{"spirit_id": _wh_id, "lot_id": wh_lot, "amount_ml": 30}],
+            },
+        )
+        raise AssertionError("should refuse")
+    except store.Conflict as exc:
+        assert "不是金酒" in str(exc)
+    assert spirits.get_lot(conn, wh_lot)["balance_ml"] == 1000
+
+
 def test_multi_lot_refuses_to_pick(conn):
     bottle_id, _ = make_spirit(conn)
     spirits.add_lot(conn, bottle_id, {"nominal_ml": 700, "price": 200})

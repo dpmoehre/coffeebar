@@ -20,6 +20,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "倒酒时能选要用哪支同类酒",
+    notes: [
+      "配方写的是金酒，库里有好几支金酒，倒的时候下拉选要用哪一支。",
+      "不能拿威士忌去顶金酒。同一支开了两瓶还是要你指定第几瓶，不会替你挑。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "酒单倒酒能点选谁喝的，还能多选",
     notes: [
       "出品倒一杯时，人名用芯片点选，可以多选。",

@@ -102,7 +102,7 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
         <div>
           <h1 className="serif m-0 text-3xl font-semibold">酒单</h1>
           <p className="mt-2 mb-0 text-muted">
-            今晚出品。纯饮点了直接倒；鸡尾酒按配方扣各瓶，毫升都能改。
+            今晚出品。纯饮点了直接倒；鸡尾酒按配方扣各瓶，毫升都能改。同类有好几支时当场选要用哪一支。
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -487,10 +487,12 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
       (item.lines || []).map((ln) => ({
         spirit_id: ln.spirit_id,
         spirit_name: ln.spirit_name,
+        kind: ln.kind,
         amount_ml: String(ln.amount_ml),
         lot_id: ln.open_lots?.length === 1 ? ln.open_lots[0].lot_id : "",
         lots: ln.open_lots || [],
         balance_ml: ln.balance_ml,
+        alts: ln.alts || [],
       }))
     );
   }, [item]);
@@ -519,7 +521,7 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
       sub={
         item.kind === "neat"
           ? "纯饮，毫升按这次实际倒的填。多选人名就是一人一杯。"
-          : "按配方预填，每支都能改。多选人名就是一人一杯。"
+          : "按配方预填。同类有好几支就选要用哪一支，毫升也能改。多选人名就是一人一杯。"
       }
       footer={
         <>
@@ -527,7 +529,9 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
             取消
           </Btn>
           <Btn
-            disabled={rows.some((r) => !(Number(r.amount_ml) > 0))}
+            disabled={rows.some(
+              (r) => !(Number(r.amount_ml) > 0) || (r.lots.length > 1 && !r.lot_id)
+            )}
             onClick={async () => {
               try {
                 const out = await api.pourMenu({
@@ -602,14 +606,57 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
           </p>
         )}
         {rows.map((r, i) => (
-          <div key={`${r.spirit_id}-${i}`} className="rounded-xl border border-line p-3">
-            <button
-              type="button"
-              className="text-sm text-amber underline"
-              onClick={() => onOpenSpirit?.(r.spirit_id)}
-            >
-              {r.spirit_name}
-            </button>
+          <div key={`${r.kind || r.spirit_id}-${i}`} className="rounded-xl border border-line p-3">
+            {r.alts.length > 1 ? (
+              <Field label={`用哪支${r.kind || "酒"}`}>
+                <Select
+                  value={String(r.spirit_id)}
+                  onChange={(e) => {
+                    const sid = e.target.value;
+                    setRows((cur) =>
+                      cur.map((x, j) => {
+                        if (j !== i) return x;
+                        const alt = (x.alts || []).find((a) => String(a.spirit_id) === sid);
+                        if (!alt) return { ...x, spirit_id: Number(sid) };
+                        const lots = alt.open_lots || [];
+                        return {
+                          ...x,
+                          spirit_id: alt.spirit_id,
+                          spirit_name: alt.spirit_name,
+                          balance_ml: alt.balance_ml,
+                          lots,
+                          lot_id: lots.length === 1 ? lots[0].lot_id : "",
+                        };
+                      })
+                    );
+                  }}
+                >
+                  {r.alts.map((a) => (
+                    <option key={a.spirit_id} value={a.spirit_id}>
+                      {a.spirit_name}
+                      {a.balance_ml != null ? ` · 剩 ${Math.round(a.balance_ml)} ml` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </Field>
+            ) : (
+              <button
+                type="button"
+                className="text-sm text-amber underline"
+                onClick={() => onOpenSpirit?.(r.spirit_id)}
+              >
+                {r.spirit_name}
+              </button>
+            )}
+            {r.alts.length > 1 && onOpenSpirit && (
+              <button
+                type="button"
+                className="mt-1 text-xs text-muted underline"
+                onClick={() => onOpenSpirit(r.spirit_id)}
+              >
+                看这支酒卡
+              </button>
+            )}
             <div className="mt-2 grid grid-cols-2 gap-2">
               <Field label="这次毫升">
                 <Input
@@ -629,7 +676,7 @@ function PourModal({ item, people, onClose, onOpenSpirit, toast, oops, onDone })
               </div>
             </div>
             {r.lots.length > 1 && (
-              <Field label="用哪一瓶">
+              <Field label="这支有几瓶未关，用哪一瓶">
                 <Select
                   value={r.lot_id}
                   onChange={(e) =>

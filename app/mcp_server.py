@@ -17,7 +17,7 @@ mcp = MCPServer(
         "网页正在改这一条时硬拒绝，不要接管、不要重试。"
         "关袋、撤回、删卡、删人必须人明确说。"
         "多袋/多瓶未关时不要自己挑，先列出再等 lot_id。"
-        "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升。自制基酒还没有。"
+        "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升，同类可换支。自制基酒还没有。"
         "服务没开就说 coffeebar 未在运行。"
     ),
 )
@@ -586,7 +586,7 @@ def pour_menu(
     note: str | None = None,
     people_json: str | None = None,
 ) -> Any:
-    """从酒单倒酒。people_json 是人名数组，多选一人一杯。lines_json 可改毫升和 lot_id。多瓶未关不自挑。撤回整巡用 void_consumption。"""
+    """从酒单倒酒。people_json 是人名数组，多选一人一杯。lines_json 可改毫升、换同一类的 spirit_id、指定 lot_id。同一支多瓶未关不自挑。撤回整巡用 void_consumption。"""
     return _call(client().pour_menu, menu_item_id, person, lines_json, note, people_json)
 
 
