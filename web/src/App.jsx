@@ -61,6 +61,8 @@ export default function App() {
   const [byeEmail, setByeEmail] = useState("");
   const [byePass, setByePass] = useState("");
   const [byeBusy, setByeBusy] = useState(false);
+  const [byeToken, setByeToken] = useState("");
+  const [claimBusy, setClaimBusy] = useState(false);
   const [pwd, setPwd] = useState(false);
   const [pwdOld, setPwdOld] = useState("");
   const [pwdNew, setPwdNew] = useState("");
@@ -160,13 +162,41 @@ export default function App() {
     }
   };
 
+  const takeOrphans = async () => {
+    setClaimBusy(true);
+    try {
+      await api.claimOrphans();
+      const user = await api.me();
+      setMe(user);
+      toast("已经接手没主人的库存");
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setClaimBusy(false);
+    }
+  };
+
+  const downloadByeBackup = async () => {
+    setByeBusy(true);
+    try {
+      const token = await api.exportBackup();
+      setByeToken(token || "");
+      toast("备份已下载。15 分钟内可以确认注销");
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setByeBusy(false);
+    }
+  };
+
   const wipeAccount = async () => {
     setByeBusy(true);
     try {
-      await api.deleteAccount(byeEmail, byePass);
+      await api.deleteAccount(byeEmail, byePass, byeToken || undefined);
       setBye(false);
       setByeEmail("");
       setByePass("");
+      setByeToken("");
       setMe(null);
     } catch (e) {
       oops(e.message);
@@ -253,6 +283,15 @@ export default function App() {
                     }}
                   >
                     邮箱还没验证，再发一封
+                  </button>
+                )}
+                {me.can_claim && me.orphans && (
+                  <button
+                    className="mt-1 block text-amber underline"
+                    disabled={claimBusy}
+                    onClick={takeOrphans}
+                  >
+                    还有没主人的库存（{me.orphans.beans} 支豆 / {me.orphans.bottles} 瓶酒），点这里接手
                   </button>
                 )}
               </div>
@@ -427,16 +466,21 @@ export default function App() {
         open={bye}
         onClose={() => !byeBusy && setBye(false)}
         title="注销账号"
-        sub="会删掉你的豆、酒、照片和流水，不可恢复。别人的库不动。小主机上若这是接手真库存的那个号，注销等于清掉吧台账本。"
+        sub="会删掉你的豆、酒、照片和流水，不可恢复。别人的库不动。接手过库存的号必须先下载备份。"
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setBye(false)} disabled={byeBusy}>
+            <Btn variant="ghost" onClick={() => { setBye(false); setByeToken(""); }} disabled={byeBusy}>
               取消
             </Btn>
+            {me?.claimed && (
+              <Btn variant="ghost" onClick={downloadByeBackup} disabled={byeBusy}>
+                {byeToken ? "已下载，再下一份" : "先下载备份"}
+              </Btn>
+            )}
             <Btn
               variant="danger"
               onClick={wipeAccount}
-              disabled={byeBusy || !byeEmail || byePass.length < 8}
+              disabled={byeBusy || !byeEmail || byePass.length < 8 || (me?.claimed && !byeToken)}
             >
               确认注销
             </Btn>
@@ -484,6 +528,7 @@ function Gate({ onIn, oops, toast }) {
   const [devLink, setDevLink] = useState("");
   const [invite, setInvite] = useState("");
   const [inviteRequired, setInviteRequired] = useState(false);
+  const [orphans, setOrphans] = useState(null);
 
   useEffect(() => {
     api.authConfig().then((c) => setInviteRequired(Boolean(c.invite_required))).catch(() => {});
@@ -540,9 +585,14 @@ function Gate({ onIn, oops, toast }) {
         toast?.("本机没配邮箱，打开验证链接即可");
         setDevLink(user.verify_url);
       }
+      setOrphans(null);
       onIn(user);
     } catch (e) {
-      oops(e.message);
+      if (mode === "register" && e.isOrphans) {
+        setOrphans(e.body);
+      } else {
+        oops(e.message);
+      }
     } finally {
       setBusy(false);
     }
@@ -558,8 +608,8 @@ function Gate({ onIn, oops, toast }) {
   const sub = {
     login: "每人一份私库。豆、酒、进价只给自己看。",
     register: inviteRequired
-      ? "云上要填邀请码。第一个注册的人会接手这份豆和酒。"
-      : "第一个注册的人会接手这台机器上已有的豆和酒。",
+      ? "云上要填邀请码。若这台机器还有没主人的库存，注册时会问你要不要接手。"
+      : "每人一份空库。若这台机器还有没主人的库存，注册时会问你要不要接手。",
     forgot: "填注册时的邮箱。有这个账号就发重设链接。",
     reset: "新密码至少 8 个字符。改完要重新登录。",
     verify: "请稍等。",
@@ -620,7 +670,7 @@ function Gate({ onIn, oops, toast }) {
             </Field>
           </div>
         )}
-        {mode !== "verify" && (
+        {mode !== "verify" && !orphans && (
           <Btn
             className="mt-5 w-full justify-center"
             onClick={submit}
@@ -628,6 +678,50 @@ function Gate({ onIn, oops, toast }) {
           >
             {mode === "register" ? "注册并进入" : mode === "forgot" ? "发送重设链接" : mode === "reset" ? "保存新密码" : "登录"}
           </Btn>
+        )}
+        {orphans && (
+          <div className="mt-5 space-y-3 text-center">
+            <p className="text-sm text-muted">
+              这台机器上还有 {orphans.beans || 0} 支豆、{orphans.bottles || 0} 瓶酒没有主人。
+            </p>
+            <Btn
+              className="w-full justify-center"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const user = await api.register(email, password, invite, "take");
+                  setOrphans(null);
+                  onIn(user);
+                } catch (e) {
+                  oops(e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              接手吧台账本
+            </Btn>
+            <Btn
+              variant="ghost"
+              className="w-full justify-center"
+              disabled={busy}
+              onClick={async () => {
+                setBusy(true);
+                try {
+                  const user = await api.register(email, password, invite, "leave");
+                  setOrphans(null);
+                  onIn(user);
+                } catch (e) {
+                  oops(e.message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              只要空库，库存先留在机器上
+            </Btn>
+          </div>
         )}
         {note && <p className="mt-4 text-center text-sm text-muted">{note}</p>}
         {devLink && (

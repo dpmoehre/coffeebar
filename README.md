@@ -90,8 +90,8 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 不用 Docker。小主机上只要三个脚本：
 
 1. **装一次**：双击 [`scripts/install.bat`](scripts/install.bat)。会装 uv、同步 Python 依赖、装前端依赖并构建。没有 Node 会提示你去装 LTS。
-2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。打开后先注册/登录（密码输错可以试 5 次，满了等一分钟）；**这台机器上第一个注册的人会接手已有的豆和酒**，之后再注册的人是空库。登录页可以忘记密码；本机没配邮箱时，重设/验证链接会直接出现在页面上。上云再配 `COFFEEBAR_SMTP_*`，并在 HTTPS 下打开 `COFFEEBAR_COOKIE_SECURE=1`。侧栏可以改密码（这台继续登着，别的设备会被踢）和注销账号；注销会删掉**自己的**豆、酒、照片和流水，不可恢复；不要拿接手真库存的那个号去试。
-3. **备份**：小主机双击 [`scripts/backup.bat`](scripts/backup.bat)；Mac / Linux 跑 `bash scripts/backup.sh`。服务开着也能安全导出，库文件和照片打包进用户目录下的 `coffeebar-backup`。
+2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。打开后先注册/登录（密码输错可以试 5 次，满了等一分钟）。这台机器上还有没主人的豆和酒时，注册会问你要接手还是只要空库，不会再悄悄领走。登录页可以忘记密码；本机没配邮箱时，重设/验证链接会直接出现在页面上。上云再配 `COFFEEBAR_SMTP_*`，并在 HTTPS 下打开 `COFFEEBAR_COOKIE_SECURE=1`。侧栏可以改密码（这台继续登着，别的设备会被踢）和注销账号；接手过库存的号注销前必须先下载备份。不要拿真库存号去试注销。
+3. **备份**：小主机双击 [`scripts/backup.bat`](scripts/backup.bat)；Mac / Linux 跑 `bash scripts/backup.sh`。服务开着也能安全导出。默认写用户目录下的 `coffeebar-backup`；设 `COFFEEBAR_BACKUP_DIR` 可指到第二块盘。还原用 [`scripts/restore.bat`](scripts/restore.bat) / [`scripts/restore.sh`](scripts/restore.sh)，演练请加 `--dest` 指到临时目录，不要直接盖真库存。定时示例见 [`scripts/backup-schedule.md`](scripts/backup-schedule.md)。
 4. **上云**：不能用 GitHub Pages。用 Render 跑 Docker，步骤见 [docs/009-🚧-上云Render.md](docs/009-🚧-上云Render.md)。公网请设邀请码；第一个用邀请码注册的人会接手迁上去的豆和酒。切过去之后小主机不要再开 `start.bat`。
 
 想用 `http://coffee` 这种短地址而不是带端口的，再加 Caddy：`caddy run --config scripts/Caddyfile`。
@@ -103,7 +103,8 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 ```bash
 bash scripts/install.sh    # 装一次：uv sync + 前端构建
 bash scripts/start.sh      # 日常用：http://localhost:8000 ，会打开浏览器
-bash scripts/backup.sh     # 备份库和照片到 ~/coffeebar-backup
+bash scripts/backup.sh     # 备份库和照片（默认同目录；可设 COFFEEBAR_BACKUP_DIR）
+bash scripts/restore.sh 备份.zip --dest /tmp/cb-restore --force   # 还原到临时目录演练
 ```
 
 改前端源码要热更新时：
@@ -162,5 +163,5 @@ uv run python scripts/smoke.py   # 对着真在跑的服务走一遍完整场景
 
 1. 先读 [CLAUDE.md](CLAUDE.md)。
 2. 查 [todo.md](todo.md) 与 `docs/` 文件名，决定复用还是新建看板。
-3. 产品范围与 MCP 以 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md) 为准。真库存耐久按 [docs/010-⌛️-防毁账与本地耐久.md](docs/010-⌛️-防毁账与本地耐久.md) 的 H1 接手，不要重开范围。
+3. 产品范围与 MCP 以 [docs/002-🚧-豆子档案与小主机架构.md](docs/002-🚧-豆子档案与小主机架构.md) 为准。真库存耐久见 [docs/010-🚧-防毁账与本地耐久.md](docs/010-🚧-防毁账与本地耐久.md)；1–4 已落地，不要重开范围。
 4. 子任务用 H1（✅ / 🚧 / ⌛️）；收尾只在 `todo.md` 顶部追加索引，并更新本页的功能或使用说明（不写日期流水账）。

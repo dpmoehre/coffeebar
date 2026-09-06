@@ -12,6 +12,7 @@ CREATE TABLE IF NOT EXISTS account (
   password_hash  TEXT    NOT NULL,
   email_verified INTEGER NOT NULL DEFAULT 0,
   created_at     TEXT    NOT NULL,
+  claimed_at     TEXT,
   status         TEXT    NOT NULL DEFAULT 'active'
 );
 
@@ -26,7 +27,7 @@ CREATE INDEX IF NOT EXISTS idx_session_account ON auth_session(account_id);
 CREATE TABLE IF NOT EXISTS auth_token (
   token      TEXT    PRIMARY KEY,
   account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
-  purpose    TEXT    NOT NULL CHECK (purpose IN ('verify', 'reset')),
+  purpose    TEXT    NOT NULL CHECK (purpose IN ('verify', 'reset', 'export')),
   created_at TEXT    NOT NULL,
   expires_at TEXT    NOT NULL,
   used_at    TEXT

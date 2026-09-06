@@ -294,6 +294,7 @@ def adjust_lot(conn: sqlite3.Connection, lot_id: int, actual_ml: float, note: st
     return {"delta_ml": round(delta, 1), "balance_ml": after["balance_ml"]}
 
 
+@db.atomic
 def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> dict:
     lot = get_lot(conn, lot_id)
     if not lot:
@@ -311,6 +312,7 @@ def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) ->
     return {"deviation_ml": round(balance, 1), "lot": get_lot(conn, lot_id)}
 
 
+@db.atomic
 def record_drink(conn: sqlite3.Connection, data: dict) -> dict:
     """倒一杯。瓶子由人选；毫升是当次实际倒了多少。"""
     lot = get_lot(conn, int(data["lot_id"]))
@@ -412,6 +414,7 @@ def _wipe_spirit(conn: sqlite3.Connection, bottle_id: int) -> None:
     conn.execute("DELETE FROM bottle WHERE id = ?", (bottle_id,))
 
 
+@db.atomic
 def delete_spirit(conn: sqlite3.Connection, bottle_id: int, mode: str | None = None) -> dict:
     """从酒库拿掉一张卡。
 

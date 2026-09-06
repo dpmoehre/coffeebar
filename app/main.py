@@ -3,17 +3,19 @@
 from __future__ import annotations
 
 import sqlite3
+import tempfile
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, Response, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.background import BackgroundTask
 
 from . import auth, brew as brew_mod
 from . import admin as admin_mod
-from . import db, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
+from . import backup, db, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -65,6 +67,14 @@ async def _bad_photo(request: Request, exc: photos.BadPhoto):
     return JSONResponse(status_code=400, content={"error": "bad_photo", "message": str(exc)})
 
 
+@app.exception_handler(auth.OrphansPending)
+async def _orphans_pending(request: Request, exc: auth.OrphansPending):
+    return JSONResponse(
+        status_code=400,
+        content={"error": "orphans", "message": str(exc), **exc.counts},
+    )
+
+
 # ── 账号 ────────────────────────────────────────────────────
 
 
@@ -92,6 +102,7 @@ def api_register(
         payload.get("email") or "",
         payload.get("password") or "",
         payload.get("invite"),
+        payload.get("claim"),
     )
     token = auth.issue_session(conn, account["id"])
     auth.set_cookie(response, token, request)
@@ -202,8 +213,18 @@ def api_resend_verify(
 
 
 @app.get("/api/me")
-def api_me(account: dict = Depends(current_account)):
-    return auth.public_account(account)
+def api_me(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
+    account = auth.require_account(request, conn)
+    return {**auth.public_account(account), **auth.stock_flags(conn, account["id"])}
+
+
+@app.post("/api/auth/claim-orphans")
+def api_claim_orphans(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    account = auth.require_account(request, conn)
+    return auth.claim_now(conn, account)
 
 
 @app.post("/api/auth/password")
@@ -233,9 +254,38 @@ def api_delete_me(
     # 只用这一根连接：再 Depends(current_account) 会另开一条，Windows 上删账号容易锁库 500
     account = auth.require_account(request, conn)
     ratelimit.check(request, "delete", 5)
-    auth.delete_account(conn, account, payload.get("email") or "", payload.get("password") or "")
+    auth.delete_account(
+        conn,
+        account,
+        payload.get("email") or "",
+        payload.get("password") or "",
+        payload.get("export_token"),
+    )
     auth.clear_cookie(response)
     return {"ok": True}
+
+
+@app.get("/api/ops/backup")
+def api_ops_backup(
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    account = auth.require_account(request, conn)
+    if not auth.is_stock_account(conn, account["id"]):
+        raise HTTPException(403, "空号不用下整库")
+    tmp = tempfile.NamedTemporaryFile(suffix=".zip", delete=False)
+    tmp.close()
+    path = Path(tmp.name)
+    backup.write_zip(path)
+    token = auth.issue_export_token(conn, account["id"])
+    auth.mark_claimed(conn, account["id"])
+    return FileResponse(
+        path,
+        filename="coffeebar-backup.zip",
+        media_type="application/zip",
+        headers={"X-Export-Token": token, "Access-Control-Expose-Headers": "X-Export-Token"},
+        background=BackgroundTask(lambda p=path: p.unlink(missing_ok=True)),
+    )
 
 
 # ── 豆子 ────────────────────────────────────────────────────

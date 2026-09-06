@@ -56,7 +56,16 @@ def test_first_account_claims_orphans(conn):
     store.create_bean(conn, {"name": "老豆"})
     spirits.create_spirit(conn, {"name": "老酒", "category": "单一麦芽威士忌"})
     store.ensure_person(conn, "戚浩辰")
-    out = auth.register(conn, "owner@coffeebar.local", "testpass1")
+    try:
+        auth.register(conn, "owner@coffeebar.local", "testpass1")
+        raise AssertionError("应该先问要不要接手")
+    except auth.OrphansPending as exc:
+        assert exc.counts["beans"] == 1
+        assert exc.counts["bottles"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 0
+    assert conn.execute("SELECT owner_id FROM bean").fetchone()["owner_id"] is None
+
+    out = auth.register(conn, "owner@coffeebar.local", "testpass1", claim="take")
     assert out["claimed"] is True
     assert store.list_beans(conn, owner_id=out["id"])[0]["name"] == "老豆"
     assert spirits.list_spirits(conn, owner_id=out["id"])[0]["name"] == "老酒"
@@ -65,6 +74,22 @@ def test_first_account_claims_orphans(conn):
     other = auth.register(conn, "other@coffeebar.local", "testpass1")
     assert other["claimed"] is False
     assert store.list_beans(conn, owner_id=other["id"]) == []
+
+
+def test_leave_orphans_then_claim(conn):
+    store.create_bean(conn, {"name": "老豆"})
+    first = auth.register(conn, "owner@coffeebar.local", "testpass1", claim="leave")
+    assert first["claimed"] is False
+    assert conn.execute("SELECT owner_id FROM bean").fetchone()["owner_id"] is None
+    try:
+        auth.register(conn, "guest@coffeebar.local", "testpass1", claim="take")
+        raise AssertionError("第二人不能接手")
+    except Exception as exc:
+        from fastapi import HTTPException
+
+        assert isinstance(exc, HTTPException) and exc.status_code == 403
+    auth.claim_now(conn, first)
+    assert store.list_beans(conn, owner_id=first["id"])[0]["name"] == "老豆"
 
 
 def test_password_is_argon2(conn):
@@ -348,9 +373,22 @@ def test_delete_account_wipes_only_self(client):
         ).status_code
         == 401
     )
+    denied = client.post(
+        "/api/auth/delete", json={"email": "gone@coffeebar.local", "password": "testpass1"}
+    )
+    assert denied.status_code == 400
+    pack = client.get("/api/ops/backup")
+    assert pack.status_code == 200
+    token = pack.headers.get("x-export-token")
+    assert token
     assert (
         client.post(
-            "/api/auth/delete", json={"email": "gone@coffeebar.local", "password": "testpass1"}
+            "/api/auth/delete",
+            json={
+                "email": "gone@coffeebar.local",
+                "password": "testpass1",
+                "export_token": token,
+            },
         ).status_code
         == 200
     )

@@ -14,12 +14,23 @@ export const holderName = () =>
 
 export class ApiError extends Error {
   constructor(status, body) {
-    super(body?.message || body?.error || body?.detail || `请求失败（${status}）`);
+    const detail = body?.detail;
+    const nested = detail && typeof detail === "object" ? detail : null;
+    const src = nested || body || {};
+    const msg =
+      src.message ||
+      (typeof detail === "string" ? detail : null) ||
+      src.error ||
+      `请求失败（${status}）`;
+    super(msg);
     this.status = status;
-    this.body = body || {};
+    this.body = { ...(body || {}), ...src };
   }
   get isLocked() {
     return this.status === 423;
+  }
+  get isOrphans() {
+    return this.body?.error === "orphans";
   }
 }
 
@@ -91,13 +102,35 @@ export const api = {
   me: () => req("GET", "/api/me"),
   health: () => req("GET", "/api/health"),
   authConfig: () => req("GET", "/api/auth/config"),
-  register: (email, password, invite) =>
-    req("POST", "/api/auth/register", { email, password, invite }),
+  register: (email, password, invite, claim) =>
+    req("POST", "/api/auth/register", { email, password, invite, claim }),
+  claimOrphans: () => req("POST", "/api/auth/claim-orphans", {}),
   login: (email, password) => req("POST", "/api/auth/login", { email, password }),
   logout: () => req("POST", "/api/auth/logout", {}),
   changePassword: (oldPassword, newPassword) =>
     req("POST", "/api/auth/password", { old: oldPassword, new: newPassword }),
-  deleteAccount: (email, password) => req("POST", "/api/auth/delete", { email, password }),
+  deleteAccount: (email, password, exportToken) =>
+    req("POST", "/api/auth/delete", { email, password, export_token: exportToken }),
+  exportBackup: async () => {
+    const res = await fetch("/api/ops/backup", {
+      credentials: "include",
+      headers: { "X-Session": SESSION, "X-Source": "web" },
+    });
+    if (!res.ok) {
+      const data = readBody(await res.text(), res.status);
+      throw new ApiError(res.status, data);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "coffeebar-backup.zip";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    return res.headers.get("X-Export-Token");
+  },
   forgot: (email) => req("POST", "/api/auth/forgot", { email }),
   reset: (token, password) => req("POST", "/api/auth/reset", { token, password }),
   verify: (token) => req("POST", "/api/auth/verify", { token }),

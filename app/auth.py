@@ -19,6 +19,7 @@ COOKIE = "coffeebar_auth"
 ITERATIONS = 200_000
 SESSION_DAYS = 30
 TOKEN_HOURS = 2
+EXPORT_MINUTES = 15
 HASHER = PasswordHasher()
 
 
@@ -114,11 +115,100 @@ def require_invite(invite: str | None) -> None:
         raise HTTPException(403, "邀请码不对")
 
 
+class OrphansPending(Exception):
+    def __init__(self, counts: dict):
+        self.counts = counts
+        super().__init__("这台机器上还有没主人的库存，请选择接手或只要空库")
+
+
+CLAIM_TABLES = ("bean", "bottle", "person", "recipe", "menu_item", "drink_serve", "user_gear")
+
+
+def _table_exists(conn: sqlite3.Connection, name: str) -> bool:
+    row = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?", (name,)
+    ).fetchone()
+    return bool(row)
+
+
+def orphan_counts(conn: sqlite3.Connection) -> dict[str, int]:
+    out = {"beans": 0, "bottles": 0, "people": 0, "recipes": 0}
+    mapping = {
+        "bean": "beans",
+        "bottle": "bottles",
+        "person": "people",
+        "recipe": "recipes",
+        "menu_item": "recipes",
+        "drink_serve": "recipes",
+        "user_gear": "recipes",
+    }
+    for table, key in mapping.items():
+        if not _table_exists(conn, table):
+            continue
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if "owner_id" not in cols:
+            continue
+        n = conn.execute(f"SELECT COUNT(*) FROM {table} WHERE owner_id IS NULL").fetchone()[0]
+        out[key] = out.get(key, 0) + int(n)
+    return out
+
+
+def has_orphans(conn: sqlite3.Connection) -> bool:
+    return any(orphan_counts(conn).values())
+
+
+def earliest_account_id(conn: sqlite3.Connection) -> int | None:
+    row = conn.execute("SELECT id FROM account ORDER BY id ASC LIMIT 1").fetchone()
+    return None if not row else int(row["id"])
+
+
+def can_claim(conn: sqlite3.Connection, account_id: int) -> bool:
+    earliest = earliest_account_id(conn)
+    return earliest is not None and earliest == account_id
+
+
+def is_stock_account(conn: sqlite3.Connection, account_id: int) -> bool:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(account)")}
+    if "claimed_at" in cols:
+        row = conn.execute("SELECT claimed_at FROM account WHERE id = ?", (account_id,)).fetchone()
+        if row and row["claimed_at"]:
+            return True
+    beans = conn.execute(
+        "SELECT COUNT(*) FROM bean WHERE owner_id = ? AND (deleted_at IS NULL OR deleted_at = '')",
+        (account_id,),
+    ).fetchone()[0]
+    bottles = conn.execute(
+        "SELECT COUNT(*) FROM bottle WHERE owner_id = ? AND (deleted_at IS NULL OR deleted_at = '')",
+        (account_id,),
+    ).fetchone()[0]
+    return int(beans) + int(bottles) > 0
+
+
+def mark_claimed(conn: sqlite3.Connection, account_id: int) -> None:
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(account)")}
+    if "claimed_at" in cols:
+        conn.execute(
+            "UPDATE account SET claimed_at = COALESCE(claimed_at, ?) WHERE id = ?",
+            (db.now(), account_id),
+        )
+
+
+def stock_flags(conn: sqlite3.Connection, account_id: int) -> dict:
+    counts = orphan_counts(conn)
+    claimable = can_claim(conn, account_id) and any(counts.values())
+    return {
+        "claimed": is_stock_account(conn, account_id),
+        "can_claim": claimable,
+        "orphans": counts if claimable else None,
+    }
+
+
 def register(
     conn: sqlite3.Connection,
     email: str,
     password: str,
     invite: str | None = None,
+    claim: str | None = None,
 ) -> dict:
     require_invite(invite)
     email = normalize_email(email)
@@ -128,27 +218,48 @@ def register(
         raise HTTPException(400, "密码至少 8 个字符")
     if conn.execute("SELECT id FROM account WHERE email = ?", (email,)).fetchone():
         raise HTTPException(409, "这个邮箱已经注册过了")
-    first = conn.execute("SELECT COUNT(*) FROM account").fetchone()[0] == 0
-    # 没配 SMTP 的本机：注册即视为已验证，不然小主机没法用
+    orphans = orphan_counts(conn)
+    pending = any(orphans.values())
+    choice = (claim or "").strip().lower() or None
+    if pending and choice not in ("take", "leave"):
+        raise OrphansPending(orphans)
+    if pending and choice == "take" and earliest_account_id(conn) is not None:
+        raise HTTPException(403, "只有这台机器上最早的账号能接手库存")
     verified = 0 if mail.configured() else 1
-    cur = conn.execute(
-        """INSERT INTO account (email, password_hash, email_verified, created_at)
-           VALUES (?, ?, ?, ?)""",
-        (email, hash_password(password), verified, db.now()),
-    )
-    account_id = int(cur.lastrowid)
-    if first:
-        claim_orphans(conn, account_id)
-    verify_token = None
-    if not verified:
-        verify_token = issue_token(conn, account_id, "verify")
+    with db.transaction(conn):
+        cur = conn.execute(
+            """INSERT INTO account (email, password_hash, email_verified, created_at)
+               VALUES (?, ?, ?, ?)""",
+            (email, hash_password(password), verified, db.now()),
+        )
+        account_id = int(cur.lastrowid)
+        claimed = False
+        if pending and choice == "take":
+            claim_orphans(conn, account_id)
+            mark_claimed(conn, account_id)
+            claimed = True
+        verify_token = None
+        if not verified:
+            verify_token = issue_token(conn, account_id, "verify")
     return {
         "id": account_id,
         "email": email,
-        "claimed": first,
+        "claimed": claimed,
         "email_verified": bool(verified),
         "verify_token": verify_token,
     }
+
+
+def claim_now(conn: sqlite3.Connection, account: dict) -> dict:
+    aid = int(account["id"])
+    if not can_claim(conn, aid):
+        raise HTTPException(403, "只有这台机器上最早的账号能接手库存")
+    if not has_orphans(conn):
+        raise HTTPException(400, "没有没主人的库存")
+    with db.transaction(conn):
+        claim_orphans(conn, aid)
+        mark_claimed(conn, aid)
+    return {"ok": True, "claimed": True}
 
 
 def login(conn: sqlite3.Connection, email: str, password: str) -> dict:
@@ -165,13 +276,42 @@ def login(conn: sqlite3.Connection, email: str, password: str) -> dict:
 
 
 def claim_orphans(conn: sqlite3.Connection, account_id: int) -> None:
-    """第一个账号接手老库里还没主人的豆、酒、人。小主机升级时走这里。"""
-    conn.execute("UPDATE bean SET owner_id = ? WHERE owner_id IS NULL", (account_id,))
-    conn.execute("UPDATE bottle SET owner_id = ? WHERE owner_id IS NULL", (account_id,))
-    conn.execute("UPDATE person SET owner_id = ? WHERE owner_id IS NULL", (account_id,))
+    """接手老库里还没主人的豆、酒、人、酒单。"""
+    for table in CLAIM_TABLES:
+        if not _table_exists(conn, table):
+            continue
+        cols = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        if "owner_id" not in cols:
+            continue
+        conn.execute(f"UPDATE {table} SET owner_id = ? WHERE owner_id IS NULL", (account_id,))
 
 
-def delete_account(conn: sqlite3.Connection, account: dict, email: str, password: str) -> None:
+def peek_export_token(conn: sqlite3.Connection, token: str | None, account_id: int) -> bool:
+    if not token:
+        return False
+    row = conn.execute("SELECT * FROM auth_token WHERE token = ?", (token,)).fetchone()
+    if (
+        not row
+        or row["purpose"] != "export"
+        or row["used_at"]
+        or int(row["account_id"]) != account_id
+        or row["expires_at"] <= db.now()
+    ):
+        return False
+    return True
+
+
+def consume_export_token(conn: sqlite3.Connection, token: str) -> None:
+    conn.execute("UPDATE auth_token SET used_at = ? WHERE token = ?", (db.now(), token))
+
+
+def delete_account(
+    conn: sqlite3.Connection,
+    account: dict,
+    email: str,
+    password: str,
+    export_token: str | None = None,
+) -> None:
     """注销：核过邮箱和密码后，删掉这个人的豆、酒、人、照片和账号。不可恢复。"""
     if normalize_email(email) != normalize_email(account["email"]):
         raise HTTPException(400, "请输入这个账号的邮箱")
@@ -179,52 +319,84 @@ def delete_account(conn: sqlite3.Connection, account: dict, email: str, password
     if not row or not check_password(password, row["password_hash"]):
         raise HTTPException(401, "密码不对")
     aid = int(account["id"])
+    if is_stock_account(conn, aid) and not peek_export_token(conn, export_token, aid):
+        raise HTTPException(400, "先导出备份")
     from . import photos
 
+    paths = photos.paths_for_owner(conn, aid)
+    # SQLite：事务里改 foreign_keys 要等 COMMIT 才生效，必须先关再 BEGIN
+    conn.execute("PRAGMA foreign_keys = OFF")
     try:
-        # 老库重建 person 后，流水外键可能还指着已经不存在的 _old_person
-        conn.execute("PRAGMA foreign_keys = OFF")
-        for path in photos.paths_for_owner(conn, aid):
-            photos.remove(path)
-        conn.execute(
-            """DELETE FROM write_lock WHERE resource IN (
-                 SELECT 'bean:' || id FROM bean WHERE owner_id = ?
-                 UNION
-                 SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
-                 UNION
-                 SELECT 'recipe:' || id FROM recipe WHERE owner_id = ?
-               )""",
-            (aid, aid, aid),
-        )
-        conn.execute(
-            """UPDATE consumption_event SET person_id = NULL
-               WHERE person_id IN (SELECT id FROM person WHERE owner_id = ?)""",
-            (aid,),
-        )
-        cons_owned = """
-            SELECT c.id FROM consumption_event c
-            LEFT JOIN bean_lot l ON l.id = c.lot_id
-            LEFT JOIN bean b ON b.id = l.bean_id
-            LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
-            LEFT JOIN bottle sp ON sp.id = bl.bottle_id
-            WHERE b.owner_id = ? OR sp.owner_id = ?
-        """
-        conn.execute(f"DELETE FROM consumption_photo WHERE cons_id IN ({cons_owned})", (aid, aid))
-        conn.execute(f"DELETE FROM consumption_audit WHERE cons_id IN ({cons_owned})", (aid, aid))
-        conn.execute(f"DELETE FROM consumption_event WHERE id IN ({cons_owned})", (aid, aid))
-        conn.execute("DELETE FROM drink_serve WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM menu_item WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM recipe WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
-        conn.execute("DELETE FROM auth_token WHERE account_id = ?", (aid,))
-        conn.execute("DELETE FROM auth_session WHERE account_id = ?", (aid,))
-        conn.execute("DELETE FROM account WHERE id = ?", (aid,))
+        with db.transaction(conn):
+            if export_token:
+                consume_export_token(conn, export_token)
+            conn.execute(
+                """DELETE FROM write_lock WHERE resource IN (
+                     SELECT 'bean:' || id FROM bean WHERE owner_id = ?
+                     UNION
+                     SELECT 'bottle:' || id FROM bottle WHERE owner_id = ?
+                     UNION
+                     SELECT 'recipe:' || id FROM recipe WHERE owner_id = ?
+                   )""",
+                (aid, aid, aid),
+            )
+            conn.execute(
+                """UPDATE consumption_event SET person_id = NULL
+                   WHERE person_id IN (SELECT id FROM person WHERE owner_id = ?)""",
+                (aid,),
+            )
+            cons_owned = """
+                SELECT c.id FROM consumption_event c
+                LEFT JOIN bean_lot l ON l.id = c.lot_id
+                LEFT JOIN bean b ON b.id = l.bean_id
+                LEFT JOIN bottle_lot bl ON bl.id = c.bottle_lot_id
+                LEFT JOIN bottle sp ON sp.id = bl.bottle_id
+                WHERE b.owner_id = ? OR sp.owner_id = ?
+            """
+            conn.execute(f"DELETE FROM consumption_photo WHERE cons_id IN ({cons_owned})", (aid, aid))
+            conn.execute(f"DELETE FROM consumption_audit WHERE cons_id IN ({cons_owned})", (aid, aid))
+            conn.execute(f"DELETE FROM consumption_event WHERE id IN ({cons_owned})", (aid, aid))
+            conn.execute("DELETE FROM drink_serve WHERE owner_id = ?", (aid,))
+            conn.execute("DELETE FROM menu_item WHERE owner_id = ?", (aid,))
+            conn.execute("DELETE FROM recipe WHERE owner_id = ?", (aid,))
+            conn.execute("DELETE FROM bean WHERE owner_id = ?", (aid,))
+            conn.execute("DELETE FROM bottle WHERE owner_id = ?", (aid,))
+            conn.execute("DELETE FROM person WHERE owner_id = ?", (aid,))
+            if _table_exists(conn, "user_gear"):
+                conn.execute(
+                    """UPDATE gear_catalog SET source_gear_id = NULL
+                       WHERE source_gear_id IN (SELECT id FROM user_gear WHERE owner_id = ?)""",
+                    (aid,),
+                )
+                conn.execute(
+                    "UPDATE gear_catalog SET collected_by = NULL WHERE collected_by = ?", (aid,)
+                )
+                conn.execute(
+                    """DELETE FROM user_gear_photo
+                       WHERE gear_id IN (SELECT id FROM user_gear WHERE owner_id = ?)""",
+                    (aid,),
+                )
+                conn.execute("DELETE FROM user_gear WHERE owner_id = ?", (aid,))
+            if _table_exists(conn, "kingdom_score"):
+                conn.execute("DELETE FROM kingdom_score WHERE author_id = ?", (aid,))
+            if _table_exists(conn, "kingdom_favorite"):
+                conn.execute("DELETE FROM kingdom_favorite WHERE account_id = ?", (aid,))
+            if _table_exists(conn, "kingdom_bean"):
+                conn.execute(
+                    "UPDATE kingdom_bean SET collected_by = NULL WHERE collected_by = ?", (aid,)
+                )
+            conn.execute("DELETE FROM auth_token WHERE account_id = ?", (aid,))
+            conn.execute("DELETE FROM auth_session WHERE account_id = ?", (aid,))
+            conn.execute("DELETE FROM account WHERE id = ?", (aid,))
     except sqlite3.Error as exc:
         raise HTTPException(500, f"注销没做成：{exc}") from exc
     finally:
-        conn.execute("PRAGMA foreign_keys = ON")
+        try:
+            conn.execute("PRAGMA foreign_keys = ON")
+        except sqlite3.Error:
+            pass
+    for path in paths:
+        photos.remove(path)
 
 
 def issue_session(conn: sqlite3.Connection, account_id: int) -> str:
@@ -279,6 +451,20 @@ def issue_token(conn: sqlite3.Connection, account_id: int, purpose: str) -> str:
         """INSERT INTO auth_token (token, account_id, purpose, created_at, expires_at)
            VALUES (?, ?, ?, ?, ?)""",
         (token, account_id, purpose, now, expires),
+    )
+    return token
+
+
+def issue_export_token(conn: sqlite3.Connection, account_id: int) -> str:
+    token = secrets.token_urlsafe(32)
+    now = db.now()
+    expires = (db.parse(now) + timedelta(minutes=EXPORT_MINUTES)).replace(
+        microsecond=0
+    ).isoformat(sep=" ")
+    conn.execute(
+        """INSERT INTO auth_token (token, account_id, purpose, created_at, expires_at)
+           VALUES (?, ?, 'export', ?, ?)""",
+        (token, account_id, now, expires),
     )
     return token
 

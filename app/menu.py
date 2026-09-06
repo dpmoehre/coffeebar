@@ -381,6 +381,7 @@ def _write_serve(conn: sqlite3.Connection, item: dict, data: dict, person_id, ts
     return get_serve(conn, serve_id)
 
 
+@db.atomic
 def pour(
     conn: sqlite3.Connection,
     data: dict,
@@ -501,6 +502,7 @@ def get_serve(conn: sqlite3.Connection, serve_id: int) -> dict | None:
     }
 
 
+@db.atomic
 def void_serve(conn: sqlite3.Connection, serve_id: int, reason: str | None = None) -> dict:
     serve = get_serve(conn, serve_id)
     if not serve:
@@ -523,6 +525,7 @@ def unvoid_serve(conn: sqlite3.Connection, serve_id: int) -> None:
             store.unvoid_one(conn, ln["id"])
 
 
+@db.atomic
 def delete_voided_serve(conn: sqlite3.Connection, serve_id: int) -> dict:
     serve = get_serve(conn, serve_id)
     if not serve:
