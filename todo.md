@@ -11,6 +11,7 @@
 
 ## 2026-09-06
 
+- **MCP 红点（Mac）**：`.cursor/mcp.json` 写死了小主机 Windows 的 exe 路径，这台 Mac 上启动失败。改成按仓库 `.venv` 找 `coffeebar-mcp`。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)。
 - **配方 MCP**：`list_recipes` / `get_recipe` / `update_recipe`（一次换基酒）/ `delete_recipe` / `delete_menu_item`。见 [docs/004-🚧](docs/004-🚧-基酒第一期.md)。
 - **配方能换基酒**：上架鸡尾酒可先选已有配方再改基酒；「改配方」也能换酒，一次保存。见 [docs/004-🚧](docs/004-🚧-基酒第一期.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)#10。
 - **删酒卡**：对标豆卡 keep / wipe。`DELETE /api/spirits/{id}`，酒卡页右上「删除酒卡」，MCP `delete_spirit`。有未撤回倒酒必须选留下钱或连记录抹；酒单/配方引用一并摘掉。不要 wipe 格兰杰。见 [docs/004-🚧](docs/004-🚧-基酒第一期.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。
