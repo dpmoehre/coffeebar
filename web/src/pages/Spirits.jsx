@@ -137,7 +137,7 @@ export default function Spirits({ onOpen, toast, oops }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">酒水</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">酒水</h1>
           <p className="mt-2 mb-0 text-muted">
             {data
               ? `在库 ${(data.spirits || []).filter((s) => s.in_stock).length} 支基酒。同样的酒再买一瓶，进酒卡点「再入一瓶」。`

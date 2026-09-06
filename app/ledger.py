@@ -62,8 +62,7 @@ def month(
                    COALESCE(SUM(CASE WHEN c.kind = 'drink' AND c.voided_at IS NULL
                                      THEN c.amount_ml ELSE 0 END), 0) AS drinks_ml,
                    COALESCE(SUM(CASE WHEN c.voided_at IS NULL THEN
-                     (CASE c.kind WHEN 'drink' THEN c.amount_ml ELSE c.amount_g END)
-                     * COALESCE(c.unit_cost, 0) ELSE 0 END), 0) AS spent
+                     {store.EVENT_COST_SQL} ELSE 0 END), 0) AS spent
             FROM consumption_event c
             WHERE {where}
             GROUP BY day
@@ -109,10 +108,7 @@ def day(
                    c.voided_at, c.as_cup, c.note, c.serve_id,
                    b.name AS bean_name, sp.name AS spirit_name, p.name AS person_name,
                    s.name AS serve_name, s.kind AS serve_kind,
-                   CASE c.kind
-                     WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0))
-                     ELSE (c.amount_g * COALESCE(c.unit_cost, 0))
-                   END AS cost
+                   {store.EVENT_COST_SQL} AS cost
             FROM consumption_event c
             LEFT JOIN bean_lot l ON l.id = c.lot_id
             LEFT JOIN bean b ON b.id = l.bean_id
@@ -250,10 +246,7 @@ def export_zip(conn: sqlite3.Connection, owner_id: int, period: str = "month") -
             f"""SELECT {_DAY} AS day, c.at, c.kind, c.voided_at, c.as_cup,
                        b.name AS bean_name, sp.name AS spirit_name, p.name AS person_name,
                        c.amount_g, c.amount_ml, c.unit_cost, c.note,
-                       CASE c.kind
-                         WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0))
-                         ELSE (c.amount_g * COALESCE(c.unit_cost, 0))
-                       END AS cost
+                       {store.EVENT_COST_SQL} AS cost
                 FROM consumption_event c
                 LEFT JOIN bean_lot l ON l.id = c.lot_id
                 LEFT JOIN bean b ON b.id = l.bean_id

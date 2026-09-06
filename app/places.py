@@ -524,6 +524,19 @@ def guess(origin: str | None, producer: str | None = None) -> list[dict]:
     return out
 
 
+def copy_to(conn: sqlite3.Connection, src_id: int, dest_id: int) -> None:
+    """把原卡的钉拷到新卡。广场领回用，不带认证。"""
+    pins = list_places(conn, src_id)
+    conn.execute("DELETE FROM bean_place WHERE bean_id = ?", (dest_id,))
+    ts = db.now()
+    for p in pins:
+        conn.execute(
+            """INSERT INTO bean_place (bean_id, lat, lng, label, source, created_at)
+               VALUES (?, ?, ?, ?, ?, ?)""",
+            (dest_id, p["lat"], p["lng"], p.get("label"), p.get("source") or "copy", ts),
+        )
+
+
 def list_places(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
     return [
         dict(r)

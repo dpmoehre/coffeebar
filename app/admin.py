@@ -6,7 +6,7 @@ import sqlite3
 
 from fastapi import HTTPException
 
-from . import auth, db, photos, places, spirits, stats, store
+from . import auth, db, gear, photos, places, spirits, stats, store
 
 
 def _public(row: sqlite3.Row | dict) -> dict:
@@ -33,6 +33,9 @@ def list_accounts(conn: sqlite3.Connection) -> list[dict]:
         d["people"] = conn.execute(
             "SELECT COUNT(*) FROM person WHERE owner_id = ?", (aid,)
         ).fetchone()[0]
+        d["gear"] = conn.execute(
+            "SELECT COUNT(*) FROM user_gear WHERE owner_id = ?", (aid,)
+        ).fetchone()[0]
         summary = stats.summary(conn, "all", owner_id=aid)
         d["spent"] = summary.get("spent")
         d["bought"] = summary.get("bought")
@@ -55,6 +58,7 @@ def dossier(conn: sqlite3.Connection, account_id: int) -> dict:
     bottles = spirits.list_spirits(conn, "all", owner_id=account_id)
     people = store.list_people(conn, include_inactive=True, owner_id=account_id)
     log = store.list_consumption(conn, owner_id=account_id, limit=80)
+    kit = gear.list_gear(conn, account_id)
     return {
         "account": account,
         "summary": stats.summary(conn, "all", owner_id=account_id),
@@ -62,6 +66,7 @@ def dossier(conn: sqlite3.Connection, account_id: int) -> dict:
         "spirits": bottles,
         "people": people,
         "consumption": log,
+        "gear": kit,
     }
 
 

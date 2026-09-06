@@ -16,7 +16,7 @@ export function Btn({ variant = "solid", className = "", ...rest }) {
 
 export function Panel({ className = "", children }) {
   return (
-    <div className={`rounded-2xl border border-line bg-panel p-6 ${className}`}>{children}</div>
+    <div className={`rounded-2xl border border-line bg-panel p-4 md:p-6 ${className}`}>{children}</div>
   );
 }
 

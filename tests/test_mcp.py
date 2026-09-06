@@ -119,9 +119,14 @@ def test_tool_catalog_covers_bar():
         "review_guess_places",
         "list_plaza",
         "get_plaza_bean",
+        "take_plaza_bean",
+        "list_plaza_gear",
+        "get_plaza_gear",
+        "take_plaza_gear",
         "list_gear",
         "get_gear",
         "create_gear",
+        "open_filter_pack",
         "update_gear",
         "delete_gear",
         "add_gear_photo",
@@ -283,12 +288,14 @@ def test_mcp_plaza_is_sanitized(client):
     hit = next(b for b in listed if b["id"] == public["id"])
     assert hit["offer"]["price"] == 88
     assert hit["offer"]["nominal_g"] == 200
+    assert hit["offer"]["per_g"] == pytest.approx(88 / 200)
     for key in ("unit_cost", "balance_g", "lots", "log", "owner_id", "price", "remaining_value"):
         assert key not in hit
     card = c.get_plaza_bean(public["id"])
     assert card["name"] == "MCP广场浅烘"
     assert card["offer"]["price"] == 88
     assert card["offer"]["nominal_g"] == 200
+    assert card["offer"]["per_g"] == pytest.approx(88 / 200)
     assert "unit_cost" not in card
     assert "balance_g" not in card
     roast = c.list_plaza(roast="浅烘", q="MCP广场")["beans"]
@@ -300,6 +307,34 @@ def test_mcp_plaza_is_sanitized(client):
         raise AssertionError("私卡不应出现在广场")
     except ApiError as exc:
         assert exc.status == 404
+
+
+def test_mcp_take_plaza_bean_and_gear(client):
+    bean = client.post(
+        "/api/beans",
+        json={"name": "MCP领回豆", "origin": "肯尼亚", "visibility": "public"},
+    ).json()
+    gear = client.post(
+        "/api/gear",
+        json={"name": "MCP领回壶", "kind": "kettle", "family": "gooseneck", "visibility": "public"},
+    ).json()
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "mcp-taker@coffeebar.local", "password": "testpass1"},
+    )
+    c = _mcp(client)
+    listed = c.list_plaza_gear()["gear"]
+    assert any(g["id"] == gear["id"] for g in listed)
+    got = c.get_plaza_gear(gear["id"])
+    assert got["name"] == "MCP领回壶"
+    copied_gear = c.take_plaza_gear(gear["id"])
+    assert copied_gear["source_gear_id"] == gear["id"]
+    assert c.take_plaza_gear(gear["id"])["id"] == copied_gear["id"]
+    copied_bean = c.take_plaza_bean(bean["id"])
+    assert copied_bean["source_bean_id"] == bean["id"]
+    assert copied_bean["lots"] == []
+    assert c.take_plaza_bean(bean["id"])["id"] == copied_bean["id"]
 
 
 def test_mcp_kingdom_cupping(client, monkeypatch):

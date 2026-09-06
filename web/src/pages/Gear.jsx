@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus, Trash } from "../icons.jsx";
-import { Btn, Chip, Empty, Field, Input, Modal, Panel, Select } from "../ui.jsx";
+import { Btn, Chip, Empty, Field, Input, Modal, Panel, Select, money } from "../ui.jsx";
 
 const KIND_LABEL = {
   dripper: "滤杯",
@@ -11,10 +11,11 @@ const KIND_LABEL = {
   grinder: "磨豆机",
   scale: "称",
   server: "分享壶",
+  filter: "滤纸",
   other: "其他",
 };
 
-export default function Gear({ toast, oops }) {
+export default function Gear({ toast, oops, focusId }) {
   const [meta, setMeta] = useState(null);
   const [mine, setMine] = useState(null);
   const [catalog, setCatalog] = useState([]);
@@ -36,6 +37,12 @@ export default function Gear({ toast, oops }) {
     load();
   }, []);
 
+  useEffect(() => {
+    if (!focusId || !mine) return;
+    const hit = mine.find((g) => g.id === focusId);
+    if (hit) setPicked(hit);
+  }, [focusId, mine]);
+
   const shown = useMemo(() => {
     const list = mine || [];
     return kind === "all" ? list : list.filter((g) => g.kind === kind);
@@ -48,9 +55,9 @@ export default function Gear({ toast, oops }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">器具</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">器具</h1>
           <p className="mt-2 mb-0 text-muted">
-            登记你台面上的滤杯、壶、磨和称。冲煮指导会按你有的滤杯给建议。
+            登记你台面上的滤杯、壶、磨、称和滤纸。滤纸新开一包再开始计张，冲一杯会加上纸钱。公开后别人能在广场领走一份拷贝。
           </p>
         </div>
         <Btn onClick={() => setAdding(true)}>
@@ -135,10 +142,19 @@ export default function Gear({ toast, oops }) {
               <div className="p-5">
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="serif truncate text-lg">{g.name}</div>
-                  {g.collected ? <span className="shrink-0 text-xs text-amber">已收录</span> : null}
+                  <span className="shrink-0 text-xs text-muted">
+                    {[g.visibility === "public" ? "公开" : null, g.collected ? "已收录" : null]
+                      .filter(Boolean)
+                      .join(" · ")}
+                  </span>
                 </div>
                 <div className="mt-1 truncate text-[13px] text-muted">
                   {[g.kind_label, g.family_label, g.brand, g.model].filter(Boolean).join(" · ")}
+                  {g.kind === "filter"
+                    ? g.counting
+                      ? ` · 还剩 ${g.sheets_left} 张`
+                      : " · 还没开始计张"
+                    : ""}
                 </div>
               </div>
             </article>
@@ -181,7 +197,16 @@ export default function Gear({ toast, oops }) {
 }
 
 function blank(kind = "dripper") {
-  return { name: "", kind, family: "", brand: "", model: "", brew_method: "", note: "" };
+  return {
+    name: "",
+    kind,
+    family: "",
+    brand: "",
+    model: "",
+    brew_method: "",
+    note: "",
+    visibility: "private",
+  };
 }
 
 function GearForm({ open, meta, initial, onClose, onDone, oops }) {
@@ -200,6 +225,7 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
               model: initial.model || "",
               brew_method: initial.brew_method || "",
               note: initial.note || "",
+              visibility: initial.visibility || "private",
             }
           : blank(),
       );
@@ -224,6 +250,7 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
         model: f.model,
         brew_method: f.brew_method || null,
         note: f.note,
+        visibility: f.visibility || "private",
       };
       const item = initial
         ? await api.updateGear(initial.id, payload)
@@ -241,7 +268,11 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
       open={open}
       onClose={() => !busy && onClose()}
       title={initial ? "改这件器具" : "登记器具"}
-      sub="滤杯请选锥形或平底，冲煮建议才知道该推 V60 还是 Kalita。"
+      sub={
+        f.kind === "filter"
+          ? "滤纸新开一包再开始计张。现在手里这包剩多少不要估。"
+          : "滤杯请选锥形或平底，冲煮建议才知道该推 V60 还是 Kalita。"
+      }
       footer={
         <>
           <Btn variant="ghost" onClick={onClose} disabled={busy}>
@@ -317,12 +348,21 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
           <Input value={f.note} onChange={(e) => setF({ ...f, note: e.target.value })} />
         </Field>
       </div>
+      <label className="mt-3 flex items-center gap-2 text-sm text-cream">
+        <input
+          type="checkbox"
+          checked={f.visibility === "public"}
+          onChange={(e) => setF({ ...f, visibility: e.target.checked ? "public" : "private" })}
+        />
+        公开到广场，别人可以领一份到自己台面
+      </label>
     </Modal>
   );
 }
 
 function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
   const [editing, setEditing] = useState(false);
+  const [packing, setPacking] = useState(false);
   const [busy, setBusy] = useState(false);
 
   const upload = async (file) => {
@@ -371,6 +411,26 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
           <Btn variant="ghost" onClick={onClose}>
             关闭
           </Btn>
+          <Btn
+            variant="ghost"
+            onClick={async () => {
+              const next = item.visibility === "public" ? "private" : "public";
+              try {
+                const out = await api.updateGear(item.id, { visibility: next });
+                toast(next === "public" ? "已公开。别人能在广场领走一份" : "已改回只自己看");
+                onChange(out);
+              } catch (e) {
+                oops(e.message);
+              }
+            }}
+          >
+            {item.visibility === "public" ? "改回只自己看" : "公开这件"}
+          </Btn>
+          {(item.kind === "filter" || item.kind === "other") && (
+            <Btn variant="ghost" onClick={() => setPacking(true)}>
+              开一包
+            </Btn>
+          )}
           <Btn variant="ghost" onClick={() => setEditing(true)}>
             改字段
           </Btn>
@@ -381,10 +441,29 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
         </>
       }
     >
+      {item.visibility === "public" ? (
+        <p className="mt-0 mb-3 text-sm text-amber">已公开。别人能在广场领走一份拷贝。</p>
+      ) : null}
+      {item.source_gear_id ? (
+        <p className="mt-0 mb-3 text-[13px] text-muted">从广场领来的拷贝，改自己的不影响原件。</p>
+      ) : null}
       {item.collected && item.catalog?.note ? (
         <p className="mt-0 mb-4 text-sm text-amber">目录备注：{item.catalog.note}</p>
       ) : null}
       {item.note ? <p className="mt-0 mb-4 text-sm text-muted">{item.note}</p> : null}
+      {item.kind === "filter" || item.counting ? (
+        <p className="mt-0 mb-4 text-sm text-amber">
+          {item.counting
+            ? `已开始计张，还剩 ${item.sheets_left} 张。冲一杯扣一张${
+                item.open_pack?.unit_cost != null ? `，大约 ${money(item.open_pack.unit_cost)} / 张` : ""
+              }。`
+            : "还没开始计张。现在这包剩多少不要估，等新开一包再记枚数和价钱。"}
+        </p>
+      ) : item.kind === "other" ? (
+        <p className="mt-0 mb-4 text-[13px] text-muted">
+          如果这是滤纸，点「开一包」会改成滤纸耗材，才开始计张。旧包剩多少不要估。
+        </p>
+      ) : null}
       <div className="flex flex-wrap gap-2">
         <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-line px-3.5 py-1.5 text-sm hover:border-amber">
           <Plus className="h-3.5 w-3.5" />
@@ -419,6 +498,17 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
       ) : (
         <p className="mt-3 mb-0 text-[13px] text-muted">还没有照片。手机拍完直接传。</p>
       )}
+      <PackForm
+        open={packing}
+        item={item}
+        onClose={() => setPacking(false)}
+        onDone={(next) => {
+          setPacking(false);
+          toast("已开一包，开始计张");
+          onChange(next);
+        }}
+        oops={oops}
+      />
       <GearForm
         open={editing}
         meta={meta}
@@ -431,6 +521,65 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
         }}
         oops={oops}
       />
+    </Modal>
+  );
+}
+
+function PackForm({ open, item, onClose, onDone, oops }) {
+  const [sheets, setSheets] = useState("100");
+  const [price, setPrice] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    if (open) {
+      setSheets("100");
+      setPrice("");
+    }
+  }, [open]);
+
+  const save = async () => {
+    const n = Number(sheets);
+    if (!(n > 0)) {
+      oops("先写这一包多少张");
+      return;
+    }
+    setBusy(true);
+    try {
+      const out = await api.openFilterPack(item.id, {
+        sheets: n,
+        price: price === "" ? null : Number(price),
+      });
+      onDone(out);
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      open={open}
+      onClose={() => !busy && onClose()}
+      title="开一包滤纸"
+      sub="从这一包开始计张。不要把旧包剩多少估进去。"
+      footer={
+        <>
+          <Btn variant="ghost" onClick={onClose} disabled={busy}>
+            取消
+          </Btn>
+          <Btn onClick={save} disabled={busy || !(Number(sheets) > 0)}>
+            开始计张
+          </Btn>
+        </>
+      }
+    >
+      <Field label="这一包多少张">
+        <Input type="number" value={sheets} onChange={(e) => setSheets(e.target.value)} autoFocus />
+      </Field>
+      <Field label="这一包多少钱" hint="可空。填了冲一杯才会加上纸钱">
+        <Input type="number" step="0.01" value={price} onChange={(e) => setPrice(e.target.value)} />
+      </Field>
     </Modal>
   );
 }

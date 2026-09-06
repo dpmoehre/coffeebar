@@ -389,6 +389,47 @@ def purge_kingdom_score_photos(conn: sqlite3.Connection, score_id: int) -> int:
     return len(rows)
 
 
+def copy_to_bean(conn: sqlite3.Connection, bean_id: int, kind: str, rel_path: str) -> dict | None:
+    """广场领回：拷一张豆卡图到自己的卡上。"""
+    try:
+        copied = copy_file(rel_path)
+    except BadPhoto:
+        return None
+    if kind not in ("pack", "tray", "card"):
+        kind = "pack"
+    cur = conn.execute(
+        "INSERT INTO bean_photo (bean_id, kind, path, created_at) VALUES (?, ?, ?, ?)",
+        (bean_id, kind, copied, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "bean_id": bean_id,
+        "kind": kind,
+        "path": copied,
+        "url": f"/{copied}",
+        "thumb": thumb_url(copied),
+    }
+
+
+def copy_to_user_gear(conn: sqlite3.Connection, gear_id: int, rel_path: str) -> dict | None:
+    """广场领回：拷一张器具图到自己台面。"""
+    try:
+        copied = copy_file(rel_path)
+    except BadPhoto:
+        return None
+    cur = conn.execute(
+        "INSERT INTO user_gear_photo (gear_id, path, created_at) VALUES (?, ?, ?)",
+        (gear_id, copied, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "gear_id": gear_id,
+        "path": copied,
+        "url": f"/{copied}",
+        "thumb": thumb_url(copied),
+    }
+
+
 def copy_to_kingdom(conn: sqlite3.Connection, kingdom_id: int, rel_path: str) -> dict | None:
     try:
         copied = copy_file(rel_path)

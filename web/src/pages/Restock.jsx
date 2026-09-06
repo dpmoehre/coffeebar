@@ -4,15 +4,17 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api.js";
 import { Empty, Panel, g, ml, money } from "../ui.jsx";
 
-export default function Restock({ onOpen, onOpenSpirit, toast, oops }) {
+export default function Restock({ onOpen, onOpenSpirit, onOpenGear, toast, oops }) {
   const [items, setItems] = useState(null);
   const [spirits, setSpirits] = useState([]);
+  const [filters, setFilters] = useState([]);
   const fileRef = useRef({});
 
   const load = () =>
     api.restock().then((d) => {
       setItems(d.items || []);
       setSpirits(d.spirits || []);
+      setFilters(d.filters || []);
     });
 
   useEffect(() => {
@@ -36,19 +38,19 @@ export default function Restock({ onOpen, onOpenSpirit, toast, oops }) {
     return <p className="mt-6 text-muted">读取中…</p>;
   }
 
-  const empty = items.length === 0 && spirits.length === 0;
+  const empty = items.length === 0 && spirits.length === 0 && filters.length === 0;
 
   return (
     <>
       <header>
-        <h1 className="serif m-0 text-3xl font-semibold">补货</h1>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">补货</h1>
         <p className="mt-2 mb-0 text-muted">
-          账面不够一杯、瓶子空了，或照这个喝法撑不了几天的，会出现在这里。豆子能挂货架对照图。
+          账面不够一杯、瓶子空了、滤纸用完或只剩不多，会出现在这里。豆子能挂货架对照图。
         </p>
       </header>
 
       {empty ? (
-        <Empty>豆和酒都还够。</Empty>
+        <Empty>豆、酒和滤纸都还够。</Empty>
       ) : (
         <>
           {items.length > 0 && (
@@ -108,6 +110,48 @@ export default function Restock({ onOpen, onOpenSpirit, toast, oops }) {
                       />
                     </label>
                   </div>
+                ))}
+              </Panel>
+            </section>
+          )}
+
+          {filters.length > 0 && (
+            <section className="mt-6">
+              <h2 className="serif m-0 text-lg">滤纸</h2>
+              <Panel className="mt-3">
+                {filters.map((it) => (
+                  <button
+                    type="button"
+                    key={`filter-${it.id}`}
+                    onClick={() => onOpenGear?.(it.id)}
+                    className="flex w-full cursor-pointer items-center gap-4 border-b border-line py-3.5
+                      text-left last:border-0 hover:opacity-80"
+                  >
+                    {it.cover ? (
+                      <img
+                        src={it.cover.thumb || it.cover.url}
+                        alt=""
+                        className="h-11 w-11 shrink-0 rounded-full object-cover"
+                      />
+                    ) : (
+                      <div
+                        className="h-11 w-11 shrink-0 rounded-full"
+                        style={{
+                          background: "radial-gradient(circle at 35% 35%, #7a5333, #2a1c14)",
+                        }}
+                      />
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="truncate">
+                        {it.name}
+                        <span className="ml-2 text-[13px] text-muted">还剩 {it.sheets_left} 张</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-muted">
+                        {it.reasons.join(" · ")}
+                        {it.last_price ? ` · 上次 ${money(it.last_price)}` : ""}
+                      </div>
+                    </div>
+                  </button>
                 ))}
               </Panel>
             </section>

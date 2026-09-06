@@ -105,7 +105,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
             ‹ 回豆库
           </button>
           <div className="flex flex-wrap items-baseline gap-3">
-            <h1 className="serif m-0 truncate text-3xl font-semibold">{bean.name}</h1>
+            <h1 className="serif m-0 truncate text-2xl font-semibold md:text-3xl">{bean.name}</h1>
             {bean.certified ? (
               <span className="text-xs text-amber">已认证</span>
             ) : bean.visibility === "public" ? (
@@ -315,8 +315,11 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
                       </span>
                       <span className="mx-2 text-muted">·</span>
                       <span className="text-amber">{r.amount_g} g</span>
-                      {r.unit_cost ? (
-                        <span className="ml-2 text-amber">{money(r.cost)}</span>
+                      {r.cost != null && (r.unit_cost != null || r.filter_unit_cost != null) ? (
+                        <span className="ml-2 text-amber">
+                          {money(r.cost)}
+                          {r.filter_sheets ? " · 含滤纸" : ""}
+                        </span>
                       ) : null}
                     </div>
                     <div className="mt-1 text-[13px] text-muted">
@@ -776,6 +779,8 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
   const [amount, setAmount] = useState("");
   const [who, setWho] = useState("");
   const [totalS, setTotalS] = useState("");
+  const [paper, setPaper] = useState(null);
+  const [packId, setPackId] = useState(null);
 
   useEffect(() => {
     if (!open) return;
@@ -784,11 +789,27 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
     setAmount(String(prefill?.dose ?? dose.avg_g ?? 15));
     setWho(localStorage.getItem("coffeebar-last-person") || "");
     setTotalS(prefill?.total_s != null ? String(prefill.total_s) : "");
+    setPaper(undefined);
+    setPackId(null);
+    api.brewMethods().then((d) => {
+      const f = d.filter || null;
+      setPaper(f);
+      if (f?.pack_id) setPackId(f.pack_id);
+    });
   }, [open, lots, prefill, dose]);
 
   const lot = lots.find((l) => l.id === lotId);
   const amt = Number(amount);
   const short = lot && amt > lot.balance_g;
+  const pickedPack = paper?.need_pick
+    ? (paper.packs || []).find((p) => p.pack_id === packId)
+    : paper;
+  const paperUnit = pickedPack?.unit_cost;
+  const beanUnit = lot?.unit_cost;
+  const cupCost =
+    beanUnit != null || paperUnit != null
+      ? (amt > 0 && beanUnit != null ? amt * beanUnit : 0) + (paperUnit || 0)
+      : null;
 
   const submit = async () => {
     try {
@@ -800,12 +821,15 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
         brew_ratio: prefill?.ratio,
         brew_total_s: totalS ? Number(totalS) : undefined,
         brew_stages: prefill?.stages,
+        filter_pack_id: packId || undefined,
       });
       if (who.trim()) localStorage.setItem("coffeebar-last-person", who.trim());
+      const paperBit =
+        res.filter_cost != null ? ` · 滤纸 ${money(res.filter_cost)}` : "";
       onDone(
         `${who.trim() || "没记谁"} · 扣 ${amt} g${
           res.cost ? ` · ${money(res.cost)}` : ""
-        }${res.near_empty ? " · 这袋快见底了" : ""}`
+        }${paperBit}${res.near_empty ? " · 这袋快见底了" : ""}`
       );
     } catch (e) {
       oops(e.message);
@@ -890,8 +914,30 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
             ? `这袋只剩 ${Math.round(lot.balance_g)} g，不够 ${amt} g。换一袋、改粉量，或先盘点补重。`
             : `这袋账面 ${Math.round(lot.balance_g)} g，按你平均 ${dose.avg_g} g 还能冲约 ${Math.floor(
                 lot.balance_g / dose.avg_g
-              )} 杯${lot.unit_cost ? ` · 这杯约 ${money(amt * lot.unit_cost)}` : ""}`}
+              )} 杯${cupCost != null ? ` · 这杯约 ${money(cupCost)}` : ""}`}
       </p>
+      {paper === undefined ? null : paper?.need_pick ? (
+        <div>
+          <span className="mb-2 block text-[13px] text-muted">
+            开着好几包滤纸，选一包才扣纸；不选这杯不加纸钱
+          </span>
+          <div className="flex flex-wrap gap-2">
+            {(paper.packs || []).map((p) => (
+              <Chip key={p.pack_id} on={packId === p.pack_id} onClick={() => setPackId(p.pack_id)}>
+                {p.name || "滤纸"} · 还剩 {p.remaining} 张
+                {p.unit_cost != null ? ` · ${money(p.unit_cost)} / 张` : ""}
+              </Chip>
+            ))}
+          </div>
+        </div>
+      ) : paper?.remaining != null ? (
+        <p className="text-[13px] text-muted">
+          滤纸还剩 {paper.remaining} 张
+          {paper.unit_cost != null ? `，这杯加 ${money(paper.unit_cost)}` : "，这包没记价钱"}
+        </p>
+      ) : (
+        <p className="text-[13px] text-muted">还没开包计张，这杯不加纸钱。</p>
+      )}
 
       <Field label="谁喝的" hint="打个新名字就有这个人；留空表示没记">
         <Input value={who} onChange={(e) => setWho(e.target.value)} placeholder="丁瀚舟" />

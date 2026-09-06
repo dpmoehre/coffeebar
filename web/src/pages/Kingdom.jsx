@@ -60,7 +60,7 @@ function KingdomList({ onOpen, oops }) {
   return (
     <>
       <header>
-        <h1 className="serif m-0 text-3xl font-semibold">咖啡王国</h1>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">咖啡王国</h1>
         <p className="mt-2 mb-0 text-muted">
           大家一起评同一支豆。杯测、评价、收藏都挂在这里，看不见别人的进价和还剩多少。
         </p>
@@ -166,7 +166,7 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
         </button>
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
-            <h1 className="serif m-0 truncate text-3xl font-semibold">{bean.name}</h1>
+            <h1 className="serif m-0 truncate text-2xl font-semibold md:text-3xl">{bean.name}</h1>
             <p className="mt-2 mb-0 text-muted">
               {[bean.origin, bean.varietal, bean.process, bean.roast, bean.altitude]
                 .filter(Boolean)

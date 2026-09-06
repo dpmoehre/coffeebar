@@ -114,7 +114,7 @@ export default function Calendar({ personId: initialPerson, toast, oops }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">日历</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">日历</h1>
           <p className="mt-2 mb-0 text-muted">
             上点咖啡、下点酒。一天从凌晨 4 点算起，夜里喝的算前一天。
           </p>

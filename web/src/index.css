@@ -17,6 +17,13 @@
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
 }
 
+html {
+  /* rem 跟这一档走。只写在 body 上时，标题仍按浏览器默认 16px 算，手机上会偏大。 */
+  font-size: 15px;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
 html,
 body,
 #root {
@@ -28,8 +35,17 @@ body {
   background: var(--color-bg);
   color: var(--color-cream);
   font-family: var(--font-sans);
-  font-size: 15px;
+  font-size: 1rem;
   line-height: 1.5;
+}
+
+@media (max-width: 767.98px) {
+  html {
+    font-size: 13px;
+  }
+  body {
+    line-height: 1.45;
+  }
 }
 
 /* 数字与标题走衬线，这是整站气质的来源 */

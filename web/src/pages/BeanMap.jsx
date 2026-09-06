@@ -154,7 +154,7 @@ export default function BeanMap({ focusId, onOpen, toast, oops }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <header className="shrink-0">
-        <h1 className="serif m-0 text-3xl font-semibold">地图</h1>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">地图</h1>
         <p className="mt-2 mb-0 text-muted">
           {data
             ? `${beans.length} 支豆 · ${pins.length} 个落点 · ${data.unplaced.length} 支还没定点`

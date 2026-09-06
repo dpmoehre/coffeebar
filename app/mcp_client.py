@@ -218,6 +218,9 @@ class Client:
     def create_gear(self, data: dict):
         return self.request("POST", "/api/gear", json=data)
 
+    def open_filter_pack(self, gear_id: int, data: dict):
+        return self.request("POST", f"/api/gear/{gear_id}/packs", json=data)
+
     def update_gear(self, gear_id: int, data: dict):
         return self.request("PATCH", f"/api/gear/{gear_id}", json=data)
 
@@ -570,6 +573,7 @@ class Client:
         process=None,
         tags=None,
         in_kingdom: bool | None = None,
+        sort: str = "recent",
     ):
         params: dict[str, str] = {}
         if certified_only:
@@ -589,11 +593,25 @@ class Client:
             params["in_kingdom"] = "1"
         elif in_kingdom is False:
             params["in_kingdom"] = "0"
+        if sort and sort != "recent":
+            params["sort"] = sort
         qs = urlencode(params)
         return self.request("GET", f"/api/public/beans{f'?{qs}' if qs else ''}")
 
     def get_plaza_bean(self, bean_id: int):
         return self.request("GET", f"/api/public/beans/{bean_id}")
+
+    def take_plaza_bean(self, bean_id: int):
+        return self.request("POST", f"/api/public/beans/{bean_id}/take", json={})
+
+    def list_plaza_gear(self):
+        return self.request("GET", "/api/public/gear")
+
+    def get_plaza_gear(self, gear_id: int):
+        return self.request("GET", f"/api/public/gear/{gear_id}")
+
+    def take_plaza_gear(self, gear_id: int):
+        return self.request("POST", f"/api/public/gear/{gear_id}/take", json={})
 
     def list_kingdom(self, saved: bool = False):
         return self.request("GET", f"/api/kingdom{'?saved=1' if saved else ''}")

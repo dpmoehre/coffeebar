@@ -6,7 +6,7 @@ export default function Updates() {
   return (
     <>
       <header>
-        <h1 className="serif m-0 text-3xl font-semibold">更新</h1>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">更新</h1>
         <p className="mt-2 mb-0 text-muted">每次上了什么，用白话记在最上面。同一天写在一张卡片里。</p>
       </header>
       <ol className="mt-6 mb-0 flex list-none flex-col gap-4 p-0">
@@ -17,8 +17,8 @@ export default function Updates() {
               <div className="mt-3 space-y-5">
                 {day.items.map((entry) => (
                   <section key={entry.title}>
-                    <h2 className="serif mt-0 mb-0 text-xl">{entry.title}</h2>
-                    <ul className="mt-2 mb-0 list-disc space-y-1.5 pl-5 text-[15px] leading-relaxed text-cream">
+                    <h2 className="serif mt-0 mb-0 text-lg md:text-xl">{entry.title}</h2>
+                    <ul className="mt-2 mb-0 list-disc space-y-1.5 pl-5 leading-relaxed text-cream">
                       {entry.notes.map((note) => (
                         <li key={note}>{note}</li>
                       ))}

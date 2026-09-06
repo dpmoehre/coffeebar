@@ -60,7 +60,7 @@ export default function SpiritCard({ id, onBack, toast, oops }) {
 
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">{spirit.name}</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">{spirit.name}</h1>
           <p className="mt-2 mb-0 text-muted">
             {[
               spirit.kind,

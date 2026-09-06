@@ -58,6 +58,9 @@ export default function App() {
   const [beanId, setBeanId] = useState(null);
   const [spiritId, setSpiritId] = useState(null);
   const [plazaId, setPlazaId] = useState(null);
+  const [plazaGearId, setPlazaGearId] = useState(null);
+  const [plazaTab, setPlazaTab] = useState("beans");
+  const [gearFocusId, setGearFocusId] = useState(null);
   const [kingdomId, setKingdomId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   const [calendarPerson, setCalendarPerson] = useState(null);
@@ -98,6 +101,8 @@ export default function App() {
     setBeanId(id);
     setSpiritId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setKingdomId(null);
     setMapFocus(null);
     setPage("bean");
@@ -105,6 +110,8 @@ export default function App() {
 
   const openPlaza = useCallback((id) => {
     setPlazaId(id);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setBeanId(null);
     setSpiritId(null);
     setKingdomId(null);
@@ -112,11 +119,35 @@ export default function App() {
     setPage("plaza-bean");
   }, []);
 
+  const openPlazaGear = useCallback((id) => {
+    setPlazaGearId(id);
+    setPlazaId(null);
+    setGearFocusId(null);
+    setBeanId(null);
+    setSpiritId(null);
+    setKingdomId(null);
+    setMapFocus(null);
+    setPage("plaza-gear");
+  }, []);
+
+  const openGear = useCallback((id) => {
+    setGearFocusId(id);
+    setBeanId(null);
+    setSpiritId(null);
+    setPlazaId(null);
+    setPlazaGearId(null);
+    setKingdomId(null);
+    setMapFocus(null);
+    setPage("gear");
+  }, []);
+
   const openKingdom = useCallback((id) => {
     setKingdomId(id);
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setMapFocus(null);
     setPage("kingdom-bean");
   }, []);
@@ -125,6 +156,8 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setKingdomId(null);
     setMapFocus(id || null);
     setPage("map");
@@ -134,6 +167,8 @@ export default function App() {
     setSpiritId(id);
     setBeanId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setKingdomId(null);
     setPage("spirit");
   }, []);
@@ -142,6 +177,8 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setKingdomId(null);
     setMapFocus(null);
     setCalendarPerson(personId || null);
@@ -152,9 +189,14 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
     setKingdomId(null);
     setMapFocus(null);
     setCalendarPerson(null);
+    if (key !== "plaza" && key !== "plaza-bean" && key !== "plaza-gear") {
+      setPlazaTab("beans");
+    }
     setPage(key);
   };
 
@@ -235,7 +277,7 @@ export default function App() {
   const navOn = (key) =>
     page === key ||
     (key === "beans" && page === "bean") ||
-    (key === "plaza" && page === "plaza-bean") ||
+    (key === "plaza" && (page === "plaza-bean" || page === "plaza-gear")) ||
     (key === "kingdom" && page === "kingdom-bean") ||
     (key === "spirits" && page === "spirit");
 
@@ -400,14 +442,17 @@ export default function App() {
         className={
           fill
             ? "flex h-full min-h-0 min-w-0 flex-1 flex-col overflow-hidden px-5 py-4 md:px-10 md:py-6"
-            : "min-w-0 w-full px-5 py-7 md:px-12 md:py-9"
+            : "min-w-0 w-full px-5 py-5 md:px-12 md:py-9"
         }
       >
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
-        {page === "gear" && <Gear toast={toast} oops={oops} />}
+        {page === "gear" && <Gear toast={toast} oops={oops} focusId={gearFocusId} />}
         {page === "plaza" && (
           <Plaza
+            tab={plazaTab}
+            onTab={setPlazaTab}
             onOpen={openPlaza}
+            onOpenGear={openPlazaGear}
             onOpenKingdom={openKingdom}
             admin={!!me?.admin}
             toast={toast}
@@ -421,6 +466,15 @@ export default function App() {
             onOpenMine={openBean}
             onOpenKingdom={openKingdom}
             admin={!!me?.admin}
+            toast={toast}
+            oops={oops}
+          />
+        )}
+        {page === "plaza-gear" && (
+          <Plaza
+            openGearId={plazaGearId}
+            onBack={() => go("plaza")}
+            onOpenMineGear={openGear}
             toast={toast}
             oops={oops}
           />
@@ -450,7 +504,13 @@ export default function App() {
         )}
         {page === "menu" && <Menu onOpenSpirit={openSpirit} toast={toast} oops={oops} />}
         {page === "restock" && (
-          <Restock onOpen={openBean} onOpenSpirit={openSpirit} toast={toast} oops={oops} />
+          <Restock
+            onOpen={openBean}
+            onOpenSpirit={openSpirit}
+            onOpenGear={openGear}
+            toast={toast}
+            oops={oops}
+          />
         )}
         {page === "stats" && <Stats toast={toast} oops={oops} />}
         {page === "calendar" && (

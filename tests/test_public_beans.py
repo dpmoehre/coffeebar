@@ -1,5 +1,7 @@
 """公开豆卡去敏、认证审核、改关键字段掉认证。"""
 
+import pytest
+
 from app.mcp_client import ApiError, Client
 
 
@@ -23,12 +25,149 @@ def test_public_card_hides_money_and_stock(client):
     assert card["origin"] == "埃塞俄比亚"
     assert card["certified"] is False
     assert card["mine"] is True
-    for key in ("unit_cost", "balance_g", "lots", "log", "owner_id", "remaining_value"):
+    assert card.get("kingdom") in (None, {})
+    assert card["offer"]["price"] == 88
+    assert card["offer"]["nominal_g"] == 200
+    assert card["offer"]["per_g"] == pytest.approx(88 / 200)
+    for key in ("unit_cost", "balance_g", "lots", "log", "owner_id", "remaining_value", "price"):
         assert key not in card
     plaza = client.get("/api/public/beans").json()["beans"]
-    assert any(b["id"] == bean["id"] for b in plaza)
+    hit = next(b for b in plaza if b["id"] == bean["id"])
+    assert hit["offer"]["price"] == 88
+    assert hit["offer"]["nominal_g"] == 200
+    assert hit["offer"]["per_g"] == pytest.approx(88 / 200)
     hidden = client.get("/api/public/beans?certified=1").json()["beans"]
     assert all(b["id"] != bean["id"] for b in hidden)
+
+
+def test_plaza_sorts_cost_roast_origin(client):
+    cheap = client.post(
+        "/api/beans",
+        json={
+            "name": "排哥伦比亚深烘",
+            "origin": "哥伦比亚",
+            "roast": "深烘",
+            "nominal_g": 200,
+            "price": 60,
+            "visibility": "public",
+        },
+    ).json()
+    mid = client.post(
+        "/api/beans",
+        json={
+            "name": "排肯尼亚中烘",
+            "origin": "肯尼亚",
+            "roast": "中烘",
+            "nominal_g": 200,
+            "price": 80,
+            "visibility": "public",
+        },
+    ).json()
+    dear = client.post(
+        "/api/beans",
+        json={
+            "name": "排埃塞浅烘",
+            "origin": "埃塞俄比亚",
+            "roast": "浅烘",
+            "nominal_g": 200,
+            "price": 100,
+            "visibility": "public",
+        },
+    ).json()
+    want = {cheap["id"], mid["id"], dear["id"]}
+
+    def ids(sort):
+        rows = client.get(f"/api/public/beans?sort={sort}").json()["beans"]
+        return [b["id"] for b in rows if b["id"] in want]
+
+    assert ids("cost") == [cheap["id"], mid["id"], dear["id"]]
+    assert ids("cost_desc") == [dear["id"], mid["id"], cheap["id"]]
+    assert ids("price") == [cheap["id"], mid["id"], dear["id"]]
+    assert ids("roast") == [dear["id"], mid["id"], cheap["id"]]
+    assert ids("origin") == [cheap["id"], dear["id"], mid["id"]]
+
+
+def test_plaza_filters_roast_tag_and_kingdom(client, monkeypatch):
+    wash = client.post(
+        "/api/beans",
+        json={
+            "name": "筛浅烘水洗",
+            "origin": "埃塞俄比亚",
+            "roast": "浅烘",
+            "process": "水洗",
+            "tags": ["柑橘", "耶加"],
+            "visibility": "public",
+            "nominal_g": 200,
+            "price": 88,
+        },
+    ).json()
+    mid = client.post(
+        "/api/beans",
+        json={
+            "name": "筛中烘日晒",
+            "origin": "哥伦比亚",
+            "roast": "中烘",
+            "process": "日晒",
+            "tags": ["巧克力"],
+            "visibility": "public",
+        },
+    ).json()
+    sun = client.post(
+        "/api/beans",
+        json={
+            "name": "筛浅烘日晒",
+            "roast": "浅烘",
+            "process": "日晒",
+            "tags": ["柑橘"],
+            "visibility": "public",
+        },
+    ).json()
+
+    roast_ids = {b["id"] for b in client.get("/api/public/beans?roast=浅烘").json()["beans"]}
+    assert {wash["id"], sun["id"]} <= roast_ids
+    assert mid["id"] not in roast_ids
+
+    both = {b["id"] for b in client.get("/api/public/beans?roast=浅烘，中烘").json()["beans"]}
+    assert {wash["id"], mid["id"], sun["id"]} <= both
+
+    tag_ids = {b["id"] for b in client.get("/api/public/beans?tag=柑橘,耶加").json()["beans"]}
+    assert wash["id"] in tag_ids
+    assert sun["id"] not in tag_ids
+    assert mid["id"] not in tag_ids
+
+    q_ids = {b["id"] for b in client.get("/api/public/beans?q=哥伦比亚").json()["beans"]}
+    assert mid["id"] in q_ids
+    assert wash["id"] not in q_ids
+
+    process_ids = {b["id"] for b in client.get("/api/public/beans?process=水洗").json()["beans"]}
+    assert wash["id"] in process_ids
+    assert mid["id"] not in process_ids
+
+    listed = client.get("/api/public/beans").json()["beans"]
+    money = next(b for b in listed if b["id"] == wash["id"])
+    assert money["offer"]["price"] == 88
+    assert money["offer"]["nominal_g"] == 200
+    for key in ("unit_cost", "balance_g", "lots", "price", "remaining_value"):
+        assert key not in money
+
+    monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/register",
+            json={"email": "boss@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 201
+    )
+    collected = client.post(f"/api/admin/kingdom/collect/{wash['id']}", json={"name": "筛选王国"})
+    assert collected.status_code == 200, collected.text
+
+    in_k = {b["id"] for b in client.get("/api/public/beans?in_kingdom=1").json()["beans"]}
+    assert wash["id"] in in_k
+    assert mid["id"] not in in_k
+    out_k = {b["id"] for b in client.get("/api/public/beans?in_kingdom=0").json()["beans"]}
+    assert mid["id"] in out_k
+    assert wash["id"] not in out_k
 
 
 def test_ordinary_user_cannot_certify(client):
@@ -253,3 +392,80 @@ def test_review_dossier_shows_archive_not_stock(client, monkeypatch):
     }
     for key in ("lots", "balance_g", "log", "unit_cost"):
         assert key not in review
+
+
+def test_take_public_bean_copies_archive_without_lots(client):
+    from tests.test_photos import png_bytes
+
+    bean = client.post(
+        "/api/beans",
+        json={
+            "name": "领回耶加",
+            "origin": "埃塞俄比亚",
+            "roast": "浅烘",
+            "process": "水洗",
+            "tags": ["柑橘"],
+            "nominal_g": 200,
+            "price": 88,
+            "visibility": "public",
+        },
+    ).json()
+    photo = client.post(
+        f"/api/beans/{bean['id']}/photos",
+        files={"file": ("pack.png", png_bytes(), "image/png")},
+        data={"kind": "pack"},
+    )
+    assert photo.status_code == 201, photo.text
+    src_path = photo.json()["path"]
+    card = client.get(f"/api/public/beans/{bean['id']}").json()
+    assert card["mine"] is True
+    assert card["taken"] is False
+    own = client.post(f"/api/public/beans/{bean['id']}/take", json={})
+    assert own.status_code == 400
+
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "taker@coffeebar.local", "password": "testpass1"},
+    )
+    plaza = client.get(f"/api/public/beans/{bean['id']}").json()
+    assert plaza["taken"] is False
+    assert plaza["offer"]["price"] == 88
+    for key in ("lots", "balance_g", "log", "owner_id", "unit_cost"):
+        assert key not in plaza
+
+    first = client.post(f"/api/public/beans/{bean['id']}/take", json={})
+    assert first.status_code == 200, first.text
+    cloned = first.json()
+    assert cloned["id"] != bean["id"]
+    assert cloned["name"] == "领回耶加"
+    assert cloned["source_bean_id"] == bean["id"]
+    assert cloned["lots"] == []
+    assert cloned["balance_g"] == 0
+    assert cloned.get("certified") is False
+    assert cloned["visibility"] == "private"
+
+    detail = client.get(f"/api/beans/{cloned['id']}").json()
+    assert detail["lots"] == []
+    assert detail["log"] == []
+    assert detail["photos"]
+    assert detail["photos"][0]["path"] != src_path
+    for key in ("unit_cost", "remaining_value"):
+        assert not detail.get(key)
+
+    again = client.post(f"/api/public/beans/{bean['id']}/take", json={}).json()
+    assert again["id"] == cloned["id"]
+    flagged = client.get(f"/api/public/beans/{bean['id']}").json()
+    assert flagged["taken"] is True
+    assert flagged["cloned_id"] == cloned["id"]
+
+
+def test_take_private_bean_is_404(client):
+    bean = client.post("/api/beans", json={"name": "不给领"}).json()
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "nosy@coffeebar.local", "password": "testpass1"},
+    )
+    assert client.get(f"/api/public/beans/{bean['id']}").status_code == 404
+    assert client.post(f"/api/public/beans/{bean['id']}/take", json={}).status_code == 404

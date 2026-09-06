@@ -9,6 +9,7 @@ import { Btn, Field, Input, Panel, Select } from "../ui.jsx";
 
 export default function BrewPlan({ bean, onRecord, toast, oops }) {
   const [methods, setMethods] = useState([]);
+  const [paper, setPaper] = useState(null);
   const [form, setForm] = useState({
     method: bean.brew?.method || "v60",
     dose: bean.brew?.dose_g ?? 15,
@@ -22,7 +23,10 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
   const tickRef = useRef(null);
 
   useEffect(() => {
-    api.brewMethods().then((d) => setMethods(d.methods));
+    api.brewMethods().then((d) => {
+      setMethods(d.methods);
+      setPaper(d.filter || null);
+    });
   }, []);
 
   // 改粉量或比例，各段立刻重算
@@ -119,6 +123,16 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
           {bean.grind_hint?.sentence && (
             <p className="mt-1 mb-0 text-[13px] text-amber">{bean.grind_hint.sentence}</p>
           )}
+          {paper?.need_pick ? (
+            <p className="mt-1 mb-0 text-[13px] text-muted">
+              开着好几包滤纸，记下时再选哪一包。
+            </p>
+          ) : paper?.remaining != null ? (
+            <p className="mt-1 mb-0 text-[13px] text-muted">
+              滤纸还剩 {paper.remaining} 张
+              {paper.unit_cost != null ? `，冲一杯加纸钱` : ""}。
+            </p>
+          ) : null}
           {hint && (
             <p className="mt-1 mb-0 text-[13px] text-amber">
               {hint}

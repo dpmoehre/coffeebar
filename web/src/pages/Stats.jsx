@@ -40,7 +40,7 @@ export default function Stats({ toast, oops }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">统计</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">统计</h1>
           <p className="mt-2 mb-0 text-muted">
             先看数字：消耗了多少豆、多少酒、花了多少钱。
           </p>

@@ -602,7 +602,10 @@ def api_brew_methods(
     account: dict | None = Depends(optional_account),
 ):
     owner = account["id"] if account else None
-    return {"methods": gear.annotate_methods(conn, owner)}
+    return {
+        "methods": gear.annotate_methods(conn, owner),
+        "filter": gear.filter_teaser(conn, owner),
+    }
 
 
 # ── 咖啡器具 ────────────────────────────────────────────────
@@ -657,6 +660,16 @@ def api_get_gear(
     if not item:
         raise HTTPException(404, "没有这件器具")
     return item
+
+
+@app.post("/api/gear/{gear_id}/packs", status_code=201)
+def api_open_filter_pack(
+    gear_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return gear.open_pack(conn, gear_id, account["id"], payload or {})
 
 
 @app.patch("/api/gear/{gear_id}")
@@ -1238,6 +1251,7 @@ def api_restock(
     return {
         "items": stats.restock_list(conn, owner_id=account["id"]),
         "spirits": stats.restock_spirits(conn, owner_id=account["id"]),
+        "filters": gear.restock_filters(conn, account["id"]),
     }
 
 
@@ -1471,6 +1485,7 @@ def api_public_beans(
     process: str | None = None,
     tag: str | None = None,
     in_kingdom: str = "any",
+    sort: str = "recent",
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
@@ -1485,6 +1500,7 @@ def api_public_beans(
             process=process,
             tags=tag,
             in_kingdom=_tri_flag(in_kingdom),
+            sort=sort,
         )
     }
 
@@ -1499,6 +1515,49 @@ def api_public_bean(
     if not card:
         raise HTTPException(404, "没有这张公开豆卡")
     return card
+
+
+@app.post("/api/public/beans/{bean_id}/take")
+def api_take_public_bean(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = store.public_card(conn, bean_id, viewer_id=account["id"])
+    if not card:
+        raise HTTPException(404, "没有这张公开豆卡")
+    if card.get("mine"):
+        raise HTTPException(400, "这是你自己的卡，不用领")
+    return store.take_public_bean(conn, bean_id, account["id"])
+
+
+@app.get("/api/public/gear")
+def api_public_gear_list(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return {"gear": gear.list_public_gear(conn, account["id"])}
+
+
+@app.get("/api/public/gear/{gear_id}")
+def api_public_gear(
+    gear_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = gear.get_public_gear(conn, gear_id, account["id"])
+    if not card:
+        raise HTTPException(404, "没有这件公开器具")
+    return card
+
+
+@app.post("/api/public/gear/{gear_id}/take")
+def api_take_public_gear(
+    gear_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return gear.take_public_gear(conn, gear_id, account["id"])
 
 
 @app.get("/api/admin/review/beans")

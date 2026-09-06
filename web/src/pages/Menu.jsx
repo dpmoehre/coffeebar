@@ -120,7 +120,7 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-3xl font-semibold">酒单</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">酒单</h1>
           <p className="mt-2 mb-0 text-muted">
             今晚出品。纯饮点了直接倒；鸡尾酒按配方扣各瓶，毫升都能改。同类有好几支时当场选要用哪一支。
           </p>

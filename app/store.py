@@ -9,9 +9,21 @@
 from __future__ import annotations
 
 import json
+import os
 import sqlite3
+from functools import cmp_to_key
 
 from . import brew, db, freshness, photos, places
+
+# 一杯的钱 = 豆 + 滤纸。纸钱冻在 filter_unit_cost，没开包就是 0。
+COFFEE_SPENT_SQL = (
+    "(c.amount_g * COALESCE(c.unit_cost, 0)"
+    " + COALESCE(c.filter_sheets, 0) * COALESCE(c.filter_unit_cost, 0))"
+)
+EVENT_COST_SQL = (
+    "CASE c.kind WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0)) "
+    f"ELSE {COFFEE_SPENT_SQL} END"
+)
 
 # 可用克重：开袋实称有则用之，否则用包装标称（刚拆袋不会称，默认走标称）
 USABLE = "COALESCE(l.measured_g, l.nominal_g)"
@@ -206,8 +218,6 @@ def _bean_roast(conn: sqlite3.Connection, bean_id: int) -> str | None:
 
 
 def starter_enabled() -> bool:
-    import os
-
     raw = (os.environ.get("COFFEEBAR_STARTER_BEAN") or "1").strip().lower()
     return raw not in ("0", "false", "no", "off")
 
@@ -235,7 +245,6 @@ def give_starter_bean(conn: sqlite3.Connection, owner_id: int) -> int:
     if "seed" in cols:
         conn.execute("UPDATE bean SET seed = 1 WHERE id = ?", (bean_id,))
     add_lot(conn, bean_id, {"nominal_g": 100, "note": "练习袋"})
-    import os
     shot = os.path.join(os.path.dirname(__file__), "assets", "starter-yirgacheffe.jpg")
     if os.path.isfile(shot):
         with open(shot, "rb") as fh:
@@ -485,8 +494,18 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     return _annotate_bean(bean)
 
 
+ROAST_RANK = {
+    "浅烘": 0,
+    "中浅烘": 1,
+    "中浅": 1,
+    "中烘": 2,
+    "中深烘": 3,
+    "深烘": 4,
+}
+
+
 def plaza_offer(conn: sqlite3.Connection, bean_id: int) -> dict | None:
-    """广场给人看的买袋价和袋上克重。最近一袋；不带剩余、实称、批次明细。"""
+    """广场给人看的买袋价、袋上克重和每克价。最近一袋；不带剩余、实称、批次明细。"""
     row = _row(
         conn.execute(
             """SELECT price, nominal_g
@@ -506,7 +525,72 @@ def plaza_offer(conn: sqlite3.Connection, bean_id: int) -> dict | None:
         offer["price"] = price
     if nominal is not None:
         offer["nominal_g"] = nominal
+    if price is not None and nominal:
+        offer["per_g"] = float(price) / float(nominal)
     return offer or None
+
+
+def _cmp_num(av, bv, desc=False) -> int:
+    if av is None and bv is None:
+        return 0
+    if av is None:
+        return 1
+    if bv is None:
+        return -1
+    if av == bv:
+        return 0
+    if desc:
+        return 1 if av < bv else -1
+    return -1 if av < bv else 1
+
+
+def sort_public_cards(cards: list[dict], sort: str | None = "recent") -> list[dict]:
+    """广场排序。没填价的排在克价/袋价后面，避免被当成最便宜。"""
+    key = (sort or "recent").strip().lower()
+    out = list(cards)
+
+    def roast_rank(card) -> int:
+        return ROAST_RANK.get(card.get("roast") or "", 99)
+
+    def cmp(a, b) -> int:
+        if key == "cost":
+            return _cmp_num((a.get("offer") or {}).get("per_g"), (b.get("offer") or {}).get("per_g"))
+        if key == "cost_desc":
+            return _cmp_num(
+                (a.get("offer") or {}).get("per_g"), (b.get("offer") or {}).get("per_g"), True
+            )
+        if key == "price":
+            return _cmp_num((a.get("offer") or {}).get("price"), (b.get("offer") or {}).get("price"))
+        if key == "price_desc":
+            return _cmp_num(
+                (a.get("offer") or {}).get("price"), (b.get("offer") or {}).get("price"), True
+            )
+        if key == "roast":
+            return roast_rank(a) - roast_rank(b)
+        if key == "origin":
+            ao, bo = (a.get("origin") or "").strip(), (b.get("origin") or "").strip()
+            if not ao and not bo:
+                return 0
+            if not ao:
+                return 1
+            if not bo:
+                return -1
+            if ao == bo:
+                return 0
+            return -1 if ao < bo else 1
+        if key == "score":
+            return _cmp_num(
+                (a.get("scores") or {}).get("overall"),
+                (b.get("scores") or {}).get("overall"),
+                True,
+            )
+        at, bt = a.get("updated_at") or "", b.get("updated_at") or ""
+        if at == bt:
+            return 0
+        return 1 if at < bt else -1
+
+    out.sort(key=cmp_to_key(cmp))
+    return out
 
 
 def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = None) -> dict | None:
@@ -520,6 +604,15 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
     if not bean or (bean.get("visibility") or "private") != "public":
         return None
     shots = photos.list_bean_photos(conn, bean_id)
+    cloned_id = None
+    if viewer_id:
+        hit = conn.execute(
+            """SELECT id FROM bean
+                WHERE source_bean_id = ? AND owner_id = ? AND deleted_at IS NULL""",
+            (bean_id, viewer_id),
+        ).fetchone()
+        if hit:
+            cloned_id = int(hit["id"])
     return {
         "id": bean["id"],
         "name": bean["name"],
@@ -545,6 +638,8 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "kingdom_id": bean.get("kingdom_id"),
         "kingdom": _kingdom_teaser(conn, bean.get("kingdom_id")),
         "offer": plaza_offer(conn, bean_id),
+        "taken": cloned_id is not None,
+        "cloned_id": cloned_id,
     }
 
 
@@ -619,6 +714,7 @@ def list_public_beans(
     process=None,
     tags=None,
     in_kingdom: bool | None = None,
+    sort: str | None = "recent",
 ) -> list[dict]:
     sql = """SELECT id FROM bean
               WHERE visibility = 'public' AND deleted_at IS NULL"""
@@ -632,7 +728,58 @@ def list_public_beans(
             card, q=q, roast=roast, process=process, tags=tags, in_kingdom=in_kingdom
         ):
             out.append(card)
-    return out
+    return sort_public_cards(out, sort)
+
+
+def take_public_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int) -> dict:
+    """把别人公开的豆卡拷到自己豆库。不带袋子、剩余和流水。已经领过就还已有的那张。"""
+    src = _row(
+        conn.execute(
+            "SELECT * FROM bean WHERE id = ? AND deleted_at IS NULL", (bean_id,)
+        )
+    )
+    if not src or (src.get("visibility") or "private") != "public":
+        raise Conflict("没有这张公开豆卡")
+    if src.get("owner_id") == owner_id:
+        raise Conflict("这是你自己的卡，不用领")
+    already = conn.execute(
+        """SELECT id FROM bean
+            WHERE source_bean_id = ? AND owner_id = ? AND deleted_at IS NULL""",
+        (bean_id, owner_id),
+    ).fetchone()
+    if already:
+        return get_bean(conn, int(already["id"]), owner_id=owner_id)
+
+    new_id = create_bean(
+        conn,
+        {
+            "owner_id": owner_id,
+            "name": src["name"],
+            "origin": src.get("origin"),
+            "varietal": src.get("varietal"),
+            "producer": src.get("producer"),
+            "altitude": src.get("altitude"),
+            "process": src.get("process"),
+            "roast": src.get("roast"),
+            "water_temp": src.get("water_temp"),
+            "note": src.get("note"),
+            "tags": bean_tags(conn, bean_id),
+        },
+    )
+    conn.execute(
+        "UPDATE bean SET source_bean_id = ?, updated_at = ? WHERE id = ?",
+        (bean_id, db.now(), new_id),
+    )
+    guide = _row(conn.execute("SELECT * FROM brew_guide WHERE bean_id = ?", (bean_id,)))
+    if guide:
+        conn.execute(
+            """UPDATE brew_guide SET method = ?, dose_g = ?, ratio = ?, note = ? WHERE bean_id = ?""",
+            (guide.get("method") or "v60", guide.get("dose_g") or 15, guide.get("ratio") or 16, guide.get("note"), new_id),
+        )
+    places.copy_to(conn, bean_id, new_id)
+    for shot in photos.list_bean_photos(conn, bean_id):
+        photos.copy_to_bean(conn, new_id, shot.get("kind") or "pack", shot["path"])
+    return get_bean(conn, new_id, owner_id=owner_id)
 
 
 def latest_score(conn: sqlite3.Connection, bean_id: int) -> dict | None:
@@ -1020,11 +1167,24 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
     stages = data.get("brew_stages")
     as_cup = 0 if data.get("as_cup") in (0, False, "0") else 1
 
+    paper = None
+    if as_cup and data.get("owner_id"):
+        from . import gear as gear_mod
+
+        pack = gear_mod.pick_pack(
+            conn,
+            int(data["owner_id"]),
+            data.get("brew_method"),
+            data.get("filter_pack_id"),
+        )
+        paper = gear_mod.consume_sheet(conn, pack) if pack else None
+
     cur = conn.execute(
         """INSERT INTO consumption_event
              (kind, lot_id, person_id, amount_g, unit_cost, brew_method, brew_ratio,
-              brew_total_s, brew_stages, note, as_cup, at)
-           VALUES ('coffee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+              brew_total_s, brew_stages, filter_pack_id, filter_sheets, filter_unit_cost,
+              note, as_cup, at)
+           VALUES ('coffee', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             lot["id"],
             person_id,
@@ -1034,6 +1194,9 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
             data.get("brew_ratio"),
             data.get("brew_total_s"),
             json.dumps(stages, ensure_ascii=False) if stages else None,
+            (paper or {}).get("filter_pack_id"),
+            (paper or {}).get("filter_sheets"),
+            (paper or {}).get("filter_unit_cost"),
             data.get("note"),
             as_cup,
             ts,
@@ -1049,11 +1212,21 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
         )
 
     after = get_lot(conn, lot["id"])
+    bean_cost = (amount * lot["unit_cost"]) if lot["unit_cost"] else None
+    paper_cost = None
+    if paper and paper.get("filter_unit_cost") is not None:
+        paper_cost = paper["filter_sheets"] * paper["filter_unit_cost"]
+    cost = None
+    if bean_cost is not None or paper_cost is not None:
+        cost = (bean_cost or 0) + (paper_cost or 0)
     out = {
         "id": int(cur.lastrowid),
         "lot_id": lot["id"],
         "amount_g": amount,
-        "cost": (amount * lot["unit_cost"]) if lot["unit_cost"] else None,
+        "cost": cost,
+        "bean_cost": bean_cost,
+        "filter_cost": paper_cost,
+        "filter_sheets": (paper or {}).get("filter_sheets"),
         "as_cup": as_cup,
         "balance_g": after["balance_g"],
         "near_empty": after["balance_g"] < amount,
@@ -1142,6 +1315,9 @@ def void_one(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) 
         "UPDATE consumption_event SET voided_at = ?, void_reason = ? WHERE id = ?",
         (ts, reason, cons_id),
     )
+    from . import gear as gear_mod
+
+    gear_mod.restore_sheet(conn, row.get("filter_pack_id"), row.get("filter_sheets"))
 
     compensated = False
     if row["kind"] == "drink":
@@ -1178,6 +1354,16 @@ def unvoid_one(conn: sqlite3.Connection, cons_id: int) -> None:
         lot = get_lot(conn, row["lot_id"])
         if lot and not lot["closed_at"] and row["amount_g"] > lot["balance_g"]:
             raise Conflict("恢复后账面会变成负数，先盘点补重")
+        if row.get("filter_pack_id") and row.get("filter_sheets"):
+            from . import gear as gear_mod
+
+            pack = conn.execute(
+                "SELECT * FROM filter_pack WHERE id = ?", (row["filter_pack_id"],)
+            ).fetchone()
+            left = int(pack["remaining"]) if pack else 0
+            if not pack or left < int(row["filter_sheets"]):
+                raise Conflict("滤纸不够扣回去，先开一包或先别恢复")
+            gear_mod.consume_sheet(conn, gear_mod._pack_public(pack), int(row["filter_sheets"]))
     conn.execute(
         "UPDATE consumption_event SET voided_at = NULL, void_reason = NULL WHERE id = ?",
         (cons_id,),
@@ -1294,10 +1480,7 @@ def list_consumption(
         f"""SELECT c.*, b.name AS bean_name, p.name AS person_name,
                    l.nominal_g, l.bought_on, l.closed_at AS lot_closed_at, s.seq AS lot_seq,
                    sp.name AS spirit_name, bl.nominal_ml, bl.closed_at AS bottle_closed_at,
-                   CASE c.kind
-                     WHEN 'drink' THEN (c.amount_ml * COALESCE(c.unit_cost, 0))
-                     ELSE (c.amount_g * COALESCE(c.unit_cost, 0))
-                   END AS cost
+                   {EVENT_COST_SQL} AS cost
             FROM consumption_event c
             LEFT JOIN bean_lot l ON l.id = c.lot_id
             LEFT JOIN bean b ON b.id = l.bean_id
@@ -1320,6 +1503,13 @@ def list_consumption(
                 row["brew_stages"] = json.loads(raw)
             except ValueError:
                 pass
+        sheets = int(row.get("filter_sheets") or 0)
+        fuc = row.get("filter_unit_cost")
+        row["filter_cost"] = (sheets * fuc) if fuc is not None and sheets else None
+        if row.get("kind") != "drink" and row.get("unit_cost") is not None:
+            row["bean_cost"] = row["amount_g"] * row["unit_cost"]
+        else:
+            row["bean_cost"] = None
     by_photo = photos.list_consumption_photos(conn, [r["id"] for r in out])
     for row in out:
         row["photos"] = by_photo.get(row["id"], [])

@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS bean (
   review_note TEXT,
   places_verified_at TEXT,               -- 地图钉校对过
   kingdom_id  INTEGER,                   -- 收入咖啡王国后挂到公共豆种
+  source_bean_id INTEGER,                -- 从广场领回时记下原卡，不带袋子
   seed        INTEGER NOT NULL DEFAULT 0, -- 进门练习豆，不算真库存号
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
@@ -220,6 +221,9 @@ CREATE TABLE IF NOT EXISTS consumption_event (
   brew_ratio    REAL,
   brew_total_s  INTEGER,
   brew_stages   TEXT,
+  filter_pack_id INTEGER,                               -- 当时用的那包滤纸，钱另冻 filter_unit_cost
+  filter_sheets INTEGER,                                -- 通常 1；没开包就不记
+  filter_unit_cost REAL,                                -- 元/张快照，不回溯
   note          TEXT,
   as_cup        INTEGER NOT NULL DEFAULT 1,              -- 0：整袋补录，克重和钱进统计，不算杯
   at            TEXT    NOT NULL,
@@ -337,7 +341,7 @@ CREATE INDEX IF NOT EXISTS idx_place_bean ON bean_place(bean_id);
 CREATE TABLE IF NOT EXISTS gear_catalog (
   id             INTEGER PRIMARY KEY AUTOINCREMENT,
   name           TEXT    NOT NULL,
-  kind           TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')),
+  kind           TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'filter', 'other')),
   family         TEXT,
   brand          TEXT,
   model          TEXT,
@@ -362,17 +366,32 @@ CREATE TABLE IF NOT EXISTS user_gear (
   owner_id    INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
   catalog_id  INTEGER REFERENCES gear_catalog(id) ON DELETE SET NULL,
   name        TEXT    NOT NULL,
-  kind        TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')),
+  kind        TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'filter', 'other')),
   family      TEXT,
   brand       TEXT,
   model       TEXT,
   brew_method TEXT,
   note        TEXT,
+  visibility  TEXT    NOT NULL DEFAULT 'private',  -- private 只自己 / public 上广场
+  source_gear_id INTEGER,                          -- 从广场领回时记下原件
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_ugear_owner ON user_gear(owner_id);
 CREATE INDEX IF NOT EXISTS idx_ugear_catalog ON user_gear(catalog_id);
+
+-- 滤纸耗材：新开一包才开始计张数，不估手里旧包还剩多少。
+CREATE TABLE IF NOT EXISTS filter_pack (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  gear_id     INTEGER NOT NULL REFERENCES user_gear(id) ON DELETE CASCADE,
+  sheets      INTEGER NOT NULL,                 -- 开包时的枚数
+  price       REAL,                             -- 这一包多少钱
+  remaining   INTEGER NOT NULL,                 -- 还剩几张，开包时 = sheets
+  opened_on   TEXT,
+  closed_at   TEXT,                             -- 用完
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_fpack_gear ON filter_pack(gear_id);
 
 CREATE TABLE IF NOT EXISTS user_gear_photo (
   id         INTEGER PRIMARY KEY AUTOINCREMENT,

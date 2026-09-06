@@ -52,10 +52,12 @@ def test_no_gear_means_methods_unmarked(client):
     assert {m["key"] for m in methods} >= {"v60", "kalita", "volcano"}
     assert all(m["owned"] is None for m in methods)
     assert all(m["suggested"] is False for m in methods)
+    assert client.get("/api/brew/methods").json()["filter"] is None
     client.post("/api/auth/logout")
     guest = client.get("/api/brew/methods")
     assert guest.status_code == 200
     assert all(m["owned"] is None for m in guest.json()["methods"])
+    assert guest.json()["filter"] is None
 
 
 def test_admin_collects_gear_into_catalog(client, monkeypatch):
@@ -159,3 +161,58 @@ def test_ordinary_user_cannot_collect(client):
     item = client.post("/api/gear", json={"name": "自己的称", "kind": "scale"}).json()
     assert client.post(f"/api/admin/gear/{item['id']}/collect", json={}).status_code == 403
     assert client.get("/api/admin/gear/queue").status_code == 403
+
+
+def test_gear_default_private_not_on_plaza(client):
+    item = client.post("/api/gear", json={"name": "私密滤杯", "kind": "dripper", "family": "cone"}).json()
+    assert item["visibility"] == "private"
+    plaza = client.get("/api/public/gear").json()["gear"]
+    assert all(g["id"] != item["id"] for g in plaza)
+    assert client.get(f"/api/public/gear/{item['id']}").status_code == 404
+    assert client.post(f"/api/public/gear/{item['id']}/take", json={}).status_code == 404
+
+
+def test_take_public_gear_copies_photo_and_is_idempotent(client):
+    item = client.post(
+        "/api/gear",
+        json={"name": "公开 V60", "kind": "dripper", "family": "cone", "visibility": "public"},
+    ).json()
+    photo = client.post(f"/api/gear/{item['id']}/photos", files=_jpg()).json()
+    assert item["visibility"] == "public"
+    mine = client.get("/api/public/gear").json()["gear"]
+    hit = next(g for g in mine if g["id"] == item["id"])
+    assert hit["mine"] is True
+    assert "owner_id" not in hit
+    own = client.post(f"/api/public/gear/{item['id']}/take", json={})
+    assert own.status_code == 400
+
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "other@coffeebar.local", "password": "testpass1"},
+    )
+    listed = client.get("/api/public/gear").json()["gear"]
+    card = next(g for g in listed if g["id"] == item["id"])
+    assert card["mine"] is False
+    assert card["taken"] is False
+
+    first = client.post(f"/api/public/gear/{item['id']}/take", json={})
+    assert first.status_code == 200, first.text
+    copied = first.json()
+    assert copied["id"] != item["id"]
+    assert copied["name"] == "公开 V60"
+    assert copied["source_gear_id"] == item["id"]
+    assert copied["visibility"] == "private"
+    assert copied["photos"]
+    assert copied["photos"][0]["path"] != photo["path"]
+    assert (db.PHOTO_DIR / photo["path"].split("/")[-1]).exists()
+    assert (db.PHOTO_DIR / copied["photos"][0]["path"].split("/")[-1]).exists()
+
+    again = client.post(f"/api/public/gear/{item['id']}/take", json={}).json()
+    assert again["id"] == copied["id"]
+    mine_now = client.get("/api/gear").json()["gear"]
+    assert sum(1 for g in mine_now if g.get("source_gear_id") == item["id"]) == 1
+
+    card2 = client.get(f"/api/public/gear/{item['id']}").json()
+    assert card2["taken"] is True
+    assert card2["cloned_id"] == copied["id"]

@@ -1,23 +1,43 @@
-// 别人公开的豆卡。看得见产地、照片、杯测、买袋价和袋上克重，看不见还剩多少。
+// 别人公开的豆卡。看得见产地、照片、杯测、买袋价、袋上克重和每克价，看不见还剩多少。
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import Radar from "../components/Radar.jsx";
 import { scoreFreshnessLine } from "../freshness.js";
-import { Btn, Chip, Empty, Input, Panel, g, money } from "../ui.jsx";
+import { Btn, Chip, Empty, Input, Panel, Select, g, money, perG } from "../ui.jsx";
+
+const SORTS = [
+  { key: "recent", label: "最近公开" },
+  { key: "cost", label: "克价低" },
+  { key: "cost_desc", label: "克价高" },
+  { key: "price", label: "袋价低" },
+  { key: "price_desc", label: "袋价高" },
+  { key: "roast", label: "烘焙" },
+  { key: "origin", label: "产地" },
+  { key: "score", label: "评分" },
+];
 
 function offerLine(offer) {
   if (!offer) return "";
-  return [offer.nominal_g != null ? g(offer.nominal_g) : null, offer.price != null ? money(offer.price) : null]
+  return [
+    offer.nominal_g != null ? g(offer.nominal_g) : null,
+    offer.price != null ? money(offer.price) : null,
+    offer.per_g != null ? perG(offer.per_g) : null,
+  ]
     .filter(Boolean)
     .join(" · ");
 }
 
 export default function Plaza({
   openId,
+  openGearId,
+  tab = "beans",
+  onTab,
   onOpen,
+  onOpenGear,
   onBack,
   onOpenMine,
+  onOpenMineGear,
   onOpenKingdom,
   admin,
   toast,
@@ -36,7 +56,42 @@ export default function Plaza({
       />
     );
   }
-  return <PlazaList onOpen={onOpen} oops={oops} />;
+  if (openGearId) {
+    return (
+      <PublicGear
+        id={openGearId}
+        onBack={onBack}
+        onOpenMineGear={onOpenMineGear}
+        toast={toast}
+        oops={oops}
+      />
+    );
+  }
+  return (
+    <>
+      <header>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">广场</h1>
+        <p className="mt-2 mb-0 text-muted">
+          {tab === "gear"
+            ? "别人公开的器具。领到自己台面是拷贝，不是把原件拿走。"
+            : "别人公开的豆卡。领到豆库只拷档案和照片，不带袋子和剩余。认证过的是管理员对过产地和地图钉。"}
+        </p>
+      </header>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Chip on={tab === "beans"} onClick={() => onTab?.("beans")}>
+          豆子
+        </Chip>
+        <Chip on={tab === "gear"} onClick={() => onTab?.("gear")}>
+          器具
+        </Chip>
+      </div>
+      {tab === "gear" ? (
+        <PlazaGearList onOpen={onOpenGear} oops={oops} />
+      ) : (
+        <PlazaList onOpen={onOpen} oops={oops} />
+      )}
+    </>
+  );
 }
 
 const ROAST_ORDER = ["浅烘", "中浅烘", "中浅", "中烘", "中深烘", "深烘"];
@@ -78,6 +133,36 @@ function matchesPlaza(card, { q, roast, process, tags, inKingdom }) {
   return true;
 }
 
+function roastRank(name) {
+  const i = ROAST_ORDER.indexOf(name || "");
+  return i === -1 ? 99 : i;
+}
+
+function cmpNum(av, bv, desc) {
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  return desc ? bv - av : av - bv;
+}
+
+function comparePlaza(a, b, sort) {
+  if (sort === "cost") return cmpNum(a.offer?.per_g, b.offer?.per_g, false);
+  if (sort === "cost_desc") return cmpNum(a.offer?.per_g, b.offer?.per_g, true);
+  if (sort === "price") return cmpNum(a.offer?.price, b.offer?.price, false);
+  if (sort === "price_desc") return cmpNum(a.offer?.price, b.offer?.price, true);
+  if (sort === "roast") return roastRank(a.roast) - roastRank(b.roast);
+  if (sort === "origin") {
+    const ao = (a.origin || "").trim();
+    const bo = (b.origin || "").trim();
+    if (!ao && !bo) return 0;
+    if (!ao) return 1;
+    if (!bo) return -1;
+    return ao.localeCompare(bo, "zh");
+  }
+  if (sort === "score") return cmpNum(a.scores?.overall, b.scores?.overall, true);
+  return (b.updated_at || "").localeCompare(a.updated_at || "");
+}
+
 function PlazaList({ onOpen, oops }) {
   const [beans, setBeans] = useState(null);
   const [certifiedOnly, setCertifiedOnly] = useState(false);
@@ -86,6 +171,7 @@ function PlazaList({ onOpen, oops }) {
   const [roast, setRoast] = useState([]);
   const [process, setProcess] = useState([]);
   const [tags, setTags] = useState([]);
+  const [sort, setSort] = useState("recent");
 
   const load = () =>
     api
@@ -114,10 +200,10 @@ function PlazaList({ onOpen, oops }) {
     };
   }, [beans]);
 
-  const shown = useMemo(
-    () => (beans || []).filter((b) => matchesPlaza(b, { q, roast, process, tags, inKingdom })),
-    [beans, q, roast, process, tags, inKingdom],
-  );
+  const shown = useMemo(() => {
+    const list = (beans || []).filter((b) => matchesPlaza(b, { q, roast, process, tags, inKingdom }));
+    return list.sort((a, b) => comparePlaza(a, b, sort));
+  }, [beans, q, roast, process, tags, inKingdom, sort]);
 
   const filtered = roast.length || process.length || tags.length || q.trim() || inKingdom;
   const clearFilters = () => {
@@ -130,15 +216,6 @@ function PlazaList({ onOpen, oops }) {
 
   return (
     <>
-      <header>
-        <h1 className="serif m-0 text-3xl font-semibold">广场</h1>
-        <p className="mt-2 mb-0 text-muted">
-          {beans
-            ? `${shown.length} 张公开卡。认证过的是管理员对过产地和地图钉。收进王国之后，这里能跳过去看大家的杯测。`
-            : "别人公开的豆卡。认证过的是管理员对过产地和地图钉。收进王国之后，这里能跳过去看大家的杯测。"}
-        </p>
-      </header>
-
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Chip on={certifiedOnly} onClick={() => setCertifiedOnly((v) => !v)}>
           不看未认证
@@ -152,6 +229,13 @@ function PlazaList({ onOpen, oops }) {
           placeholder="搜名字、产地…"
           className="w-44 py-1.5 text-sm"
         />
+        <Select value={sort} onChange={(e) => setSort(e.target.value)} className="w-auto py-1.5 text-sm">
+          {SORTS.map((s) => (
+            <option key={s.key} value={s.key}>
+              {s.label}
+            </option>
+          ))}
+        </Select>
         {filtered ? (
           <button type="button" className="text-sm text-amber underline" onClick={clearFilters}>
             清除筛选
@@ -212,6 +296,7 @@ function PlazaList({ onOpen, oops }) {
                   {offerLine(b.offer) ? (
                     <div className="mt-2 text-sm text-amber">{offerLine(b.offer)}</div>
                   ) : null}
+                  {b.taken ? <div className="mt-2 text-xs text-amber">已在你的豆库</div> : null}
                   {b.kingdom ? (
                     <div className="mt-3 text-sm text-amber">
                       王国
@@ -284,6 +369,19 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
 
   if (!bean) return <p className="text-muted">读取中…</p>;
 
+  const take = async () => {
+    setBusy(true);
+    try {
+      const mine = await api.takePlazaBean(bean.id);
+      toast("已收到你的豆库。没有袋子，要自己入袋。");
+      if (onOpenMine) onOpenMine(mine.id);
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const collect = async () => {
     setBusy(true);
     try {
@@ -304,7 +402,7 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
           ‹ 回广场
         </button>
         <div className="flex flex-wrap items-baseline gap-3">
-          <h1 className="serif m-0 truncate text-3xl font-semibold">{bean.name}</h1>
+          <h1 className="serif m-0 truncate text-2xl font-semibold md:text-3xl">{bean.name}</h1>
           <Badge certified={bean.certified} />
         </div>
         <p className="mt-2 mb-0 text-muted">
@@ -314,7 +412,7 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
         {offerLine(bean.offer) ? (
           <p className="mt-1 mb-0 text-sm text-amber">
             最近一袋 {offerLine(bean.offer)}
-            <span className="ml-2 text-xs text-muted">袋上的买价和克重，不是还剩多少</span>
+            <span className="ml-2 text-xs text-muted">买价÷袋上克重，不是还剩多少</span>
           </p>
         ) : (
           <p className="mt-1 mb-0 text-[13px] text-muted">还没填这袋多少钱、袋上克重。</p>
@@ -329,7 +427,7 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
             地图上：{bean.places.map((p) => p.label).join("、")}
           </p>
         )}
-        {bean.mine && onOpenMine && (
+        {bean.mine && onOpenMine ? (
           <button
             type="button"
             className="mt-2 mr-4 text-sm text-amber underline"
@@ -337,6 +435,21 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
           >
             这是你的卡，去豆库改
           </button>
+        ) : bean.taken && bean.cloned_id && onOpenMine ? (
+          <button
+            type="button"
+            className="mt-2 mr-4 text-sm text-amber underline"
+            onClick={() => onOpenMine(bean.cloned_id)}
+          >
+            已在你的豆库，去看
+          </button>
+        ) : (
+          <div className="mt-3">
+            <Btn onClick={take} disabled={busy}>
+              收到我的豆库
+            </Btn>
+            <p className="mt-1 mb-0 text-[13px] text-muted">只拷档案和照片，不带袋子和还剩多少。</p>
+          </div>
         )}
       </header>
 
@@ -414,6 +527,142 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
           )}
         </Panel>
       </div>
+    </>
+  );
+}
+
+function PlazaGearList({ onOpen, oops }) {
+  const [items, setItems] = useState(null);
+
+  useEffect(() => {
+    setItems(null);
+    api
+      .publicGear()
+      .then((d) => setItems(d.gear))
+      .catch((e) => oops(e.message));
+  }, [oops]);
+
+  return (
+    <>
+      {!items ? (
+        <p className="mt-6 text-muted">读取中…</p>
+      ) : items.length === 0 ? (
+        <div className="mt-6">
+          <Empty>还没有人把器具公开。自己的在器具页打开，选「公开这件」。</Empty>
+        </div>
+      ) : (
+        <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          {items.map((g) => (
+            <article
+              key={g.id}
+              onClick={() => onOpen(g.id)}
+              className="rise cursor-pointer overflow-hidden rounded-2xl border border-line
+                bg-panel transition hover:border-amber"
+            >
+              {g.cover ? (
+                <img src={g.cover.thumb || g.cover.url} alt="" className="h-40 w-full object-cover" />
+              ) : (
+                <div
+                  className="h-40"
+                  style={{
+                    background:
+                      "radial-gradient(circle at 40% 35%, #5a3d28, transparent 46%), linear-gradient(135deg, #3a2618, #1a120e)",
+                  }}
+                />
+              )}
+              <div className="p-5">
+                <div className="serif truncate text-lg">{g.name}</div>
+                <div className="mt-1 truncate text-[13px] text-muted">
+                  {[g.kind_label, g.family_label, g.brand, g.model].filter(Boolean).join(" · ")}
+                </div>
+                {g.mine ? (
+                  <div className="mt-2 text-xs text-muted">你公开的</div>
+                ) : g.taken ? (
+                  <div className="mt-2 text-xs text-amber">已在你的台面</div>
+                ) : null}
+              </div>
+            </article>
+          ))}
+        </div>
+      )}
+    </>
+  );
+}
+
+function PublicGear({ id, onBack, onOpenMineGear, toast, oops }) {
+  const [item, setItem] = useState(null);
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setItem(null);
+    api
+      .publicGearItem(id)
+      .then(setItem)
+      .catch((e) => oops(e.message));
+  }, [id, oops]);
+
+  if (!item) return <p className="text-muted">读取中…</p>;
+
+  const take = async () => {
+    setBusy(true);
+    try {
+      const mine = await api.takePlazaGear(item.id);
+      toast("已领到你的台面。图是拷贝，原件还在主人那边。");
+      if (onOpenMineGear) onOpenMineGear(mine.id);
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <>
+      <header>
+        <button onClick={onBack} className="mb-1.5 text-sm text-muted hover:text-amber">
+          ‹ 回广场
+        </button>
+        <h1 className="serif m-0 truncate text-2xl font-semibold md:text-3xl">{item.name}</h1>
+        <p className="mt-2 mb-0 text-muted">
+          {[item.kind_label, item.family_label, item.brand, item.model].filter(Boolean).join(" · ") ||
+            "还没填型号"}
+        </p>
+        {item.note ? <p className="mt-1 mb-0 text-[13px] text-muted">{item.note}</p> : null}
+        {item.mine ? (
+          <p className="mt-2 mb-0 text-sm text-muted">这是你公开的，不用领。</p>
+        ) : item.taken && item.cloned_id && onOpenMineGear ? (
+          <button
+            type="button"
+            className="mt-2 text-sm text-amber underline"
+            onClick={() => onOpenMineGear(item.cloned_id)}
+          >
+            已在你的台面，去看
+          </button>
+        ) : (
+          <div className="mt-3">
+            <Btn onClick={take} disabled={busy}>
+              领到我的台面
+            </Btn>
+          </div>
+        )}
+      </header>
+      <Panel className="mt-6">
+        <div className="serif text-lg">照片</div>
+        {item.photos?.length ? (
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            {item.photos.map((p) => (
+              <img
+                key={p.id}
+                src={p.thumb || p.url}
+                alt=""
+                className="h-40 w-full rounded-xl object-cover"
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-3 mb-0 text-sm text-muted">还没有照片。</p>
+        )}
+      </Panel>
     </>
   );
 }

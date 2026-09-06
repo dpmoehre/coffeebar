@@ -84,7 +84,7 @@ export default function Admin({ toast, oops }) {
   return (
     <>
       <header>
-        <h1 className="serif m-0 text-3xl font-semibold">后台</h1>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">后台</h1>
         <p className="mt-2 mb-0 text-muted">
           只有管理员看得见。能看每个人的豆卡、酒卡和消耗，也能审公开豆卡、收录器具和王国豆种。普通人仍然只能看自己的。
         </p>

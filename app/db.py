@@ -96,12 +96,18 @@ ADDED_COLUMNS = [
     ("bean", "places_verified_at", "TEXT"),
     ("account", "claimed_at", "TEXT"),
     ("bean", "kingdom_id", "INTEGER"),
-    ("bean", "seed", "INTEGER NOT NULL DEFAULT 0"),
+    ("bean", "source_bean_id", "INTEGER"),
+    ("user_gear", "visibility", "TEXT NOT NULL DEFAULT 'private'"),
+    ("user_gear", "source_gear_id", "INTEGER"),
     ("bean_lot", "roasted_on", "TEXT"),
     ("bean_score", "lot_id", "INTEGER"),
     ("bean_score", "roasted_on", "TEXT"),
     ("bean_score", "days_after_roast", "INTEGER"),
     ("bean_score", "window_phase", "TEXT"),
+    ("bean", "seed", "INTEGER NOT NULL DEFAULT 0"),
+    ("consumption_event", "filter_pack_id", "INTEGER"),
+    ("consumption_event", "filter_sheets", "INTEGER"),
+    ("consumption_event", "filter_unit_cost", "REAL"),
 ]
 
 
@@ -116,6 +122,8 @@ STALE_CHECKS = {
     # 人名从全局唯一改成「同一账号下唯一」，两个人才能各有一个戚浩辰
     "person": "name       TEXT    NOT NULL UNIQUE",
     "auth_token": "purpose IN ('verify', 'reset')",
+    "user_gear": "kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')",
+    "gear_catalog": "kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')",
 }
 
 

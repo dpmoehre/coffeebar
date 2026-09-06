@@ -21,14 +21,17 @@ mcp = MCPServer(
         "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升，同类可换支。自制基酒还没有。"
         "豆卡默认只自己看；主人可改成公开。公开未认证也能上广场。"
         "逛广场用 list_plaza / get_plaza_bean，和网页同一套卡：有买袋价和袋上克重，没有还剩多少和流水。"
+        "公开器具用 list_plaza_gear / get_plaza_gear。take_plaza_bean / take_plaza_gear 领到自己库，是拷贝不是抢。"
         "roast、process 逗号分隔是或选，tags 逗号分隔是且选。in_kingdom 只看已进王国的。"
         "认证必须管理员账号：list_review_queue / get_review_bean。"
         "先看 checklist（照片/杯测/描述/进价/产地/落点）和档案是不是正常豆子，再对照 places.gazetteer。"
         "空卡或乱钉不要过。不对就 review_set_places 或 review_guess_places，再 certify_bean。"
         "对不上又坚持认证时带 force_places。普通人调审核工具会 403。"
         "改名字/产地/豆种/处理厂/处理法/烘焙/海拔或改钉会掉认证，要重审。"
-        "咖啡器具挂在账号台面上：list_gear / create_gear。滤杯要写 family=cone 或 flat，"
-        "才能按器具给冲煮建议。管理员用 list_gear_queue / collect_gear 收到公共目录，"
+        "咖啡器具挂在账号台面上：list_gear / create_gear。滤纸 kind=filter，"
+        "open_filter_pack 新开一包才计张，不估旧包。冲一杯自动扣一张并加纸钱。"
+        "滤杯要写 family=cone 或 flat，才能按器具给冲煮建议。"
+        "管理员用 list_gear_queue / collect_gear 收到公共目录，"
         "再 update_gear_catalog 挂 brew_method 和冲煮备注。"
         "咖啡王国是公共豆种：list_kingdom / get_kingdom，score_kingdom 一人一豆一条可改，"
         "add_kingdom_score_photo 给自己的杯测挂图，favorite_kingdom 开关收藏。"
@@ -309,10 +312,12 @@ def create_gear(
     model: str | None = None,
     brew_method: str | None = None,
     note: str | None = None,
+    visibility: str | None = None,
 ) -> Any:
-    """登记一件器具。kind: dripper / kettle / grinder / scale / server / other。
+    """登记一件器具。kind: dripper / kettle / grinder / scale / server / filter / other。
     滤杯 family: cone 锥形 / flat 平底 / immersion 浸泡；壶 family: gooseneck 细嘴。
-    brew_method 可挂 v60 / hoffmann / kasuya / kalita / volcano。"""
+    brew_method 可挂 v60 / hoffmann / kasuya / kalita / volcano。
+    visibility=public 公开到广场，默认只自己看。滤纸用 kind=filter，开包走 open_filter_pack。"""
     return _call(
         client().create_gear,
         _drop_none(
@@ -324,9 +329,16 @@ def create_gear(
                 "model": model,
                 "brew_method": brew_method,
                 "note": note,
+                "visibility": visibility,
             }
         ),
     )
+
+
+@mcp.tool()
+def open_filter_pack(gear_id: int, sheets: int, price: float | None = None) -> Any:
+    """新开一包滤纸才开始计张。sheets 是这包多少张，price 是这包多少钱。不估旧包还剩多少。"""
+    return _call(client().open_filter_pack, gear_id, _drop_none({"sheets": sheets, "price": price}))
 
 
 @mcp.tool()
@@ -339,8 +351,9 @@ def update_gear(
     model: str | None = None,
     brew_method: str | None = None,
     note: str | None = None,
+    visibility: str | None = None,
 ) -> Any:
-    """改一件自己的器具。"""
+    """改一件自己的器具。visibility=public 公开到广场，private 改回只自己看。"""
     return _call(
         client().update_gear,
         gear_id,
@@ -353,6 +366,7 @@ def update_gear(
                 "model": model,
                 "brew_method": brew_method,
                 "note": note,
+                "visibility": visibility,
             }
         ),
     )
@@ -483,8 +497,10 @@ def record_brew(
     brew_stages_json: str | None = None,
     note: str | None = None,
     as_cup: bool = True,
+    filter_pack_id: int | None = None,
 ) -> Any:
-    """记一次冲煮。多袋未关必须给 lot_id，我会回报扣的是哪一袋。带 brew_total_s 会对照方案给研磨建议。"""
+    """记一次冲煮。多袋未关必须给 lot_id，我会回报扣的是哪一袋。带 brew_total_s 会对照方案给研磨建议。
+    开着好几包滤纸时给 filter_pack_id，不自挑；没开包就不扣纸。"""
     extra = {}
     if brew_stages_json:
         extra["brew_stages"] = json.loads(brew_stages_json)
@@ -501,6 +517,7 @@ def record_brew(
                 "brew_total_s": brew_total_s,
                 "note": note,
                 "as_cup": as_cup,
+                "filter_pack_id": filter_pack_id,
                 **extra,
             }
         ),
@@ -925,8 +942,9 @@ def list_plaza(
     process: str | None = None,
     tags: str | None = None,
     in_kingdom: bool | None = None,
+    sort: str = "recent",
 ) -> Any:
-    """逛广场：别人公开的豆卡。有买袋价和袋上克重（offer），没有还剩多少和流水。roast/process 逗号分隔（多选=或）；tags 逗号分隔（多选=且）。in_kingdom=true 只看已进王国的。"""
+    """逛广场：别人公开的豆卡。offer 有买袋价、袋上克重、每克价，没有还剩多少。roast/process 逗号分隔（多选=或）；tags 逗号分隔（多选=且）。sort: recent / cost / cost_desc / price / price_desc / roast / origin / score。"""
     return _call(
         client().list_plaza,
         certified_only,
@@ -935,13 +953,38 @@ def list_plaza(
         process,
         tags,
         in_kingdom,
+        sort,
     )
 
 
 @mcp.tool()
 def get_plaza_bean(bean_id: int) -> Any:
-    """看一张广场公开卡：产地、照片、杯测、落点、买袋价和袋上克重。没有还剩多少和流水。私卡会 404。"""
+    """看一张广场公开卡：产地、照片、杯测、落点、买袋价、袋上克重和每克价。没有还剩多少和流水。私卡会 404。"""
     return _call(client().get_plaza_bean, bean_id)
+
+
+@mcp.tool()
+def take_plaza_bean(bean_id: int) -> Any:
+    """把别人公开的豆卡领到自己豆库。只拷档案和照片，不带袋子和剩余。自己的卡会 400。已经领过就还已有的那张。"""
+    return _call(client().take_plaza_bean, bean_id)
+
+
+@mcp.tool()
+def list_plaza_gear() -> Any:
+    """逛广场上别人公开的器具。"""
+    return _call(client().list_plaza_gear)
+
+
+@mcp.tool()
+def get_plaza_gear(gear_id: int) -> Any:
+    """看一件广场上的公开器具。没公开会 404。"""
+    return _call(client().get_plaza_gear, gear_id)
+
+
+@mcp.tool()
+def take_plaza_gear(gear_id: int) -> Any:
+    """把别人公开的器具领到自己台面。图是拷贝。自己的不用领。已经领过就还已有的那件。"""
+    return _call(client().take_plaza_gear, gear_id)
 
 
 @mcp.tool()

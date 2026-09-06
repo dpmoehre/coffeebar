@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import db, photos
+from . import db, photos, store
 
 FALLBACK_DOSE = 15.0   # 一杯都还没冲过时的兜底
 BEAN_WINDOW = 20       # 这支豆看最近多少杯
@@ -112,7 +112,7 @@ def summary(conn: sqlite3.Connection, period: str = "month", owner_id: int | Non
                    COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups,
                    COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN c.amount_g ELSE 0 END), 0)
                        AS cup_g,
-                   COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
+                   COALESCE(SUM{store.COFFEE_SPENT_SQL}, 0) AS spent
             FROM consumption_event c WHERE {where}""",
         args,
     ).fetchone()
@@ -238,7 +238,7 @@ def by_person(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
         f"""SELECT COALESCE(p.name, '没记') AS name,
                    COALESCE(SUM(c.amount_g), 0) AS beans_g,
                    COUNT(*) AS cups,
-                   COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
+                   COALESCE(SUM{store.COFFEE_SPENT_SQL}, 0) AS spent
             FROM consumption_event c
             LEFT JOIN person p ON p.id = c.person_id
             WHERE {where} AND COALESCE(c.as_cup, 1) = 1
@@ -260,7 +260,7 @@ def by_bean(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
         f"""SELECT b.id, b.name,
                    COALESCE(SUM(c.amount_g), 0) AS beans_g,
                    COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups,
-                   COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0) AS spent
+                   COALESCE(SUM{store.COFFEE_SPENT_SQL}, 0) AS spent
             FROM consumption_event c
             JOIN bean_lot l ON l.id = c.lot_id
             JOIN bean b ON b.id = l.bean_id
@@ -423,7 +423,7 @@ def person_profile(
 
     row = conn.execute(
         f"""SELECT COALESCE(SUM(c.amount_g), 0), COUNT(*),
-                   COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0)
+                   COALESCE(SUM{store.COFFEE_SPENT_SQL}, 0)
             FROM consumption_event c WHERE {where}""",
         args,
     ).fetchone()

@@ -175,6 +175,7 @@ export const api = {
   gearItem: (id) => req("GET", `/api/gear/${id}`),
   createGear: (data) => req("POST", "/api/gear", data),
   updateGear: (id, data) => req("PATCH", `/api/gear/${id}`, data),
+  openFilterPack: (id, data) => req("POST", `/api/gear/${id}/packs`, data),
   deleteGear: (id) => req("DELETE", `/api/gear/${id}`),
   gearFromCatalog: (id) => req("POST", `/api/gear/from-catalog/${id}`, {}),
   addGearPhoto: (id, file) => {
@@ -263,6 +264,10 @@ export const api = {
   publicBeans: (certifiedOnly = false) =>
     req("GET", `/api/public/beans${certifiedOnly ? "?certified=1" : ""}`),
   publicBean: (id) => req("GET", `/api/public/beans/${id}`),
+  takePlazaBean: (id) => req("POST", `/api/public/beans/${id}/take`, {}),
+  publicGear: () => req("GET", "/api/public/gear"),
+  publicGearItem: (id) => req("GET", `/api/public/gear/${id}`),
+  takePlazaGear: (id) => req("POST", `/api/public/gear/${id}/take`, {}),
   kingdom: (saved = false) => req("GET", `/api/kingdom${saved ? "?saved=1" : ""}`),
   kingdomItem: (id) => req("GET", `/api/kingdom/${id}`),
   kingdomScore: (id, data) => req("PUT", `/api/kingdom/${id}/score`, data),
