@@ -63,6 +63,15 @@ def test_admin_certify_and_filter(client, monkeypatch):
     assert "places" in review
     assert "gazetteer" in review["places"]
     assert "unit_cost" not in review
+    assert "lots" not in review
+    assert "balance_g" not in review
+    assert "log" not in review
+    assert review["price"] is None
+    assert review["checklist"]["origin"] is True
+    assert review["checklist"]["photos"] is False
+    assert review["checklist"]["scores"] is False
+    assert review["checklist"]["note"] is False
+    assert review["checklist"]["price"] is False
 
     out = client.post(
         f"/api/admin/review/beans/{bean['id']}/certify",
@@ -165,7 +174,82 @@ def test_mcp_review_tools_need_admin(client, monkeypatch):
     assert any(b["id"] == bean["id"] for b in queue["beans"])
     detail = admin.get_review_bean(bean["id"])
     assert detail["places"]["gazetteer"]
+    assert "checklist" in detail
     certified = admin.certify_bean(bean["id"], note="MCP 过了")
     assert certified["certified"] is True
     dropped = admin.uncertify_bean(bean["id"], note="再看一眼")
     assert dropped["certified"] is False
+
+
+def test_review_dossier_shows_archive_not_stock(client, monkeypatch):
+    from tests.test_photos import png_bytes
+
+    bean = client.post(
+        "/api/beans",
+        json={
+            "name": "档案完整",
+            "origin": "埃塞俄比亚 耶加雪菲",
+            "varietal": "Heirloom",
+            "process": "水洗",
+            "roast": "中浅",
+            "note": "店家说有茉莉和柠檬皮",
+            "nominal_g": 200,
+            "price": 88,
+            "visibility": "public",
+        },
+    ).json()
+    client.post(
+        f"/api/beans/{bean['id']}/scores",
+        json={
+            "dry": 8,
+            "flavor": 8,
+            "aftertaste": 7,
+            "acidity": 8,
+            "sweetness": 7,
+            "body": 6,
+            "balance": 7,
+            "overall": 8,
+            "comment": "茉莉",
+        },
+    )
+    photo = client.post(
+        f"/api/beans/{bean['id']}/photos",
+        files={"file": ("pack.png", png_bytes(), "image/png")},
+        data={"kind": "pack"},
+    )
+    assert photo.status_code == 201, photo.text
+
+    monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
+    client.post("/api/auth/logout")
+    assert (
+        client.post(
+            "/api/auth/register",
+            json={"email": "boss@coffeebar.local", "password": "testpass1"},
+        ).status_code
+        == 201
+    )
+
+    queue = client.get("/api/admin/review/beans").json()["beans"]
+    item = next(b for b in queue if b["id"] == bean["id"])
+    assert item["checklist"]["photos"] is True
+    assert item["checklist"]["scores"] is True
+    assert item["checklist"]["note"] is True
+    assert item["checklist"]["price"] is True
+    assert item["price"]["price"] == 88
+
+    review = client.get(f"/api/admin/review/beans/{bean['id']}").json()
+    assert review["note"].startswith("店家")
+    assert review["scores"]["comment"] == "茉莉"
+    assert review["photos"]
+    assert review["price"]["price"] == 88
+    assert review["price"]["nominal_g"] == 200
+    assert review["checklist"] == {
+        "photos": True,
+        "scores": True,
+        "note": True,
+        "price": True,
+        "origin": True,
+        "places": True,
+    }
+    for key in ("lots", "balance_g", "log", "unit_cost"):
+        assert key not in review

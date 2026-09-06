@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
+import Radar from "../components/Radar.jsx";
 import { Btn, Chip, Empty, Panel, g, ml, money } from "../ui.jsx";
 
 function clock(at) {
@@ -461,6 +462,9 @@ function ReviewPane({ toast, oops }) {
               <span className="mt-0.5 text-xs">
                 {b.origin || "没填产地"} · {b.owner_email || "无名氏"}
               </span>
+              {gaps(b.checklist).length > 0 && (
+                <span className="mt-0.5 text-xs text-warn">{gaps(b.checklist).join(" · ")}</span>
+              )}
             </button>
           ))}
           {beans && beans.length === 0 && <p className="text-sm text-muted">这一栏是空的。</p>}
@@ -470,59 +474,181 @@ function ReviewPane({ toast, oops }) {
 
       <div>
         {!picked ? (
-          <Empty>左边点一张卡。审核时对照词典钉，对不上就重钉或手改后再认证。</Empty>
+          <Empty>
+            左边点一张卡。认证是看这张是不是正常的豆子档案：产地、描述、照片、杯测、进价、地图钉。空卡或乱钉不要过。
+          </Empty>
         ) : (
-          <Panel>
-            <h2 className="serif m-0 text-2xl">{picked.name}</h2>
-            <p className="mt-1 mb-0 text-sm text-muted">
-              {picked.owner?.email || ""} · {[picked.origin, picked.varietal, picked.process, picked.roast]
-                .filter(Boolean)
-                .join(" · ")}
-            </p>
-            {picked.places?.warnings?.length > 0 ? (
-              <p className="mt-3 mb-0 text-sm text-warn">{picked.places.warnings.join("；")}</p>
-            ) : (
-              <p className="mt-3 mb-0 text-sm text-amber">地图钉和词典对得上</p>
-            )}
-            {picked.places?.current?.length > 0 && (
-              <p className="mt-2 mb-0 text-[13px] text-muted">
-                现在：{picked.places.current.map((p) => p.label).join("、")}
-              </p>
-            )}
-            {picked.places?.gazetteer?.length > 0 && (
-              <p className="mt-1 mb-0 text-[13px] text-muted">
-                词典：{picked.places.gazetteer.map((p) => p.label).join("、")}
-              </p>
-            )}
-            <input
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              placeholder="审核备注，可空"
-              className="mt-4 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-cream
-                outline-none focus:border-amber"
-            />
-            <div className="mt-3 flex flex-wrap gap-2">
-              <Btn variant="ghost" onClick={guess}>
-                按词典重钉
-              </Btn>
-              {picked.certified ? (
-                <Btn variant="danger" onClick={uncertify}>
-                  取消认证
-                </Btn>
-              ) : (
-                <>
-                  <Btn onClick={() => certify(false)}>认证</Btn>
-                  {picked.places?.warnings?.length > 0 && (
-                    <Btn variant="ghost" onClick={() => certify(true)}>
-                      钉不对也认证
-                    </Btn>
-                  )}
-                </>
-              )}
-            </div>
-          </Panel>
+          <ReviewDossier
+            picked={picked}
+            note={note}
+            setNote={setNote}
+            guess={guess}
+            certify={certify}
+            uncertify={uncertify}
+          />
         )}
       </div>
+    </div>
+  );
+}
+
+const CHECK_LABELS = [
+  ["photos", "照片"],
+  ["scores", "杯测"],
+  ["note", "描述"],
+  ["price", "进价"],
+  ["origin", "产地"],
+  ["places", "落点"],
+];
+
+const ARCHIVE_FIELDS = [
+  ["origin", "产地"],
+  ["varietal", "豆种"],
+  ["producer", "处理厂"],
+  ["process", "处理法"],
+  ["roast", "烘焙"],
+  ["altitude", "海拔"],
+  ["water_temp", "水温"],
+];
+
+function gaps(checklist) {
+  return CHECK_LABELS.filter(([k]) => !checklist?.[k]).map(([, label]) => `没${label}`);
+}
+
+function ReviewDossier({ picked, note, setNote, guess, certify, uncertify }) {
+  const checks = picked.checklist || {};
+  return (
+    <div className="space-y-4">
+      <Panel>
+        <h2 className="serif m-0 text-2xl">{picked.name}</h2>
+        <p className="mt-1 mb-0 text-sm text-muted">
+          {picked.owner?.email || "无名氏"}
+          {picked.certified ? " · 已认证" : " · 未认证"}
+        </p>
+        <div className="mt-3 flex flex-wrap gap-1.5">
+          {CHECK_LABELS.map(([k, label]) => (
+            <span
+              key={k}
+              className={`rounded-full border px-2 py-0.5 text-xs ${
+                checks[k] ? "border-amber/40 text-amber" : "border-line text-muted"
+              }`}
+            >
+              {checks[k] ? `有${label}` : `没${label}`}
+            </span>
+          ))}
+        </div>
+        <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+          {ARCHIVE_FIELDS.map(([k, label]) => (
+            <div key={k}>
+              <dt className="text-xs text-muted">{label}</dt>
+              <dd className="m-0 text-sm text-cream">{picked[k] || "没填"}</dd>
+            </div>
+          ))}
+        </dl>
+        {picked.tags?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {picked.tags.map((t) => (
+              <b
+                key={t}
+                className="rounded-full border border-line px-2 py-0.5 text-xs font-normal text-muted"
+              >
+                {t}
+              </b>
+            ))}
+          </div>
+        )}
+        <div className="mt-4">
+          <div className="text-xs text-muted">豆卡描述</div>
+          <p className="mt-1 mb-0 text-sm leading-relaxed text-cream">
+            {picked.note?.trim() || "没写描述"}
+          </p>
+        </div>
+        <div className="mt-4">
+          <div className="text-xs text-muted">进价</div>
+          <p className="mt-1 mb-0 text-sm text-cream">
+            {picked.price
+              ? `${money(picked.price.price)} / ${g(picked.price.nominal_g)}${
+                  picked.price.unit_cost != null ? ` · 合 ${money(picked.price.unit_cost)}/g` : ""
+                }${picked.price.bags > 1 ? ` · ${picked.price.bags} 袋有价` : ""}`
+              : "没填进价"}
+          </p>
+        </div>
+      </Panel>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel>
+          <div className="serif text-lg">照片</div>
+          {picked.photos?.length ? (
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              {picked.photos.map((p) => (
+                <img
+                  key={p.id}
+                  src={p.thumb || p.url}
+                  alt=""
+                  className="h-36 w-full rounded-xl object-cover"
+                />
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 mb-0 text-sm text-muted">没有包装或豆盘照片。</p>
+          )}
+        </Panel>
+        <Panel>
+          <div className="serif text-lg">杯测</div>
+          <Radar scores={picked.scores} />
+          {picked.scores?.comment ? (
+            <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
+              {picked.scores.comment}
+            </p>
+          ) : (
+            <p className="mt-3 mb-0 text-sm text-muted">主人还没写杯测评语。</p>
+          )}
+        </Panel>
+      </div>
+
+      <Panel>
+        {picked.places?.warnings?.length > 0 ? (
+          <p className="mt-0 mb-0 text-sm text-warn">{picked.places.warnings.join("；")}</p>
+        ) : (
+          <p className="mt-0 mb-0 text-sm text-amber">地图钉和词典对得上</p>
+        )}
+        {picked.places?.current?.length > 0 && (
+          <p className="mt-2 mb-0 text-[13px] text-muted">
+            现在：{picked.places.current.map((p) => p.label).join("、")}
+          </p>
+        )}
+        {picked.places?.gazetteer?.length > 0 && (
+          <p className="mt-1 mb-0 text-[13px] text-muted">
+            词典：{picked.places.gazetteer.map((p) => p.label).join("、")}
+          </p>
+        )}
+        <input
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="审核备注，可空"
+          className="mt-4 w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-cream
+            outline-none focus:border-amber"
+        />
+        <div className="mt-3 flex flex-wrap gap-2">
+          <Btn variant="ghost" onClick={guess}>
+            按词典重钉
+          </Btn>
+          {picked.certified ? (
+            <Btn variant="danger" onClick={uncertify}>
+              取消认证
+            </Btn>
+          ) : (
+            <>
+              <Btn onClick={() => certify(false)}>认证</Btn>
+              {picked.places?.warnings?.length > 0 && (
+                <Btn variant="ghost" onClick={() => certify(true)}>
+                  钉不对也认证
+                </Btn>
+              )}
+            </>
+          )}
+        </div>
+      </Panel>
     </div>
   );
 }

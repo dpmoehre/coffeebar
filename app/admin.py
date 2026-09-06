@@ -121,6 +121,63 @@ def _bean_row(conn: sqlite3.Connection, bean_id: int) -> dict:
     return dict(row)
 
 
+SCORE_DIMS = ("dry", "flavor", "aftertaste", "acidity", "sweetness", "body", "balance", "overall")
+
+
+def _has_cupping(score: dict | None) -> bool:
+    if not score:
+        return False
+    if (score.get("comment") or "").strip():
+        return True
+    return any(score.get(k) is not None for k in SCORE_DIMS)
+
+
+def review_price(conn: sqlite3.Connection, bean_id: int) -> dict | None:
+    """审核只看买袋价，不带剩余和谁喝的。"""
+    row = conn.execute(
+        """SELECT price, nominal_g, measured_g, bought_on
+             FROM bean_lot
+            WHERE bean_id = ? AND price IS NOT NULL
+            ORDER BY created_at DESC, id DESC
+            LIMIT 1""",
+        (bean_id,),
+    ).fetchone()
+    if not row:
+        return None
+    usable = row["measured_g"] if row["measured_g"] else row["nominal_g"]
+    bags = conn.execute(
+        "SELECT COUNT(*) FROM bean_lot WHERE bean_id = ? AND price IS NOT NULL",
+        (bean_id,),
+    ).fetchone()[0]
+    return {
+        "price": row["price"],
+        "nominal_g": row["nominal_g"],
+        "bought_on": row["bought_on"],
+        "bags": bags,
+        "unit_cost": (row["price"] / usable) if row["price"] and usable else None,
+    }
+
+
+def review_checklist(
+    *,
+    photos_ok: bool,
+    scores,
+    note,
+    price,
+    origin,
+    places_info,
+) -> dict:
+    current = (places_info or {}).get("current") if isinstance(places_info, dict) else None
+    return {
+        "photos": bool(photos_ok),
+        "scores": _has_cupping(scores),
+        "note": bool((note or "").strip()),
+        "price": bool(price),
+        "origin": bool((origin or "").strip()),
+        "places": bool(current),
+    }
+
+
 def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict]:
     where = "b.visibility = 'public' AND b.deleted_at IS NULL"
     if status == "pending":
@@ -131,7 +188,7 @@ def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict
         raise HTTPException(400, "status 只能是 pending / certified / public")
     rows = conn.execute(
         f"""SELECT b.id, b.name, b.origin, b.varietal, b.producer, b.process, b.roast,
-                   b.visibility, b.certified_at, b.certified_by, b.review_note,
+                   b.note, b.visibility, b.certified_at, b.certified_by, b.review_note,
                    b.places_verified_at, b.updated_at, b.owner_id,
                    a.email AS owner_email
               FROM bean b
@@ -142,9 +199,22 @@ def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict
     out = []
     for row in rows:
         d = dict(row)
+        shots = photos.list_bean_photos(conn, d["id"])
+        scores = store.latest_score(conn, d["id"])
+        price = review_price(conn, d["id"])
         d["certified"] = bool(d.get("certified_at"))
         d["places"] = places.review_places(conn, d["id"], d.get("origin"), d.get("producer"))
-        d["cover"] = photos.cover(photos.list_bean_photos(conn, d["id"]))
+        d["cover"] = photos.cover(shots)
+        d["photo_count"] = len(shots)
+        d["price"] = price
+        d["checklist"] = review_checklist(
+            photos_ok=bool(shots),
+            scores=scores,
+            note=d.get("note"),
+            price=price,
+            origin=d.get("origin"),
+            places_info=d["places"],
+        )
         out.append(d)
     return out
 
@@ -157,6 +227,9 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
         "SELECT id, email FROM account WHERE id = ?", (bean.get("owner_id"),)
     ).fetchone()
     shots = photos.list_bean_photos(conn, bean_id)
+    scores = store.latest_score(conn, bean_id)
+    price = review_price(conn, bean_id)
+    pins = places.review_places(conn, bean_id, bean.get("origin"), bean.get("producer"))
     return {
         "id": bean["id"],
         "name": bean["name"],
@@ -177,10 +250,20 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
         "updated_at": bean.get("updated_at"),
         "owner": {"id": owner["id"], "email": owner["email"]} if owner else None,
         "tags": store.bean_tags(conn, bean_id),
-        "scores": store.latest_score(conn, bean_id),
+        "scores": scores,
         "photos": shots,
         "cover": photos.cover(shots),
-        "places": places.review_places(conn, bean_id, bean.get("origin"), bean.get("producer")),
+        "photo_count": len(shots),
+        "price": price,
+        "places": pins,
+        "checklist": review_checklist(
+            photos_ok=bool(shots),
+            scores=scores,
+            note=bean.get("note"),
+            price=price,
+            origin=bean.get("origin"),
+            places_info=pins,
+        ),
     }
 
 
