@@ -111,8 +111,18 @@ def api_login(
     response: Response,
     conn: sqlite3.Connection = Depends(get_conn),
 ):
-    ratelimit.check(request, "login", 5)
-    account = auth.login(conn, payload.get("email") or "", payload.get("password") or "")
+    try:
+        account = auth.login(conn, payload.get("email") or "", payload.get("password") or "")
+    except HTTPException as exc:
+        if exc.status_code == 401:
+            ratelimit.check(
+                request,
+                "login",
+                ratelimit.LOGIN_TRIES,
+                who=ratelimit.client_who(request),
+                message="登录试错已经 5 次，过一分钟再来",
+            )
+        raise
     token = auth.issue_session(conn, account["id"])
     auth.set_cookie(response, token, request)
     return account

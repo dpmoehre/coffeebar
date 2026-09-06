@@ -36,6 +36,15 @@ def test_missing_credentials():
         c._login()
 
 
+def test_wrong_password_is_not_retried(client):
+    c = Client(client, email="test@coffeebar.local", password="wrongwrong")
+    with pytest.raises(ApiError, match="邮箱或密码不对"):
+        c._login()
+    assert c._auth_error is not None
+    with pytest.raises(ApiError, match="邮箱或密码不对"):
+        c._login()
+
+
 def test_tool_catalog_covers_bar():
     tools = anyio.run(mcp.list_tools)
     names = {t.name for t in tools}

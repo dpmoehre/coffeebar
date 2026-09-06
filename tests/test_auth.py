@@ -163,17 +163,33 @@ def test_login_rate_limit(monkeypatch):
             ).status_code
             == 201
         )
+        for _ in range(4):
+            ok = c.post(
+                "/api/auth/login",
+                json={"email": "rl@coffeebar.local", "password": "testpass1"},
+            )
+            assert ok.status_code == 200
         for i in range(5):
             r = c.post(
                 "/api/auth/login",
                 json={"email": "rl@coffeebar.local", "password": "wrongwrong"},
+                headers={"X-Source": "web"},
             )
             assert r.status_code == 401, i
+        for i in range(5):
+            mcp = c.post(
+                "/api/auth/login",
+                json={"email": "rl@coffeebar.local", "password": "wrongwrong"},
+                headers={"X-Source": "mcp"},
+            )
+            assert mcp.status_code == 401, i
         blocked = c.post(
             "/api/auth/login",
             json={"email": "rl@coffeebar.local", "password": "wrongwrong"},
+            headers={"X-Source": "web"},
         )
         assert blocked.status_code == 429
+        assert "5 次" in (blocked.json().get("detail") or "")
 
 
 def test_cookie_secure_when_forced(client, monkeypatch):

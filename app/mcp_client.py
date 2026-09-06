@@ -68,6 +68,7 @@ class Client:
         self.email = email
         self.password = password
         self._authed = authed
+        self._auth_error: ApiError | None = None
 
     @classmethod
     def from_env(cls) -> Client:
@@ -94,15 +95,25 @@ class Client:
     def _login(self) -> None:
         if self._authed:
             return
+        if self._auth_error:
+            raise self._auth_error
         if not self.email or not self.password:
             raise ApiError(401, "请在 MCP 配置或仓库 .env 里写 COFFEEBAR_EMAIL 和 COFFEEBAR_PASSWORD")
         try:
             self._connect("GET", "/api/health")
         except Offline:
             raise
-        res = self._connect("POST", "/api/auth/login", json={"email": self.email, "password": self.password})
+        res = self._connect(
+            "POST",
+            "/api/auth/login",
+            json={"email": self.email, "password": self.password},
+            headers={"X-Source": "mcp"},
+        )
         if res.status_code >= 400:
-            raise ApiError(res.status_code, _msg(res))
+            err = ApiError(res.status_code, _msg(res))
+            if res.status_code in (401, 429):
+                self._auth_error = err
+            raise err
         self._authed = True
 
     def request(self, method: str, path: str, **kw):

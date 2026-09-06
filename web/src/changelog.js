@@ -20,6 +20,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-06",
+    title: "登录可以试错 5 次",
+    notes: [
+      "密码输错了还能再试，满 5 次才要等一分钟。登对了不占这几次。",
+      "Cursor 那边连不上，也不会把网页登录的次数用光。",
+    ],
+  },
+  {
+    date: "2026-09-06",
     title: "配方换基酒也能让 Cursor 代劳",
     notes: [
       "可以说「把这款鸡尾酒的金酒换成那支朗姆」，配方会一次改掉。",
