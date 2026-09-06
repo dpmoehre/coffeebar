@@ -44,7 +44,19 @@ Cursor ──MCP── 同一套 FastAPI / SQLite（建豆卡、挂照片、记�
 └── .cursor/rules/            # Cursor 工作牌（alwaysApply 规则）
 ```
 
-产品代码落地后，在本节补应用目录，并在 README 写清入口与运行方式。相对独立的新子系统用自包含目录（接口、逻辑、配置、测试、README），勿跨目录复制粘贴。
+应用目录（入口仍是 `uvicorn app.main:app`）：
+
+```
+app/
+├── main.py          # 启动、异常、静态文件
+├── deps.py          # 连接与当前账号
+├── routers/         # HTTP 按领域（豆子 / 酒 / 王国 / 后台…）
+├── store.py         # 豆子账面；人名见 people.py
+├── errors.py        # Conflict → 409
+└── schema.sql
+```
+
+相对独立的新子系统用自包含目录（接口、逻辑、配置、测试、README），勿跨目录复制粘贴。HTTP 新接口挂进 `app/routers/` 对应文件，不要把路由再堆回 `main.py`。
 
 ---
 
