@@ -6,6 +6,7 @@ import BrewPlan from "../components/BrewPlan.jsx";
 import OpenBag from "../components/OpenBag.jsx";
 import Photos from "../components/Photos.jsx";
 import Radar from "../components/Radar.jsx";
+import { SCORE_DIMS, freshnessLine, scoreFreshnessLine } from "../freshness.js";
 import { Plus, Trash, Undo } from "../icons.jsx";
 import { Bar, Btn, Chip, Field, Input, Modal, Panel, Select, g, money } from "../ui.jsx";
 
@@ -122,6 +123,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
               bean.altitude,
               bean.water_temp && `${bean.water_temp} °C`,
               current?.opened_on ? `开封 ${current.opened_on}` : "未开封",
+              freshnessLine(bean.freshness),
               current?.unit_cost && `这杯约 ${money(dose.avg_g * current.unit_cost)}`,
             ]
               .filter(Boolean)
@@ -242,11 +244,29 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         <Panel>
           <div className="serif text-lg">杯测雷达</div>
           <Radar scores={bean.scores} />
+          {scoreFreshnessLine(bean.scores) && (
+            <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
+          )}
           {bean.scores?.comment && (
             <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
               {bean.scores.comment}
             </p>
           )}
+          {(bean.score_log || []).length > 1 && (
+            <div className="mt-4 space-y-1.5">
+              {(bean.score_log || []).map((s) => (
+                <div key={s.id} className="flex flex-wrap justify-between gap-2 text-[13px] text-muted">
+                  <span>
+                    {s.at?.slice(0, 10)}
+                    {s.lot_seq ? ` · 第 ${s.lot_seq} 袋` : ""}
+                    {s.overall != null ? ` · 总体 ${s.overall}` : ""}
+                  </span>
+                  <span className="text-amber">{scoreFreshnessLine(s) || "没填烘焙日"}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <ScoreForm bean={bean} onDone={load} toast={toast} oops={oops} />
         </Panel>
       </div>
 
@@ -529,9 +549,117 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
   );
 }
 
+function ScoreForm({ bean, onDone, toast, oops }) {
+  const lots = bean.lots || [];
+  const current = lots.find((l) => !l.closed_at) || lots[0];
+  const [lotId, setLotId] = useState(current?.id ?? "");
+  const [roastedOn, setRoastedOn] = useState(current?.roasted_on || "");
+  const [form, setForm] = useState(() => blankScore());
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const lot = (bean.lots || []).find((l) => l.id === lotId);
+    setRoastedOn(lot?.roasted_on || "");
+  }, [lotId, bean.id]);
+
+  const save = async () => {
+    const payload = { comment: form.comment || undefined, roasted_on: roastedOn || null };
+    if (lotId) payload.lot_id = Number(lotId);
+    let filled = Boolean(form.comment);
+    for (const [k] of SCORE_DIMS) {
+      if (form[k] !== "") {
+        payload[k] = Number(form[k]);
+        filled = true;
+      }
+    }
+    if (!filled) return oops("先打一个分，或写一句");
+    setBusy(true);
+    try {
+      await api.addScore(bean.id, payload);
+      setForm(blankScore());
+      toast("杯测记下了");
+      onDone();
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="mt-5 border-t border-line pt-4">
+      <div className="serif text-base">新打一杯</div>
+      <p className="mt-1 mb-0 text-[13px] text-muted">选袋、八维、评语。烘焙日有就带出，可改；袋上还空着会写回这袋。</p>
+      {lots.length > 0 && (
+        <div className="mt-3 space-y-2">
+          {lots.map((l) => (
+            <button
+              key={l.id}
+              type="button"
+              onClick={() => setLotId(l.id)}
+              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-[13px] transition ${
+                l.id === lotId ? "border-amber bg-amber/10" : "border-line hover:border-[#6b5438]"
+              }`}
+            >
+              <span>
+                第 {l.seq} 袋 · {l.closed_at ? "已关袋" : l.opened_on ? "在喝这袋" : "未开封"}
+                {l.roasted_on ? ` · 烘于 ${l.roasted_on}` : ""}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+      <div className="mt-3">
+        <Field label="烘焙日" hint="袋上印的 Roast Date，可空">
+          <Input type="date" value={roastedOn} onChange={(e) => setRoastedOn(e.target.value)} />
+        </Field>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {SCORE_DIMS.map(([k, label]) => (
+          <Field key={k} label={label}>
+            <Input
+              type="number"
+              min="1"
+              max="10"
+              step="0.5"
+              value={form[k]}
+              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
+            />
+          </Field>
+        ))}
+      </div>
+      <div className="mt-3">
+        <Field label="一句评语">
+          <Input
+            value={form.comment}
+            onChange={(e) => setForm({ ...form, comment: e.target.value })}
+            placeholder="明亮的柠檬、尾段有可可…"
+          />
+        </Field>
+      </div>
+      <div className="mt-3">
+        <Btn onClick={save} disabled={busy}>
+          记下这杯
+        </Btn>
+      </div>
+    </div>
+  );
+}
+
+function blankScore() {
+  const out = { comment: "" };
+  for (const [k] of SCORE_DIMS) out[k] = "";
+  return out;
+}
+
 function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
   const [busy, setBusy] = useState(null);
+  const [roastOn, setRoastOn] = useState(lot.roasted_on || "");
   const pct = lot.usable_g ? (lot.balance_g / lot.usable_g) * 100 : 0;
+
+  useEffect(() => {
+    setRoastOn(lot.roasted_on || "");
+  }, [lot.roasted_on]);
 
   const ask = async (kind) => {
     const label = kind === "measure" ? "开袋称出来是多少克" : "现在实际还剩多少克";
@@ -566,8 +694,38 @@ function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
             {lot.measured_g ? ` · 实称 ${lot.measured_g}` : "（没称）"}
             {lot.price ? ` · ${money(lot.price)}` : ""}
           </span>
+          {freshnessLine(lot.freshness) && (
+            <span className="ml-2 text-[13px] text-amber">{freshnessLine(lot.freshness)}</span>
+          )}
         </div>
         <div className="whitespace-nowrap text-amber">{g(lot.balance_g)}</div>
+      </div>
+      <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+        <span className="text-muted">烘焙日</span>
+        <Input
+          type="date"
+          className="w-auto py-1 text-xs"
+          value={roastOn}
+          onChange={(e) => setRoastOn(e.target.value)}
+        />
+        <button
+          className="text-amber underline"
+          disabled={busy === "roast"}
+          onClick={async () => {
+            setBusy("roast");
+            try {
+              await api.setLotRoast(lot.id, roastOn || null);
+              toast(roastOn ? "烘焙日记下了" : "已去掉烘焙日");
+              onDone();
+            } catch (e) {
+              oops(e.message);
+            } finally {
+              setBusy(null);
+            }
+          }}
+        >
+          记下
+        </button>
       </div>
       {!lot.closed_at && (
         <>
@@ -782,6 +940,7 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
                   nominal_g: Number(f.nominal_g),
                   price: f.price ? Number(f.price) : undefined,
                   bought_on: f.bought_on || undefined,
+                  roasted_on: f.roasted_on || undefined,
                 });
                 onDone();
               } catch (e) {
@@ -815,6 +974,9 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
       </div>
       <Field label="购入日" hint="不填就按今天记">
         <Input type="date" value={f.bought_on ?? ""} onChange={(e) => setF({ ...f, bought_on: e.target.value })} />
+      </Field>
+      <Field label="烘焙日" hint="袋上印的 Roast Date，可空">
+        <Input type="date" value={f.roasted_on ?? ""} onChange={(e) => setF({ ...f, roasted_on: e.target.value })} />
       </Field>
     </Modal>
   );

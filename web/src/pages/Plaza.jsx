@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import Radar from "../components/Radar.jsx";
+import { scoreFreshnessLine } from "../freshness.js";
 import { Btn, Chip, Empty, Input, Panel, g, money } from "../ui.jsx";
 
 function offerLine(offer) {
@@ -405,6 +406,9 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
           <div className="serif text-lg">这张卡主人的杯测</div>
           <p className="mt-1 mb-0 text-[13px] text-muted">只代表这袋的主人，不是王国里大家的分。</p>
           <Radar scores={bean.scores} />
+          {scoreFreshnessLine(bean.scores) && (
+            <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
+          )}
           {bean.scores?.comment && (
             <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">{bean.scores.comment}</p>
           )}

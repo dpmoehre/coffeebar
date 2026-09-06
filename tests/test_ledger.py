@@ -87,7 +87,9 @@ def test_export_zip_has_sheets_and_bom(conn):
     text = detail.decode("utf-8-sig")
     assert "西达摩" in text
     assert "戚浩辰" in text
-    assert "关袋偏差" in zf.read("豆子批次.csv").decode("utf-8-sig")
+    lots_csv = zf.read("豆子批次.csv").decode("utf-8-sig")
+    assert "关袋偏差" in lots_csv
+    assert "烘焙日" in lots_csv
 
 
 def test_calendar_and_export_http(client):

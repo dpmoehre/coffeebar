@@ -2,11 +2,13 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { freshnessLine } from "../freshness.js";
 import { Plus } from "../icons.jsx";
 import { Bar, Btn, Chip, Empty, Field, Input, Modal, Select, g, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近动过" },
+  { key: "fresh", label: "新鲜" },
   { key: "left", label: "剩得少" },
   { key: "left_desc", label: "剩得多" },
   { key: "cost", label: "克价低" },
@@ -16,6 +18,28 @@ const SORTS = [
   { key: "score", label: "评分" },
   { key: "opened", label: "开封日" },
 ];
+
+const PHASE_CHIPS = [
+  { key: "resting", label: "养豆中" },
+  { key: "peak", label: "正当时" },
+  { key: "past", label: "过了" },
+  { key: "unknown", label: "没填烘焙日" },
+];
+
+function byFresh(a, b) {
+  const da = a.freshness?.days_after_roast;
+  const db = b.freshness?.days_after_roast;
+  if (da == null && db == null) return 0;
+  if (da == null) return 1;
+  if (db == null) return -1;
+  return da - db;
+}
+
+function phaseMatch(bean, filter) {
+  const p = bean.freshness?.phase;
+  if (filter === "past") return p === "fading" || p === "stale";
+  return p === filter;
+}
 
 // 没填价钱的垫底，别因为 null 被当成最便宜或最贵
 function byCost(a, b, desc) {
@@ -30,6 +54,7 @@ export default function Beans({ onOpen, toast, oops }) {
   const [scope, setScope] = useState("stock");
   const [sort, setSort] = useState("recent");
   const [picked, setPicked] = useState([]);
+  const [phase, setPhase] = useState("");
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
 
@@ -49,6 +74,7 @@ export default function Beans({ onOpen, toast, oops }) {
     let list = [...(data?.beans || [])];
     // 多选标签 = 同时带这些标签（越点越少）
     if (picked.length) list = list.filter((b) => picked.every((t) => b.tags.includes(t)));
+    if (phase) list = list.filter((b) => phaseMatch(b, phase));
     const needle = q.trim().toLowerCase();
     if (needle) {
       list = list.filter((b) =>
@@ -67,9 +93,10 @@ export default function Beans({ onOpen, toast, oops }) {
       opened: (a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""),
       cost: (a, b) => byCost(a, b, false),
       cost_desc: (a, b) => byCost(a, b, true),
+      fresh: byFresh,
     };
     return list.sort(by[sort]);
-  }, [data, picked, sort, q]);
+  }, [data, picked, phase, sort, q]);
 
   return (
     <>
@@ -116,11 +143,25 @@ export default function Beans({ onOpen, toast, oops }) {
             </option>
           ))}
         </Select>
-        {picked.length > 0 && (
-          <button className="text-sm text-amber underline" onClick={() => setPicked([])}>
+        {(picked.length > 0 || phase) && (
+          <button
+            className="text-sm text-amber underline"
+            onClick={() => {
+              setPicked([]);
+              setPhase("");
+            }}
+          >
             清除筛选
           </button>
         )}
+      </div>
+
+      <div className="mt-3 flex flex-wrap gap-2">
+        {PHASE_CHIPS.map((c) => (
+          <Chip key={c.key} on={phase === c.key} onClick={() => setPhase((p) => (p === c.key ? "" : c.key))}>
+            {c.label}
+          </Chip>
+        ))}
       </div>
 
       {allTags.length > 0 && (
@@ -207,6 +248,9 @@ function Card({ bean, onClick }) {
         <div className="mt-1 truncate text-[13px] text-muted">
           {[bean.origin, bean.varietal, bean.roast].filter(Boolean).join(" · ") || "还没填产地"}
         </div>
+        {freshnessLine(bean.freshness) && (
+          <div className="mt-1 truncate text-[13px] text-amber">{freshnessLine(bean.freshness)}</div>
+        )}
 
         {/* 还没入袋就没有克重可言，别拿 0 g 的空进度条糊弄 */}
         {bean.pending ? (
@@ -263,6 +307,7 @@ function NewBean({ open, onClose, onDone, oops }) {
         price: f.price ? Number(f.price) : undefined,
         water_temp: f.water_temp ? Number(f.water_temp) : undefined,
         bought_on: f.bought_on || undefined,
+        roasted_on: f.roasted_on || undefined,
         tags: (f.tags || "").split(/[,，\s]+/).filter(Boolean),
       });
       onDone(bean);
@@ -335,6 +380,9 @@ function NewBean({ open, onClose, onDone, oops }) {
           <Input type="date" value={f.bought_on || ""} onChange={set("bought_on")} />
         </Field>
       </div>
+      <Field label="烘焙日" hint="袋上印的 Roast Date，可空">
+        <Input type="date" value={f.roasted_on || ""} onChange={set("roasted_on")} />
+      </Field>
       <Field label="标签" hint="空格或逗号分开，输入即创建">
         <Input value={f.tags || ""} onChange={set("tags")} placeholder="水洗 柑橘 耶加" />
       </Field>

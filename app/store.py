@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import brew, db, photos, places
+from . import brew, db, freshness, photos, places
 
 # 可用克重：开袋实称有则用之，否则用包装标称（刚拆袋不会称，默认走标称）
 USABLE = "COALESCE(l.measured_g, l.nominal_g)"
@@ -86,6 +86,8 @@ SCORE_PUBLIC_KEYS = (
     "overall",
     "comment",
     "at",
+    "days_after_roast",
+    "window_phase",
 )
 
 
@@ -130,6 +132,76 @@ def _row(cur) -> dict | None:
     return dict(r) if r else None
 
 
+def roasted_on_of(value) -> str | None:
+    try:
+        day = freshness.parse_date(value)
+        freshness.assert_not_future(day)
+    except ValueError as exc:
+        raise Conflict(str(exc)) from exc
+    return day
+
+
+def pick_current_lot(lots: list[dict]) -> dict | None:
+    """在喝的那袋：优先已开封未关，再按买入序。历史豆看最近关的。"""
+    open_lots = [lot for lot in lots if not lot.get("closed_at")]
+    if open_lots:
+        open_lots.sort(
+            key=lambda lot: (
+                0 if lot.get("opened_on") else 1,
+                lot.get("created_at") or "",
+                lot.get("id") or 0,
+            )
+        )
+        return open_lots[0]
+    closed = [lot for lot in lots if lot.get("closed_at")]
+    if not closed:
+        return None
+    closed.sort(key=lambda lot: (lot.get("closed_at") or "", lot.get("id") or 0), reverse=True)
+    return closed[0]
+
+
+def _lots_grouped(conn: sqlite3.Connection, bean_ids: list[int]) -> dict[int, list[dict]]:
+    if not bean_ids:
+        return {}
+    marks = ",".join("?" * len(bean_ids))
+    rows = _rows(
+        conn.execute(
+            f"""SELECT id, bean_id, roasted_on, opened_on, closed_at, created_at
+                FROM bean_lot WHERE bean_id IN ({marks})""",
+            bean_ids,
+        )
+    )
+    grouped: dict[int, list[dict]] = {}
+    for row in rows:
+        grouped.setdefault(row["bean_id"], []).append(row)
+    return grouped
+
+
+def _attach_list_freshness(conn: sqlite3.Connection, beans: list[dict]) -> None:
+    grouped = _lots_grouped(conn, [b["id"] for b in beans])
+    today = freshness.calendar_today()
+    for bean in beans:
+        lot = pick_current_lot(grouped.get(bean["id"]) or [])
+        bean["freshness"] = freshness.of(
+            lot.get("roasted_on") if lot else None,
+            bean.get("roast"),
+            lot.get("opened_on") if lot else None,
+            today,
+        )
+
+
+def _decorate_lot(lot: dict | None, roast: str | None, today: str | None = None) -> dict | None:
+    if not lot:
+        return None
+    lot["freshness"] = freshness.of(lot.get("roasted_on"), roast, lot.get("opened_on"), today)
+    return lot
+
+
+def _bean_roast(conn: sqlite3.Connection, bean_id: int) -> str | None:
+    row = conn.execute("SELECT roast FROM bean WHERE id = ?", (bean_id,)).fetchone()
+    return row["roast"] if row else None
+
+
 # ── 豆子 ────────────────────────────────────────────────────
 
 
@@ -164,7 +236,6 @@ def give_starter_bean(conn: sqlite3.Connection, owner_id: int) -> int:
         conn.execute("UPDATE bean SET seed = 1 WHERE id = ?", (bean_id,))
     add_lot(conn, bean_id, {"nominal_g": 100, "note": "练习袋"})
     return bean_id
-
 
 
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
@@ -375,6 +446,7 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
         b["tags"] = bean_tags(conn, b["id"])
         b["scores"] = latest_score(conn, b["id"])
         out.append(_annotate_bean(b))
+    _attach_list_freshness(conn, out)
     return out
 
 
@@ -387,12 +459,17 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     if bean.get("deleted_at"):
         return None
     bean["tags"] = bean_tags(conn, bean_id)
-    bean["lots"] = list_lots(conn, bean_id)
+    bean["lots"] = list_lots(conn, bean_id, roast=bean.get("roast"))
     bean["balance_g"] = sum(l["balance_g"] for l in bean["lots"] if not l["closed_at"])
     bean["in_stock"] = any(not l["closed_at"] for l in bean["lots"])
     bean["pending"] = not bean["lots"]
     bean["unit_cost"] = unit_cost_of(bean["lots"])
-    bean["scores"] = latest_score(conn, bean_id)
+    bean["score_log"] = list_scores(conn, bean_id, lot_seq={l["id"]: l["seq"] for l in bean["lots"]})
+    bean["scores"] = bean["score_log"][0] if bean["score_log"] else None
+    current = pick_current_lot(bean["lots"])
+    bean["freshness"] = (
+        current["freshness"] if current else freshness.of(None, bean.get("roast"))
+    )
     bean["brew"] = _row(
         conn.execute(
             "SELECT method, dose_g, ratio, note FROM brew_guide WHERE bean_id = ?", (bean_id,)
@@ -556,19 +633,81 @@ def list_public_beans(
 def latest_score(conn: sqlite3.Connection, bean_id: int) -> dict | None:
     return _row(
         conn.execute(
-            "SELECT * FROM bean_score WHERE bean_id = ? ORDER BY at DESC LIMIT 1",
+            "SELECT * FROM bean_score WHERE bean_id = ? ORDER BY at DESC, id DESC LIMIT 1",
             (bean_id,),
         )
     )
 
 
-def add_score(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
-    cols = ["dry", "flavor", "aftertaste", "acidity", "sweetness", "body", "balance", "overall"]
-    cur = conn.execute(
-        f"""INSERT INTO bean_score (bean_id, {', '.join(cols)}, comment, at)
-            VALUES (?, {', '.join('?' * len(cols))}, ?, ?)""",
-        (bean_id, *[data.get(c) for c in cols], data.get("comment"), db.now()),
+def list_scores(
+    conn: sqlite3.Connection, bean_id: int, lot_seq: dict[int, int] | None = None
+) -> list[dict]:
+    rows = _rows(
+        conn.execute(
+            "SELECT * FROM bean_score WHERE bean_id = ? ORDER BY at DESC, id DESC",
+            (bean_id,),
+        )
     )
+    seq = lot_seq
+    if seq is None:
+        seq = {lot["id"]: lot["seq"] for lot in list_lots(conn, bean_id)}
+    for row in rows:
+        lid = row.get("lot_id")
+        row["lot_seq"] = seq.get(lid) if lid else None
+    return rows
+
+
+def add_score(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
+    bean = _row(conn.execute("SELECT roast, deleted_at FROM bean WHERE id = ?", (bean_id,)))
+    if not bean or bean.get("deleted_at"):
+        raise Conflict("没有这支豆")
+    lot_id = data.get("lot_id")
+    if lot_id in ("", None):
+        lot = None
+        lot_id = None
+    else:
+        lot = get_lot(conn, int(lot_id))
+        if not lot or lot["bean_id"] != bean_id:
+            raise Conflict("没有这一袋")
+        lot_id = lot["id"]
+
+    bag_date = lot.get("roasted_on") if lot else None
+    if "roasted_on" in data:
+        snapshot = roasted_on_of(data.get("roasted_on"))
+        if snapshot and lot and not bag_date:
+            conn.execute("UPDATE bean_lot SET roasted_on = ? WHERE id = ?", (snapshot, lot_id))
+    else:
+        snapshot = bag_date
+
+    today = freshness.calendar_today()
+    opened = lot.get("opened_on") if lot else None
+    fresh = freshness.of(snapshot, bean.get("roast"), opened, today)
+    if snapshot:
+        days = fresh["days_after_roast"]
+        phase = fresh["phase"]
+    else:
+        days = None
+        phase = None
+
+    cols = ["dry", "flavor", "aftertaste", "acidity", "sweetness", "body", "balance", "overall"]
+    ts = db.now()
+    cur = conn.execute(
+        f"""INSERT INTO bean_score
+            (bean_id, {", ".join(cols)}, comment, lot_id, roasted_on,
+             days_after_roast, window_phase, at)
+            VALUES (?, {", ".join("?" * len(cols))}, ?, ?, ?, ?, ?, ?)""",
+        (
+            bean_id,
+            *[data.get(c) for c in cols],
+            data.get("comment"),
+            lot_id,
+            snapshot,
+            days,
+            phase,
+            ts,
+        ),
+    )
+    conn.execute("UPDATE bean SET updated_at = ? WHERE id = ?", (ts, bean_id))
     return int(cur.lastrowid)
 
 
@@ -592,7 +731,7 @@ def set_brew_default(
 # ── 批次（袋子） ────────────────────────────────────────────
 
 
-def list_lots(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
+def list_lots(conn: sqlite3.Connection, bean_id: int, roast: str | None = None) -> list[dict]:
     # seq 按买入顺序编号（第 1 袋、第 2 袋）。同一支豆两袋规格价钱可能一模一样，
     # 没有编号就分不清谁是谁。它不跟显示顺序走——开封会把袋子提到前面，
     # 但「第 2 袋」得一直是第 2 袋。
@@ -606,8 +745,11 @@ def list_lots(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
         (bean_id,),
     )
     lots = _rows(cur)
+    roast = roast if roast is not None else _bean_roast(conn, bean_id)
+    today = freshness.calendar_today()
     for l in lots:
         l["unit_cost"] = (l["price"] / l["usable_g"]) if l["price"] and l["usable_g"] else None
+        _decorate_lot(l, roast, today)
     return lots
 
 
@@ -621,7 +763,19 @@ def get_lot(conn: sqlite3.Connection, lot_id: int) -> dict | None:
     )
     if lot:
         lot["unit_cost"] = (lot["price"] / lot["usable_g"]) if lot["price"] and lot["usable_g"] else None
+        _decorate_lot(lot, _bean_roast(conn, lot["bean_id"]))
     return lot
+
+
+def set_lot_roasted_on(conn: sqlite3.Connection, lot_id: int, roasted_on) -> dict:
+    """只改烘焙日，不写库存事件。"""
+    lot = get_lot(conn, lot_id)
+    if not lot:
+        raise Conflict("没有这一袋")
+    day = roasted_on_of(roasted_on)
+    conn.execute("UPDATE bean_lot SET roasted_on = ? WHERE id = ?", (day, lot_id))
+    conn.execute("UPDATE bean SET updated_at = ? WHERE id = ?", (db.now(), lot["bean_id"]))
+    return get_lot(conn, lot_id)
 
 
 def add_lot(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
@@ -634,17 +788,19 @@ def add_lot(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
     nominal = float(data["nominal_g"])
     if nominal <= 0:
         raise Conflict("包装标称克重要大于 0")
+    roasted_on = roasted_on_of(data.get("roasted_on"))
     ts = db.now()
     cur = conn.execute(
         """INSERT INTO bean_lot (bean_id, nominal_g, measured_g, price, bought_on,
-                                 opened_on, note, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 roasted_on, opened_on, note, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             bean_id,
             nominal,
             data.get("measured_g"),
             data.get("price"),
             data.get("bought_on"),
+            roasted_on,
             data.get("opened_on"),
             data.get("note"),
             ts,

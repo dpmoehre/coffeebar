@@ -69,6 +69,7 @@ CREATE TABLE IF NOT EXISTS bean_lot (
   measured_g  REAL,                      -- 开袋实称，可选且通常为空（刚拆袋不会称）
   price       REAL,                      -- 这袋买入价
   bought_on   TEXT,                       -- 购入日
+  roasted_on  TEXT,                       -- 袋上印的烘焙日，可空
   opened_on   TEXT,                       -- 开封日
   closed_at   TEXT,                       -- 非空 = 已关袋（这袋用完了）
   note        TEXT,
@@ -264,6 +265,10 @@ CREATE TABLE IF NOT EXISTS bean_score (
   dry       REAL, flavor REAL, aftertaste REAL, acidity REAL,
   sweetness REAL, body   REAL, balance    REAL, overall REAL,
   comment   TEXT,
+  lot_id    INTEGER REFERENCES bean_lot(id) ON DELETE SET NULL,
+  roasted_on TEXT,                       -- 写下时的烘焙日快照
+  days_after_roast INTEGER,
+  window_phase TEXT,
   at        TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_score_bean ON bean_score(bean_id);

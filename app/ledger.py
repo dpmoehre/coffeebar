@@ -12,7 +12,7 @@ from datetime import date, datetime
 
 import sqlite3
 
-from . import db, stats, store
+from . import db, freshness, stats, store
 
 _OWNER = """(
   (c.kind = 'coffee' AND EXISTS (
@@ -336,6 +336,7 @@ def export_zip(conn: sqlite3.Connection, owner_id: int, period: str = "month") -
                         round(lot.get("balance_g") or 0, 1),
                         lot.get("price") if lot.get("price") is not None else "",
                         lot.get("bought_on") or "",
+                        lot.get("roasted_on") or "",
                         lot.get("opened_on") or "",
                         lot.get("closed_at") or "",
                         round(-leftover, 1) if leftover is not None else "",
@@ -345,15 +346,22 @@ def export_zip(conn: sqlite3.Connection, owner_id: int, period: str = "month") -
             zf,
             "豆子批次.csv",
             _csv(
-                ["豆子", "第几袋", "标称克", "实称克", "可用克", "已消耗", "账面克", "买入价", "购入日", "开封日", "关袋", "关袋偏差"],
+                ["豆子", "第几袋", "标称克", "实称克", "可用克", "已消耗", "账面克", "买入价", "购入日", "烘焙日", "开封日", "关袋", "关袋偏差"],
                 lot_rows,
             ),
         )
 
         scores = conn.execute(
             """SELECT b.name, s.at, s.dry, s.flavor, s.aftertaste, s.acidity,
-                      s.sweetness, s.body, s.balance, s.overall, s.comment
-               FROM bean_score s JOIN bean b ON b.id = s.bean_id
+                      s.sweetness, s.body, s.balance, s.overall, s.comment,
+                      s.roasted_on, s.days_after_roast, s.window_phase, s.lot_id,
+                      (SELECT COUNT(*) FROM bean_lot x
+                        WHERE x.bean_id = s.bean_id AND l.id IS NOT NULL
+                          AND (x.created_at < l.created_at
+                               OR (x.created_at = l.created_at AND x.id <= l.id))) AS lot_seq
+               FROM bean_score s
+               JOIN bean b ON b.id = s.bean_id
+               LEFT JOIN bean_lot l ON l.id = s.lot_id
                WHERE b.owner_id = ?
                ORDER BY s.at DESC, s.id DESC""",
             (owner_id,),
@@ -362,11 +370,15 @@ def export_zip(conn: sqlite3.Connection, owner_id: int, period: str = "month") -
             zf,
             "杯测分数.csv",
             _csv(
-                ["豆子", "时间", "干香", "风味", "余韵", "酸质", "甜感", "醇厚度", "平衡", "整体", "备注"],
+                ["豆子", "时间", "第几袋", "烘焙日", "烘后天数", "阶段", "干香", "风味", "余韵", "酸质", "甜感", "醇厚度", "平衡", "整体", "备注"],
                 [
                     [
                         r["name"],
                         r["at"],
+                        r["lot_seq"] or "",
+                        r["roasted_on"] or "",
+                        r["days_after_roast"] if r["days_after_roast"] is not None else "",
+                        freshness.LABELS.get(r["window_phase"] or "", r["window_phase"] or ""),
                         r["dry"] or "",
                         r["flavor"] or "",
                         r["aftertaste"] or "",

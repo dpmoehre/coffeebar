@@ -506,6 +506,20 @@ def api_add_lot(
     return store.get_lot(conn, lot_id)
 
 
+@app.patch("/api/lots/{lot_id}")
+def api_patch_lot(
+    lot_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    """后补或改烘焙日。只改日子，不写库存事件。"""
+    auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
+    if "roasted_on" not in payload:
+        raise store.Conflict("只能改烘焙日")
+    return store.set_lot_roasted_on(conn, lot_id, payload.get("roasted_on"))
+
+
 @app.post("/api/lots/{lot_id}/open")
 def api_open_lot(
     lot_id: int,

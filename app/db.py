@@ -97,6 +97,11 @@ ADDED_COLUMNS = [
     ("account", "claimed_at", "TEXT"),
     ("bean", "kingdom_id", "INTEGER"),
     ("bean", "seed", "INTEGER NOT NULL DEFAULT 0"),
+    ("bean_lot", "roasted_on", "TEXT"),
+    ("bean_score", "lot_id", "INTEGER"),
+    ("bean_score", "roasted_on", "TEXT"),
+    ("bean_score", "days_after_roast", "INTEGER"),
+    ("bean_score", "window_phase", "TEXT"),
 ]
 
 

@@ -159,6 +159,7 @@ export const api = {
   },
 
   addLot: (beanId, data) => req("POST", `/api/beans/${beanId}/lots`, data),
+  setLotRoast: (lotId, roasted_on) => req("PATCH", `/api/lots/${lotId}`, { roasted_on }),
   openLot: (lotId) => req("POST", `/api/lots/${lotId}/open`, {}),
   measure: (lotId, g) => req("POST", `/api/lots/${lotId}/measure`, { measured_g: g }),
   adjust: (lotId, g, note) => req("POST", `/api/lots/${lotId}/adjust`, { actual_g: g, note }),

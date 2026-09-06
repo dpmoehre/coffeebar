@@ -88,13 +88,14 @@ def create_bean(
     nominal_g: float | None = None,
     price: float | None = None,
     bought_on: str | None = None,
+    roasted_on: str | None = None,
     brew_method: str | None = None,
     brew_dose_g: float | None = None,
     brew_ratio: float | None = None,
     brew_note: str | None = None,
     visibility: str | None = None,
 ) -> Any:
-    """建一张豆卡。带 nominal_g 会同时入第一袋。visibility=public 建完就公开，默认只自己看。返回 id。"""
+    """建一张豆卡。带 nominal_g 会同时入第一袋。roasted_on 是袋上烘焙日，可空。visibility=public 建完就公开，默认只自己看。返回 id。"""
     return _call(
         client().create_bean,
         _drop_none(
@@ -112,6 +113,7 @@ def create_bean(
                 "nominal_g": nominal_g,
                 "price": price,
                 "bought_on": bought_on,
+                "roasted_on": roasted_on,
                 "brew_method": brew_method,
                 "brew_dose_g": brew_dose_g,
                 "brew_ratio": brew_ratio,
@@ -189,8 +191,10 @@ def add_score(
     balance: float | None = None,
     overall: float | None = None,
     comment: str | None = None,
+    lot_id: int | None = None,
+    roasted_on: str | None = None,
 ) -> Any:
-    """给这支豆打一杯杯测分。"""
+    """给这支豆打一杯杯测分。lot_id / roasted_on 可空；烘后天数和阶段由服务端算，不要手填。"""
     return _call(
         client().add_score,
         bean_id,
@@ -205,6 +209,8 @@ def add_score(
                 "balance": balance,
                 "overall": overall,
                 "comment": comment,
+                "lot_id": lot_id,
+                "roasted_on": roasted_on,
             }
         ),
     )
@@ -217,9 +223,10 @@ def create_bean_lot(
     price: float | None = None,
     measured_g: float | None = None,
     bought_on: str | None = None,
+    roasted_on: str | None = None,
     note: str | None = None,
 ) -> Any:
-    """同豆再入一袋，不新建卡。"""
+    """同豆再入一袋，不新建卡。roasted_on 是袋上烘焙日，可空。"""
     return _call(
         client().create_bean_lot,
         bean_id,
@@ -229,6 +236,7 @@ def create_bean_lot(
                 "price": price,
                 "measured_g": measured_g,
                 "bought_on": bought_on,
+                "roasted_on": roasted_on,
                 "note": note,
             }
         ),
