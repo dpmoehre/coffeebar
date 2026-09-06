@@ -47,10 +47,23 @@ test("缩小时不会把本来分得开的钉拉成一圈", () => {
   assert.equal(b.sx, 30);
 });
 
-test("放大后本来挨着的两颗会各自回到真点", () => {
+test("隔开十几像素的钉不并成一圈", () => {
+  const out = spreadScreen(
+    [
+      { bean_id: 1, place_id: 1, x: 0, y: 0 },
+      { bean_id: 2, place_id: 2, x: 15, y: 0 },
+    ],
+    1,
+    26
+  );
+  assert.equal(out.find((p) => p.bean_id === 1).sx, 0);
+  assert.equal(out.find((p) => p.bean_id === 2).sx, 15);
+});
+
+test("放大后几乎重叠的两颗会各自回到真点", () => {
   const pair = [
     { bean_id: 1, place_id: 1, x: 0, y: 0 },
-    { bean_id: 2, place_id: 2, x: 15, y: 0 },
+    { bean_id: 2, place_id: 2, x: 6, y: 0 },
   ];
   const wide = spreadScreen(pair, 1, 26);
   assert.ok(wide.some((p) => Math.hypot(p.sx - p.x, p.sy - p.y) > 1));

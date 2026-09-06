@@ -3,6 +3,7 @@ import { geoEqualEarth, geoGraticule, geoMercator, geoPath } from "d3-geo";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { spreadScreen } from "../geo/spread.js";
+import { clientToSvg, unview, zoomAt } from "../geo/view.js";
 import { countries } from "../geo/world.js";
 import PinTip from "./PinTip.jsx";
 
@@ -32,7 +33,6 @@ export default function WorldMap2d({
 }) {
   const wrap = useRef(null);
   const svgRef = useRef(null);
-  const layerRef = useRef(null);
   const [size, setSize] = useState({ w: 640, h: 420 });
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [tip, setTip] = useState(null);
@@ -122,21 +122,9 @@ export default function WorldMap2d({
 
   const toLatLng = (clientX, clientY) => {
     const svg = svgRef.current;
-    const layer = layerRef.current;
-    if (svg && layer) {
-      const ctm = layer.getScreenCTM();
-      if (ctm) {
-        const pt = svg.createSVGPoint();
-        pt.x = clientX;
-        pt.y = clientY;
-        const p = pt.matrixTransform(ctm.inverse());
-        return projection.invert([p.x, p.y]);
-      }
-    }
-    const el = wrap.current;
-    const rect = el.getBoundingClientRect();
-    const px = (clientX - rect.left - el.clientLeft - view.x) / view.k;
-    const py = (clientY - rect.top - el.clientTop - view.y) / view.k;
+    const xy = clientToSvg(svg, clientX, clientY);
+    if (!xy) return null;
+    const [px, py] = unview(xy[0], xy[1], view);
     return projection.invert([px, py]);
   };
 
@@ -148,6 +136,7 @@ export default function WorldMap2d({
       y: e.clientY,
       ox: view.x,
       oy: view.y,
+      start: clientToSvg(svgRef.current, e.clientX, e.clientY),
       moved: false,
     };
     e.currentTarget.setPointerCapture(e.pointerId);
@@ -161,7 +150,12 @@ export default function WorldMap2d({
     if (Math.hypot(dx, dy) > 5) d.moved = true;
     if (d.moved) {
       setTip(null);
-      setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
+      const now = clientToSvg(svgRef.current, e.clientX, e.clientY);
+      if (d.start && now) {
+        setView((v) => ({ ...v, x: d.ox + (now[0] - d.start[0]), y: d.oy + (now[1] - d.start[1]) }));
+      } else {
+        setView((v) => ({ ...v, x: d.ox + dx, y: d.oy + dy }));
+      }
     }
   };
 
@@ -176,17 +170,10 @@ export default function WorldMap2d({
 
   const onWheel = (e) => {
     e.preventDefault();
-    const el = wrap.current;
-    const rect = el.getBoundingClientRect();
-    const mx = e.clientX - rect.left - el.clientLeft;
-    const my = e.clientY - rect.top - el.clientTop;
     const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
-    setView((v) => {
-      const k = Math.min(8, Math.max(0.7, v.k * factor));
-      const nx = mx - ((mx - v.x) * k) / v.k;
-      const ny = my - ((my - v.y) * k) / v.k;
-      return { k, x: nx, y: ny };
-    });
+    const at = clientToSvg(svgRef.current, e.clientX, e.clientY);
+    if (!at) return;
+    setView((v) => zoomAt(v, at[0], at[1], factor));
   };
 
   const activeOrigin = tip?.origin?.key;
@@ -209,7 +196,7 @@ export default function WorldMap2d({
         viewBox={`0 0 ${w} ${h}`}
         className="block h-full w-full"
       >
-        <g ref={layerRef} transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+        <g transform={`translate(${view.x} ${view.y}) scale(${view.k})`}>
           <path
             d={grid}
             fill="none"
