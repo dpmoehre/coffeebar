@@ -15,7 +15,7 @@ from starlette.background import BackgroundTask
 
 from . import auth, brew as brew_mod
 from . import admin as admin_mod
-from . import backup, db, gear, kingdom, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store, today
+from . import backup, db, gear, kingdom, kingdom_gear, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store, today
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -1381,6 +1381,82 @@ def api_kingdom_list(
 ):
     only = saved in ("1", "true", "yes")
     return {"beans": kingdom.list_kingdom(conn, account["id"], saved=only)}
+
+
+@app.get("/api/kingdom/gear")
+def api_kingdom_gear_list(
+    saved: str = "",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    only = saved in ("1", "true", "yes")
+    return {"gear": kingdom_gear.list_kingdom_gear(conn, account["id"], saved=only)}
+
+
+@app.get("/api/kingdom/gear/{catalog_id}")
+def api_kingdom_gear_get(
+    catalog_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = kingdom_gear.get_kingdom_gear(conn, catalog_id, account["id"])
+    if not card:
+        raise HTTPException(404, "王国里没有这件器具")
+    return card
+
+
+@app.put("/api/kingdom/gear/{catalog_id}/score")
+def api_kingdom_gear_score(
+    catalog_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom_gear.upsert_score(conn, catalog_id, account["id"], payload or {})
+
+
+@app.delete("/api/kingdom/gear/{catalog_id}/score")
+def api_kingdom_gear_unscore(
+    catalog_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = kingdom_gear.get_kingdom_gear(conn, catalog_id, account["id"])
+    if not card:
+        raise HTTPException(404, "王国里没有这件器具")
+    return kingdom_gear.delete_score(conn, catalog_id, account["id"])
+
+
+@app.post("/api/kingdom/gear/{catalog_id}/score/photos", status_code=201)
+async def api_add_kingdom_gear_score_photo(
+    catalog_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
+    return kingdom_gear.add_score_photo(
+        conn, catalog_id, account["id"], await file.read(), file.filename or ""
+    )
+
+
+@app.delete("/api/kingdom-gear-score-photos/{photo_id}")
+def api_del_kingdom_gear_score_photo(
+    photo_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom_gear.delete_score_photo(conn, photo_id, account["id"])
+
+
+@app.post("/api/kingdom/gear/{catalog_id}/favorite")
+def api_kingdom_gear_fav(
+    catalog_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom_gear.toggle_favorite(conn, catalog_id, account["id"])
 
 
 @app.get("/api/kingdom/{kingdom_id}")

@@ -63,6 +63,8 @@ export default function App() {
   const [plazaTab, setPlazaTab] = useState("beans");
   const [gearFocusId, setGearFocusId] = useState(null);
   const [kingdomId, setKingdomId] = useState(null);
+  const [kingdomGearId, setKingdomGearId] = useState(null);
+  const [kingdomTab, setKingdomTab] = useState("beans");
   const [mapFocus, setMapFocus] = useState(null);
   const [calendarPerson, setCalendarPerson] = useState(null);
   const { toast, oops, node } = useToast();
@@ -105,6 +107,8 @@ export default function App() {
     setPlazaGearId(null);
     setGearFocusId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setPage("bean");
   }, []);
@@ -116,6 +120,7 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setPage("plaza-bean");
   }, []);
@@ -127,6 +132,7 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setPage("plaza-gear");
   }, []);
@@ -138,19 +144,35 @@ export default function App() {
     setPlazaId(null);
     setPlazaGearId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setPage("gear");
   }, []);
 
   const openKingdom = useCallback((id) => {
     setKingdomId(id);
+    setKingdomGearId(null);
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
     setPlazaGearId(null);
     setGearFocusId(null);
     setMapFocus(null);
+    setKingdomTab("beans");
     setPage("kingdom-bean");
+  }, []);
+
+  const openKingdomGear = useCallback((id) => {
+    setKingdomGearId(id);
+    setKingdomId(null);
+    setBeanId(null);
+    setSpiritId(null);
+    setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
+    setMapFocus(null);
+    setKingdomTab("gear");
+    setPage("kingdom-gear");
   }, []);
 
   const openMap = useCallback((id) => {
@@ -160,6 +182,7 @@ export default function App() {
     setPlazaGearId(null);
     setGearFocusId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(id || null);
     setPage("map");
   }, []);
@@ -171,6 +194,7 @@ export default function App() {
     setPlazaGearId(null);
     setGearFocusId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setPage("spirit");
   }, []);
 
@@ -181,6 +205,7 @@ export default function App() {
     setPlazaGearId(null);
     setGearFocusId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setCalendarPerson(personId || null);
     setPage("calendar");
@@ -193,10 +218,14 @@ export default function App() {
     setPlazaGearId(null);
     setGearFocusId(null);
     setKingdomId(null);
+    setKingdomGearId(null);
     setMapFocus(null);
     setCalendarPerson(null);
     if (key !== "plaza" && key !== "plaza-bean" && key !== "plaza-gear") {
       setPlazaTab("beans");
+    }
+    if (key !== "kingdom" && key !== "kingdom-bean" && key !== "kingdom-gear") {
+      setKingdomTab("beans");
     }
     setPage(key);
   };
@@ -280,7 +309,7 @@ export default function App() {
     page === key ||
     (key === "beans" && page === "bean") ||
     (key === "plaza" && (page === "plaza-bean" || page === "plaza-gear")) ||
-    (key === "kingdom" && page === "kingdom-bean") ||
+    (key === "kingdom" && (page === "kingdom-bean" || page === "kingdom-gear")) ||
     (key === "spirits" && page === "spirit");
 
   const gateLink =
@@ -485,16 +514,36 @@ export default function App() {
             openGearId={plazaGearId}
             onBack={() => go("plaza")}
             onOpenMineGear={openGear}
+            onOpenKingdomGear={openKingdomGear}
             toast={toast}
             oops={oops}
           />
         )}
-        {page === "kingdom" && <Kingdom onOpen={openKingdom} toast={toast} oops={oops} />}
+        {page === "kingdom" && (
+          <Kingdom
+            tab={kingdomTab}
+            onTab={setKingdomTab}
+            onOpen={openKingdom}
+            onOpenGear={openKingdomGear}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "kingdom-bean" && (
           <Kingdom
             openId={kingdomId}
             onBack={() => go("kingdom")}
             onOpenPlaza={openPlaza}
+            toast={toast}
+            oops={oops}
+          />
+        )}
+        {page === "kingdom-gear" && (
+          <Kingdom
+            openGearId={kingdomGearId}
+            onBack={() => go("kingdom")}
+            onOpenPlazaGear={openPlazaGear}
+            onOpenMineGear={openGear}
             toast={toast}
             oops={oops}
           />

@@ -327,8 +327,11 @@ def paths_for_owner(conn: sqlite3.Connection, owner_id: int) -> list[str]:
         UNION ALL
         SELECT path FROM kingdom_score_photo
          WHERE score_id IN (SELECT id FROM kingdom_score WHERE author_id = ?)
+        UNION ALL
+        SELECT path FROM kingdom_gear_score_photo
+         WHERE score_id IN (SELECT id FROM kingdom_gear_score WHERE author_id = ?)
         """,
-        (owner_id, owner_id, owner_id, owner_id, owner_id, owner_id, owner_id),
+        (owner_id, owner_id, owner_id, owner_id, owner_id, owner_id, owner_id, owner_id),
     ).fetchall()
     return [r["path"] for r in rows]
 
@@ -435,6 +438,58 @@ def purge_kingdom_score_photos(conn: sqlite3.Connection, score_id: int) -> int:
     for r in rows:
         remove(r["path"])
         conn.execute("DELETE FROM kingdom_score_photo WHERE id = ?", (r["id"],))
+    return len(rows)
+
+
+def list_kingdom_gear_score_photos(conn: sqlite3.Connection, score_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, path, created_at FROM kingdom_gear_score_photo WHERE score_id = ? ORDER BY created_at, id",
+        (score_id,),
+    ).fetchall()
+    return [
+        {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])} for r in rows
+    ]
+
+
+def attach_kingdom_gear_score_photo(
+    conn: sqlite3.Connection, score_id: int, raw: bytes, filename: str
+) -> dict:
+    n = conn.execute(
+        "SELECT COUNT(*) FROM kingdom_gear_score_photo WHERE score_id = ?", (score_id,)
+    ).fetchone()[0]
+    if n >= SCORE_PHOTO_LIMIT:
+        raise BadPhoto(f"一条评价最多 {SCORE_PHOTO_LIMIT} 张")
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO kingdom_gear_score_photo (score_id, path, created_at) VALUES (?, ?, ?)",
+        (score_id, rel, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "score_id": score_id,
+        "path": rel,
+        "url": f"/{rel}",
+        "thumb": thumb_url(rel),
+    }
+
+
+def delete_kingdom_gear_score_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute(
+        "SELECT path FROM kingdom_gear_score_photo WHERE id = ?", (photo_id,)
+    ).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM kingdom_gear_score_photo WHERE id = ?", (photo_id,))
+
+
+def purge_kingdom_gear_score_photos(conn: sqlite3.Connection, score_id: int) -> int:
+    rows = conn.execute(
+        "SELECT id, path FROM kingdom_gear_score_photo WHERE score_id = ?", (score_id,)
+    ).fetchall()
+    for r in rows:
+        remove(r["path"])
+        conn.execute("DELETE FROM kingdom_gear_score_photo WHERE id = ?", (r["id"],))
     return len(rows)
 
 

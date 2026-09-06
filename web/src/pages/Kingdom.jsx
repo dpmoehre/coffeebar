@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
+import { KingdomGearCard, KingdomGearList } from "../components/KingdomGear.jsx";
 import { Btn, Chip, Cover, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
 
 const DIMS = [
@@ -18,7 +19,20 @@ const DIMS = [
   ["overall", "总体"],
 ];
 
-export default function Kingdom({ openId, onOpen, onBack, onOpenPlaza, toast, oops }) {
+export default function Kingdom({
+  openId,
+  openGearId,
+  tab = "beans",
+  onTab,
+  onOpen,
+  onOpenGear,
+  onBack,
+  onOpenPlaza,
+  onOpenPlazaGear,
+  onOpenMineGear,
+  toast,
+  oops,
+}) {
   if (openId) {
     return (
       <KingdomCard
@@ -30,7 +44,43 @@ export default function Kingdom({ openId, onOpen, onBack, onOpenPlaza, toast, oo
       />
     );
   }
-  return <KingdomList onOpen={onOpen} oops={oops} />;
+  if (openGearId) {
+    return (
+      <KingdomGearCard
+        id={openGearId}
+        onBack={onBack}
+        onOpenPlaza={onOpenPlazaGear}
+        onOpenMineGear={onOpenMineGear}
+        toast={toast}
+        oops={oops}
+      />
+    );
+  }
+  return (
+    <>
+      <header>
+        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">咖啡王国</h1>
+        <p className="mt-2 mb-0 text-muted">
+          {tab === "gear"
+            ? "大家一起评同一件器具。管理员收到目录的才会出现；只打总体分和一句话，看不见谁的台面。"
+            : "大家一起评同一支豆。杯测、评价、收藏都挂在这里，看不见别人的进价和还剩多少。"}
+        </p>
+      </header>
+      <div className="mt-5 flex flex-wrap gap-2">
+        <Chip on={tab === "beans"} onClick={() => onTab?.("beans")}>
+          豆子
+        </Chip>
+        <Chip on={tab === "gear"} onClick={() => onTab?.("gear")}>
+          器具
+        </Chip>
+      </div>
+      {tab === "gear" ? (
+        <KingdomGearList onOpen={onOpenGear} oops={oops} />
+      ) : (
+        <KingdomList onOpen={onOpen} oops={oops} />
+      )}
+    </>
+  );
 }
 
 function KingdomList({ onOpen, oops }) {
@@ -64,13 +114,6 @@ function KingdomList({ onOpen, oops }) {
 
   return (
     <>
-      <header>
-        <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">咖啡王国</h1>
-        <p className="mt-2 mb-0 text-muted">
-          大家一起评同一支豆。杯测、评价、收藏都挂在这里，看不见别人的进价和还剩多少。
-        </p>
-      </header>
-
       <div className="mt-5 flex flex-wrap items-center gap-2">
         <Chip on={saved} onClick={() => setSaved((v) => !v)}>
           只看收藏

@@ -411,6 +411,9 @@ def delete_catalog(conn: sqlite3.Connection, catalog_id: int) -> None:
     row = get_catalog(conn, catalog_id)
     if not row:
         raise HTTPException(404, "目录里没有这一件")
+    from . import kingdom_gear
+
+    kingdom_gear.purge_catalog_reviews(conn, catalog_id)
     for p in row["photos"]:
         photos.remove(p["path"])
     conn.execute("DELETE FROM gear_catalog WHERE id = ?", (catalog_id,))
@@ -437,6 +440,9 @@ def plaza_card(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None
     cloned = _cloned_gear_id(conn, row["id"], viewer_id)
     out["taken"] = bool(cloned)
     out["cloned_id"] = cloned
+    from . import kingdom_gear
+
+    out["kingdom"] = kingdom_gear.teaser(conn, out.get("catalog_id"), viewer_id)
     return out
 
 

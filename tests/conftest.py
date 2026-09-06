@@ -38,7 +38,7 @@ def client(monkeypatch):
     from app import db as db_mod
 
     importlib.reload(db_mod)
-    from app import freshness, store, stats, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, today, main as main_mod
+    from app import freshness, store, stats, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, kingdom_gear, today, main as main_mod
 
     importlib.reload(freshness)
     importlib.reload(photos)
@@ -54,6 +54,7 @@ def client(monkeypatch):
     importlib.reload(brew)
     importlib.reload(gear)
     importlib.reload(kingdom)
+    importlib.reload(kingdom_gear)
     importlib.reload(today)
     importlib.reload(main_mod)
 

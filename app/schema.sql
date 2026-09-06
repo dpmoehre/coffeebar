@@ -455,6 +455,34 @@ CREATE TABLE IF NOT EXISTS kingdom_favorite (
   PRIMARY KEY (kingdom_id, account_id)
 );
 
+-- 王国器具复用 gear_catalog，不另建一种。评价是总体分 + 一句话，不是八维杯测。
+CREATE TABLE IF NOT EXISTS kingdom_gear_score (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  catalog_id  INTEGER NOT NULL REFERENCES gear_catalog(id) ON DELETE CASCADE,
+  author_id   INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  overall     REAL,
+  comment     TEXT,
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL,
+  UNIQUE (catalog_id, author_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kgscore ON kingdom_gear_score(catalog_id);
+
+CREATE TABLE IF NOT EXISTS kingdom_gear_score_photo (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  score_id    INTEGER NOT NULL REFERENCES kingdom_gear_score(id) ON DELETE CASCADE,
+  path        TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kgscore_photo ON kingdom_gear_score_photo(score_id);
+
+CREATE TABLE IF NOT EXISTS kingdom_gear_favorite (
+  catalog_id INTEGER NOT NULL REFERENCES gear_catalog(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  created_at TEXT    NOT NULL,
+  PRIMARY KEY (catalog_id, account_id)
+);
+
 -- ── 写锁：网页之间软锁可接管，非网页来源硬拒绝 ──────────────
 
 CREATE TABLE IF NOT EXISTS write_lock (

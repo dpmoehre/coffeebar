@@ -639,3 +639,24 @@ class Client:
 
     def collect_kingdom(self, bean_id: int, data: dict | None = None):
         return self.request("POST", f"/api/admin/kingdom/collect/{bean_id}", json=data or {})
+
+    def list_kingdom_gear(self, saved: bool = False):
+        return self.request("GET", f"/api/kingdom/gear{'?saved=1' if saved else ''}")
+
+    def get_kingdom_gear(self, catalog_id: int):
+        return self.request("GET", f"/api/kingdom/gear/{catalog_id}")
+
+    def score_kingdom_gear(self, catalog_id: int, data: dict):
+        return self.request("PUT", f"/api/kingdom/gear/{catalog_id}/score", json=data)
+
+    def unscore_kingdom_gear(self, catalog_id: int):
+        return self.request("DELETE", f"/api/kingdom/gear/{catalog_id}/score")
+
+    def add_kingdom_gear_score_photo(self, catalog_id: int, file_path: str):
+        return self.upload(f"/api/kingdom/gear/{catalog_id}/score/photos", file_path)
+
+    def delete_kingdom_gear_score_photo(self, photo_id: int):
+        return self.request("DELETE", f"/api/kingdom-gear-score-photos/{photo_id}")
+
+    def favorite_kingdom_gear(self, catalog_id: int):
+        return self.request("POST", f"/api/kingdom/gear/{catalog_id}/favorite", json={})

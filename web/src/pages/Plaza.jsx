@@ -40,6 +40,7 @@ export default function Plaza({
   onOpenMine,
   onOpenMineGear,
   onOpenKingdom,
+  onOpenKingdomGear,
   admin,
   toast,
   oops,
@@ -63,6 +64,7 @@ export default function Plaza({
         id={openGearId}
         onBack={onBack}
         onOpenMineGear={onOpenMineGear}
+        onOpenKingdomGear={onOpenKingdomGear}
         toast={toast}
         oops={oops}
       />
@@ -566,7 +568,12 @@ function PlazaGearList({ onOpen, oops }) {
                 <div className="mt-1 truncate text-[13px] text-muted">
                   {[g.kind_label, g.family_label, g.brand, g.model].filter(Boolean).join(" · ")}
                 </div>
-                {g.mine ? (
+                {g.kingdom ? (
+                  <div className="mt-2 text-xs text-amber">
+                    王国
+                    {g.kingdom.avg?.overall != null ? ` · 总体 ${g.kingdom.avg.overall}` : ""}
+                  </div>
+                ) : g.mine ? (
                   <div className="mt-2 text-xs text-muted">你公开的</div>
                 ) : g.taken ? (
                   <div className="mt-2 text-xs text-amber">已在你的台面</div>
@@ -580,7 +587,7 @@ function PlazaGearList({ onOpen, oops }) {
   );
 }
 
-function PublicGear({ id, onBack, onOpenMineGear, toast, oops }) {
+function PublicGear({ id, onBack, onOpenMineGear, onOpenKingdomGear, toast, oops }) {
   const [item, setItem] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -637,6 +644,25 @@ function PublicGear({ id, onBack, onOpenMineGear, toast, oops }) {
           </div>
         )}
       </header>
+      {item.kingdom && onOpenKingdomGear ? (
+        <Panel className="mt-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <div className="serif text-lg">王国里的同一件</div>
+              <p className="mt-1 mb-0 text-sm text-muted">
+                {item.kingdom.name}
+                {item.kingdom.avg?.overall != null
+                  ? ` · 大家总体 ${item.kingdom.avg.overall}`
+                  : " · 还没人评"}
+                <span className="ml-2 text-xs">
+                  {item.kingdom.reviews} 评价 · {item.kingdom.favorites} 收藏
+                </span>
+              </p>
+            </div>
+            <Btn onClick={() => onOpenKingdomGear(item.kingdom.id)}>去评价</Btn>
+          </div>
+        </Panel>
+      ) : null}
       <Panel className="mt-6">
         <div className="serif text-lg">照片</div>
         {item.photos?.length ? (

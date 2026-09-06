@@ -33,9 +33,11 @@ mcp = MCPServer(
         "滤杯要写 family=cone 或 flat，才能按器具给冲煮建议。"
         "管理员用 list_gear_queue / collect_gear 收到公共目录，"
         "再 update_gear_catalog 挂 brew_method 和冲煮备注。"
-        "咖啡王国是公共豆种：list_kingdom / get_kingdom，score_kingdom 一人一豆一条可改，"
+        "咖啡王国是公共豆种和公共器具：list_kingdom / get_kingdom，score_kingdom 一人一豆一条可改，"
         "add_kingdom_score_photo 给自己的杯测挂图，favorite_kingdom 开关收藏。"
-        "管理员 collect_kingdom 把公开卡收进王国，两张同名卡可挂同一支。"
+        "器具复用目录：list_kingdom_gear / get_kingdom_gear，score_kingdom_gear 只打总体分和一句话，"
+        "favorite_kingdom_gear 收藏。管理员 collect_gear 收到目录就是进王国，不要另收一套。"
+        "管理员 collect_kingdom 把公开豆卡收进王国，两张同名卡可挂同一支。"
         "服务没开就说 coffeebar 未在运行。"
     ),
 )
@@ -1054,6 +1056,56 @@ def delete_kingdom_score_photo(photo_id: int) -> Any:
 def favorite_kingdom(kingdom_id: int) -> Any:
     """收藏或取消收藏王国里的一支豆。再调一次就反过来。"""
     return _call(client().favorite_kingdom, kingdom_id)
+
+
+@mcp.tool()
+def list_kingdom_gear(saved: bool = False) -> Any:
+    """王国里的公共器具（管理员收录的目录）。saved=true 只看自己收藏的。"""
+    return _call(client().list_kingdom_gear, saved)
+
+
+@mcp.tool()
+def get_kingdom_gear(catalog_id: int) -> Any:
+    """看一件王国器具：总体均分、大家的评价。看不见谁的台面库存。"""
+    return _call(client().get_kingdom_gear, catalog_id)
+
+
+@mcp.tool()
+def score_kingdom_gear(
+    catalog_id: int,
+    overall: float | None = None,
+    comment: str | None = None,
+) -> Any:
+    """给王国里这件器具打分。一人一件一条，再打会改掉自己上次的。只打总体 1–10 和一句话，不要套八维。"""
+    return _call(
+        client().score_kingdom_gear,
+        catalog_id,
+        _drop_none({"overall": overall, "comment": comment}),
+    )
+
+
+@mcp.tool()
+def unscore_kingdom_gear(catalog_id: int) -> Any:
+    """撤回自己在王国里这件器具的评价（图一起走）。人明确说才删。"""
+    return _call(client().unscore_kingdom_gear, catalog_id)
+
+
+@mcp.tool()
+def add_kingdom_gear_score_photo(catalog_id: int, path: str) -> Any:
+    """给自己在王国里这件器具的评价挂一张图。要先 score_kingdom_gear。一条最多 8 张。"""
+    return _call(client().add_kingdom_gear_score_photo, catalog_id, path)
+
+
+@mcp.tool()
+def delete_kingdom_gear_score_photo(photo_id: int) -> Any:
+    """删掉自己器具评价上的一张图。人明确说才删。"""
+    return _call(client().delete_kingdom_gear_score_photo, photo_id)
+
+
+@mcp.tool()
+def favorite_kingdom_gear(catalog_id: int) -> Any:
+    """收藏或取消收藏王国里的一件器具。再调一次就反过来。"""
+    return _call(client().favorite_kingdom_gear, catalog_id)
 
 
 @mcp.tool()

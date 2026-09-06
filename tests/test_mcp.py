@@ -145,6 +145,13 @@ def test_tool_catalog_covers_bar():
         "favorite_kingdom",
         "list_kingdom_queue",
         "collect_kingdom",
+        "list_kingdom_gear",
+        "get_kingdom_gear",
+        "score_kingdom_gear",
+        "unscore_kingdom_gear",
+        "add_kingdom_gear_score_photo",
+        "delete_kingdom_gear_score_photo",
+        "favorite_kingdom_gear",
     ):
         assert n in names, n
     assert "delete_account" not in names

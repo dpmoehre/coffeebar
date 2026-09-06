@@ -392,6 +392,10 @@ def delete_account(
                 conn.execute(
                     "UPDATE kingdom_bean SET collected_by = NULL WHERE collected_by = ?", (aid,)
                 )
+            if _table_exists(conn, "kingdom_gear_score"):
+                conn.execute("DELETE FROM kingdom_gear_score WHERE author_id = ?", (aid,))
+            if _table_exists(conn, "kingdom_gear_favorite"):
+                conn.execute("DELETE FROM kingdom_gear_favorite WHERE account_id = ?", (aid,))
             conn.execute("DELETE FROM auth_token WHERE account_id = ?", (aid,))
             conn.execute("DELETE FROM auth_session WHERE account_id = ?", (aid,))
             conn.execute("DELETE FROM account WHERE id = ?", (aid,))

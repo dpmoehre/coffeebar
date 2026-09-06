@@ -280,6 +280,17 @@ export const api = {
   },
   delKingdomScorePhoto: (id) => req("DELETE", `/api/kingdom-score-photos/${id}`),
   kingdomFavorite: (id) => req("POST", `/api/kingdom/${id}/favorite`, {}),
+  kingdomGear: (saved = false) => req("GET", `/api/kingdom/gear${saved ? "?saved=1" : ""}`),
+  kingdomGearItem: (id) => req("GET", `/api/kingdom/gear/${id}`),
+  kingdomGearScore: (id, data) => req("PUT", `/api/kingdom/gear/${id}/score`, data),
+  kingdomGearUnscore: (id) => req("DELETE", `/api/kingdom/gear/${id}/score`),
+  addKingdomGearScorePhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return upload(`/api/kingdom/gear/${id}/score/photos`, fd);
+  },
+  delKingdomGearScorePhoto: (id) => req("DELETE", `/api/kingdom-gear-score-photos/${id}`),
+  kingdomGearFavorite: (id) => req("POST", `/api/kingdom/gear/${id}/favorite`, {}),
   adminKingdomQueue: () => req("GET", "/api/admin/kingdom/queue"),
   adminCollectKingdom: (beanId, data = {}) =>
     req("POST", `/api/admin/kingdom/collect/${beanId}`, data),
