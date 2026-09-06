@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { recall, remember } from "../listCache.js";
 import { freshnessLine } from "../freshness.js";
 import { Plus } from "../icons.jsx";
 import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, g, perG } from "../ui.jsx";
@@ -50,17 +51,25 @@ function byCost(a, b, desc) {
 }
 
 export default function Beans({ onOpen, toast, oops }) {
-  const [data, setData] = useState(null);
   const [scope, setScope] = useState("stock");
+  const [data, setData] = useState(() => recall(`beans:${scope}`) ?? null);
   const [sort, setSort] = useState("recent");
   const [picked, setPicked] = useState([]);
   const [phase, setPhase] = useState("");
   const [q, setQ] = useState("");
   const [adding, setAdding] = useState(false);
 
-  const load = () => api.beans(scope).then(setData).catch((e) => oops(e.message));
+  const load = () =>
+    api
+      .beans(scope)
+      .then((d) => {
+        remember(`beans:${scope}`, d);
+        setData(d);
+      })
+      .catch((e) => oops(e.message));
   useEffect(() => {
-    setData(null);
+    const hit = recall(`beans:${scope}`);
+    setData(hit === undefined ? null : hit);
     load();
   }, [scope]);
 

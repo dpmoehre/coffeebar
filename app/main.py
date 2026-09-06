@@ -1763,8 +1763,19 @@ async def api_restore(
 
 # ── 照片与前端构建产物（放最后，别盖住 /api） ───────────────
 
+
+class PhotoFiles(StaticFiles):
+    """文件名是 uuid，改过就换名。让浏览器把封面留下，返回列表不用再穿隧道。"""
+
+    async def get_response(self, path: str, scope):
+        response = await super().get_response(path, scope)
+        if getattr(response, "status_code", 0) == 200:
+            response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+
 db.PHOTO_DIR.mkdir(parents=True, exist_ok=True)
-app.mount("/photos", StaticFiles(directory=db.PHOTO_DIR), name="photos")
+app.mount("/photos", PhotoFiles(directory=db.PHOTO_DIR), name="photos")
 
 if WEB_DIST.exists():
     app.mount("/assets", StaticFiles(directory=WEB_DIST / "assets"), name="assets")

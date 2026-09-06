@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { recall, remember } from "../listCache.js";
 import { Plus } from "../icons.jsx";
 import { Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, money } from "../ui.jsx";
 
@@ -70,17 +71,25 @@ function SpiritRow({ s, onOpen }) {
 }
 
 export default function Spirits({ onOpen, toast, oops }) {
-  const [data, setData] = useState(null);
   const [scope, setScope] = useState("stock");
+  const [data, setData] = useState(() => recall(`spirits:${scope}`) ?? null);
   const [kind, setKind] = useState("");
   const [sort, setSort] = useState("recent");
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState([]);
   const [adding, setAdding] = useState(false);
 
-  const load = () => api.spirits(scope).then(setData).catch((e) => oops(e.message));
+  const load = () =>
+    api
+      .spirits(scope)
+      .then((d) => {
+        remember(`spirits:${scope}`, d);
+        setData(d);
+      })
+      .catch((e) => oops(e.message));
   useEffect(() => {
-    setData(null);
+    const hit = recall(`spirits:${scope}`);
+    setData(hit === undefined ? null : hit);
     load();
   }, [scope]);
 

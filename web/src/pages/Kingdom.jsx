@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
 import { Btn, Chip, Cover, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
@@ -33,18 +34,22 @@ export default function Kingdom({ openId, onOpen, onBack, onOpenPlaza, toast, oo
 }
 
 function KingdomList({ onOpen, oops }) {
-  const [beans, setBeans] = useState(null);
   const [saved, setSaved] = useState(false);
+  const [beans, setBeans] = useState(() => recall("kingdom:false") ?? null);
   const [q, setQ] = useState("");
 
   const load = () =>
     api
       .kingdom(saved)
-      .then((d) => setBeans(d.beans))
+      .then((d) => {
+        remember(`kingdom:${saved}`, d.beans);
+        setBeans(d.beans);
+      })
       .catch((e) => oops(e.message));
 
   useEffect(() => {
-    setBeans(null);
+    const hit = recall(`kingdom:${saved}`);
+    setBeans(hit === undefined ? null : hit);
     load();
   }, [saved]);
 

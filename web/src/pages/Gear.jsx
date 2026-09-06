@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { recall, remember } from "../listCache.js";
 import { Plus, Trash } from "../icons.jsx";
 import { Btn, Chip, Cover, Empty, Field, Input, Modal, Panel, Select, coverSrc, money } from "../ui.jsx";
 
@@ -16,9 +17,10 @@ const KIND_LABEL = {
 };
 
 export default function Gear({ toast, oops, focusId }) {
+  const cached = recall("gear");
   const [meta, setMeta] = useState(null);
-  const [mine, setMine] = useState(null);
-  const [catalog, setCatalog] = useState([]);
+  const [mine, setMine] = useState(cached?.gear ?? null);
+  const [catalog, setCatalog] = useState(cached?.catalog ?? []);
   const [kind, setKind] = useState("all");
   const [adding, setAdding] = useState(false);
   const [picked, setPicked] = useState(null);
@@ -27,6 +29,7 @@ export default function Gear({ toast, oops, focusId }) {
     api
       .gear()
       .then((d) => {
+        remember("gear", d);
         setMine(d.gear);
         setCatalog(d.catalog || []);
       })

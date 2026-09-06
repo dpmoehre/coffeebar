@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
+import { forgetLists } from "./listCache.js";
 import {
   Bean,
   Calendar as CalIcon,
@@ -203,6 +204,7 @@ export default function App() {
   const signOut = async () => {
     try {
       await api.logout();
+      forgetLists();
       setMe(null);
     } catch (e) {
       oops(e.message);

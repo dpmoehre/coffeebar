@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
+import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { scoreFreshnessLine } from "../freshness.js";
 import { Btn, Chip, Cover, Empty, Input, Panel, Select, coverSrc, g, money, perG } from "../ui.jsx";
@@ -164,8 +165,8 @@ function comparePlaza(a, b, sort) {
 }
 
 function PlazaList({ onOpen, oops }) {
-  const [beans, setBeans] = useState(null);
   const [certifiedOnly, setCertifiedOnly] = useState(false);
+  const [beans, setBeans] = useState(() => recall("plaza:false") ?? null);
   const [inKingdom, setInKingdom] = useState(false);
   const [q, setQ] = useState("");
   const [roast, setRoast] = useState([]);
@@ -176,11 +177,15 @@ function PlazaList({ onOpen, oops }) {
   const load = () =>
     api
       .publicBeans(certifiedOnly)
-      .then((d) => setBeans(d.beans))
+      .then((d) => {
+        remember(`plaza:${certifiedOnly}`, d.beans);
+        setBeans(d.beans);
+      })
       .catch((e) => oops(e.message));
 
   useEffect(() => {
-    setBeans(null);
+    const hit = recall(`plaza:${certifiedOnly}`);
+    setBeans(hit === undefined ? null : hit);
     load();
   }, [certifiedOnly]);
 
@@ -523,13 +528,17 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
 }
 
 function PlazaGearList({ onOpen, oops }) {
-  const [items, setItems] = useState(null);
+  const [items, setItems] = useState(() => recall("plaza-gear") ?? null);
 
   useEffect(() => {
-    setItems(null);
+    const hit = recall("plaza-gear");
+    if (hit !== undefined) setItems(hit);
     api
       .publicGear()
-      .then((d) => setItems(d.gear))
+      .then((d) => {
+        remember("plaza-gear", d.gear);
+        setItems(d.gear);
+      })
       .catch((e) => oops(e.message));
   }, [oops]);
 

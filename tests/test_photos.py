@@ -53,7 +53,9 @@ def test_photo_is_served(client):
         f"/api/beans/{bean['id']}/photos",
         files={"file": ("bag.png", png_bytes(), "image/png")},
     ).json()
-    assert client.get(p["url"]).status_code == 200
+    raw = client.get(p["url"])
+    assert raw.status_code == 200
+    assert "max-age" in (raw.headers.get("cache-control") or "").lower()
     assert client.get(p["thumb"]).status_code == 200
     cover = client.get("/api/beans").json()["beans"][0]["cover"]
     assert cover["list"].endswith(f"/s_{p['path'].split('/')[-1]}")

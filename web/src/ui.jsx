@@ -134,6 +134,7 @@ export function coverSrc(cover) {
   return cover?.list || cover?.thumb || cover?.url || "";
 }
 
+const seenCovers = new Set();
 let coverInflight = 0;
 const coverWait = [];
 const COVER_AT_ONCE = 2;
@@ -157,11 +158,19 @@ function takeCoverSlot() {
 }
 
 export function Cover({ src, className = "" }) {
-  const [shown, setShown] = useState("");
+  const cached = Boolean(src && seenCovers.has(src));
+  const [shown, setShown] = useState(cached ? src : "");
+  const [animate, setAnimate] = useState(!cached);
 
   useEffect(() => {
     if (!src) {
       setShown("");
+      setAnimate(false);
+      return undefined;
+    }
+    if (seenCovers.has(src)) {
+      setShown(src);
+      setAnimate(false);
       return undefined;
     }
     let release;
@@ -174,7 +183,11 @@ export function Cover({ src, className = "" }) {
         return;
       }
       img.onload = img.onerror = () => {
-        if (!dead) setShown(src);
+        seenCovers.add(src);
+        if (!dead) {
+          setShown(src);
+          setAnimate(true);
+        }
         rel();
       };
       img.src = src;
@@ -195,7 +208,11 @@ export function Cover({ src, className = "" }) {
       }}
     >
       {shown ? (
-        <img src={shown} alt="" className="fade-in h-full w-full object-cover" />
+        <img
+          src={shown}
+          alt=""
+          className={`h-full w-full object-cover${animate ? " fade-in" : ""}`}
+        />
       ) : null}
     </div>
   );
