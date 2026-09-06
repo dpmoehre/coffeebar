@@ -447,7 +447,15 @@ export default function App() {
             : "min-w-0 w-full px-5 py-5 md:px-12 md:py-9"
         }
       >
-        {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
+        {page === "beans" && (
+          <Beans
+            onOpen={openBean}
+            onOpenRestock={() => go("restock")}
+            onOpenPerson={openCalendar}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "gear" && <Gear toast={toast} oops={oops} focusId={gearFocusId} />}
         {page === "plaza" && (
           <Plaza

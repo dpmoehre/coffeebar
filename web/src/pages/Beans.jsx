@@ -5,6 +5,7 @@ import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
 import { freshnessLine } from "../freshness.js";
 import { Plus } from "../icons.jsx";
+import TodayBar from "../components/TodayBar.jsx";
 import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, g, perG } from "../ui.jsx";
 
 const SORTS = [
@@ -50,7 +51,7 @@ function byCost(a, b, desc) {
   return desc ? b.unit_cost - a.unit_cost : a.unit_cost - b.unit_cost;
 }
 
-export default function Beans({ onOpen, toast, oops }) {
+export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops }) {
   const [scope, setScope] = useState("stock");
   const [data, setData] = useState(() => recall(`beans:${scope}`) ?? null);
   const [sort, setSort] = useState("recent");
@@ -127,6 +128,13 @@ export default function Beans({ onOpen, toast, oops }) {
           新建豆子
         </Btn>
       </header>
+
+      <TodayBar
+        onOpen={onOpen}
+        onOpenRestock={onOpenRestock}
+        onOpenPerson={onOpenPerson}
+        oops={oops}
+      />
 
       <div className="mt-5 flex flex-wrap items-center gap-2">
         {[

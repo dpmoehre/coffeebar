@@ -254,6 +254,7 @@ export const api = {
   exportZip: (period = "month") =>
     download(`/api/export?period=${period}`, `coffeebar-${period}.zip`),
   restock: () => req("GET", "/api/restock"),
+  today: () => req("GET", "/api/today"),
   adminAccounts: () => req("GET", "/api/admin/accounts"),
   adminAccount: (id) => req("GET", `/api/admin/accounts/${id}`),
   adminBean: (accountId, beanId) => req("GET", `/api/admin/accounts/${accountId}/beans/${beanId}`),

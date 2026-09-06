@@ -15,7 +15,7 @@ from starlette.background import BackgroundTask
 
 from . import auth, brew as brew_mod
 from . import admin as admin_mod
-from . import backup, db, gear, kingdom, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
+from . import backup, db, gear, kingdom, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store, today
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -1253,6 +1253,15 @@ def api_restock(
         "spirits": stats.restock_spirits(conn, owner_id=account["id"]),
         "filters": gear.restock_filters(conn, account["id"]),
     }
+
+
+@app.get("/api/today")
+def api_today(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    """豆库顶上「今天」条。当前账号、当前业务日；不占写锁。"""
+    return today.snapshot(conn, account["id"])
 
 
 @app.get("/api/calendar")
