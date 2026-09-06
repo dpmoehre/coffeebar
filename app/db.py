@@ -96,6 +96,7 @@ ADDED_COLUMNS = [
     ("bean", "places_verified_at", "TEXT"),
     ("account", "claimed_at", "TEXT"),
     ("bean", "kingdom_id", "INTEGER"),
+    ("bean", "seed", "INTEGER NOT NULL DEFAULT 0"),
 ]
 
 

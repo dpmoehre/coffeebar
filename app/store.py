@@ -133,6 +133,40 @@ def _row(cur) -> dict | None:
 # ── 豆子 ────────────────────────────────────────────────────
 
 
+def starter_enabled() -> bool:
+    import os
+
+    raw = (os.environ.get("COFFEEBAR_STARTER_BEAN") or "1").strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def give_starter_bean(conn: sqlite3.Connection, owner_id: int) -> int:
+    """空库进门的那一支耶加雪菲。标 seed，不算真库存号。"""
+    bean_id = create_bean(
+        conn,
+        {
+            "owner_id": owner_id,
+            "name": "耶加雪菲",
+            "origin": "埃塞俄比亚 耶加雪菲",
+            "process": "水洗",
+            "roast": "浅烘",
+            "water_temp": 92,
+            "note": "进门练手用的一支。不是吧台库存，冲完、改掉、删掉都行。",
+            "tags": ["入门", "水洗", "柑橘"],
+            "brew_method": "v60",
+            "brew_dose_g": 15,
+            "brew_ratio": 16,
+            "brew_note": "中细研磨，闷蒸后分三段。",
+        },
+    )
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(bean)")}
+    if "seed" in cols:
+        conn.execute("UPDATE bean SET seed = 1 WHERE id = ?", (bean_id,))
+    add_lot(conn, bean_id, {"nominal_g": 100, "note": "练习袋"})
+    return bean_id
+
+
+
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
     vis = parse_visibility(data["visibility"]) if "visibility" in data else "private"
     ts = db.now()

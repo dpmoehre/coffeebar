@@ -6,6 +6,7 @@ import pytest
 
 # 套件里会连续注册/登录，默认限流会误伤。单独测限流的用例再打开。
 os.environ["COFFEEBAR_RATE_LIMIT"] = "0"
+os.environ["COFFEEBAR_STARTER_BEAN"] = "0"
 os.environ.pop("COFFEEBAR_INVITE_CODE", None)
 os.environ.pop("COFFEEBAR_RESTORE_KEY", None)
 
@@ -37,8 +38,9 @@ def client(monkeypatch):
     from app import db as db_mod
 
     importlib.reload(db_mod)
-    from app import store, stats, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, main as main_mod
+    from app import freshness, store, stats, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, main as main_mod
 
+    importlib.reload(freshness)
     importlib.reload(photos)
     importlib.reload(places)
     importlib.reload(store)

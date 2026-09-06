@@ -13,6 +13,43 @@ def test_register_and_me(client):
     assert me["email_verified"] is True
 
 
+def test_empty_register_gets_yirgacheffe(conn, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_STARTER_BEAN", "1")
+    out = auth.register(conn, "new@coffeebar.local", "testpass1")
+    beans = store.list_beans(conn, owner_id=out["id"])
+    assert [b["name"] for b in beans] == ["耶加雪菲"]
+    assert beans[0]["origin"] == "埃塞俄比亚 耶加雪菲"
+    assert beans[0]["balance_g"] == 100
+    assert auth.is_stock_account(conn, out["id"]) is False
+
+
+def test_take_orphans_skips_starter(conn, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_STARTER_BEAN", "1")
+    store.create_bean(conn, {"name": "老豆"})
+    out = auth.register(conn, "owner@coffeebar.local", "testpass1", claim="take")
+    names = [b["name"] for b in store.list_beans(conn, owner_id=out["id"])]
+    assert names == ["老豆"]
+    assert auth.is_stock_account(conn, out["id"]) is True
+
+
+def test_leave_orphans_gets_starter(conn, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_STARTER_BEAN", "1")
+    store.create_bean(conn, {"name": "老豆"})
+    out = auth.register(conn, "guest@coffeebar.local", "testpass1", claim="leave")
+    names = [b["name"] for b in store.list_beans(conn, owner_id=out["id"])]
+    assert names == ["耶加雪菲"]
+    assert conn.execute("SELECT owner_id, name FROM bean WHERE name = '老豆'").fetchone()["owner_id"] is None
+    assert auth.is_stock_account(conn, out["id"]) is False
+
+
+def test_starter_account_can_delete_without_export(conn, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_STARTER_BEAN", "1")
+    out = auth.register(conn, "seed@coffeebar.local", "testpass1")
+    auth.delete_account(conn, out, "seed@coffeebar.local", "testpass1")
+    assert conn.execute("SELECT id FROM account WHERE email = ?", ("seed@coffeebar.local",)).fetchone() is None
+    assert store.list_beans(conn, owner_id=out["id"]) == []
+
+
 def test_beans_require_login(client):
     from fastapi.testclient import TestClient
 

@@ -173,8 +173,10 @@ def is_stock_account(conn: sqlite3.Connection, account_id: int) -> bool:
         row = conn.execute("SELECT claimed_at FROM account WHERE id = ?", (account_id,)).fetchone()
         if row and row["claimed_at"]:
             return True
+    bean_cols = {r[1] for r in conn.execute("PRAGMA table_info(bean)")}
+    seed_sql = " AND COALESCE(seed, 0) = 0" if "seed" in bean_cols else ""
     beans = conn.execute(
-        "SELECT COUNT(*) FROM bean WHERE owner_id = ? AND (deleted_at IS NULL OR deleted_at = '')",
+        f"SELECT COUNT(*) FROM bean WHERE owner_id = ? AND (deleted_at IS NULL OR deleted_at = ''){seed_sql}",
         (account_id,),
     ).fetchone()[0]
     bottles = conn.execute(
@@ -238,6 +240,11 @@ def register(
             claim_orphans(conn, account_id)
             mark_claimed(conn, account_id)
             claimed = True
+        else:
+            from . import store
+
+            if store.starter_enabled():
+                store.give_starter_bean(conn, account_id)
         verify_token = None
         if not verified:
             verify_token = issue_token(conn, account_id, "verify")

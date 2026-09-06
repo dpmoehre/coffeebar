@@ -55,6 +55,7 @@ CREATE TABLE IF NOT EXISTS bean (
   review_note TEXT,
   places_verified_at TEXT,               -- 地图钉校对过
   kingdom_id  INTEGER,                   -- 收入咖啡王国后挂到公共豆种
+  seed        INTEGER NOT NULL DEFAULT 0, -- 进门练习豆，不算真库存号
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
