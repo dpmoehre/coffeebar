@@ -235,6 +235,11 @@ def give_starter_bean(conn: sqlite3.Connection, owner_id: int) -> int:
     if "seed" in cols:
         conn.execute("UPDATE bean SET seed = 1 WHERE id = ?", (bean_id,))
     add_lot(conn, bean_id, {"nominal_g": 100, "note": "练习袋"})
+    import os
+    shot = os.path.join(os.path.dirname(__file__), "assets", "starter-yirgacheffe.jpg")
+    if os.path.isfile(shot):
+        with open(shot, "rb") as fh:
+            photos.attach_bean_photo(conn, bean_id, "pack", fh.read(), "starter-yirgacheffe.jpg")
     return bean_id
 
 

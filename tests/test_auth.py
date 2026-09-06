@@ -4,7 +4,7 @@ import hashlib
 import secrets
 import tempfile
 
-from app import auth, spirits, store
+from app import auth, photos, spirits, store
 
 
 def test_register_and_me(client):
@@ -20,6 +20,8 @@ def test_empty_register_gets_yirgacheffe(conn, monkeypatch):
     assert [b["name"] for b in beans] == ["耶加雪菲"]
     assert beans[0]["origin"] == "埃塞俄比亚 耶加雪菲"
     assert beans[0]["balance_g"] == 100
+    shots = photos.list_bean_photos(conn, beans[0]["id"])
+    assert shots and shots[0]["kind"] == "pack"
     assert auth.is_stock_account(conn, out["id"]) is False
 
 
