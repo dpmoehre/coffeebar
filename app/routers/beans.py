@@ -31,6 +31,28 @@ def api_beans(
     return {"beans": beans, "avg_dose": stats.average_dose(conn, owner_id=account["id"])}
 
 
+@router.get("/api/beans/similar")
+def api_similar_beans(
+    name: str | None = None,
+    origin: str | None = None,
+    process: str | None = None,
+    roast: str | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    """同账号查重。只读，最多 5 张。重名仍允许再建，由人决定。"""
+    return {
+        "beans": store.find_similar_beans(
+            conn,
+            account["id"],
+            name=name,
+            origin=origin,
+            process=process,
+            roast=roast,
+        )
+    }
+
+
 @router.post("/api/beans", status_code=201)
 def api_create_bean(
     payload: dict,

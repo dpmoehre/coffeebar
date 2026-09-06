@@ -54,9 +54,11 @@
 
 先让网页服务跑着（`start.sh` / `start.bat`）。在仓库根目录复制 `.env.example` 为 `.env`，填登录邮箱和密码。Cursor 打开本仓库后应能看到 `coffeebar` 这个 MCP（`.cursor/mcp.json`）。Windows 直接跑仓库里 `.venv\Scripts\coffeebar-mcp.exe`（Cursor 的 MCP 进程拿不到用户 PATH，写 `uv` / `cmd.exe` 都会红）。红了先完全退出 Cursor 再开，不要只拨开关。Mac 把 `command` 改成 `uv`、`args` 改成 `["run", "coffeebar-mcp"]`。
 
+丢一张豆卡或包装图时，Agent 先按字段清单读图（读不清就空着，不猜克重价钱），查有没有像的已有卡，对人复述，你点头后才建卡并挂上那张图。不要对真库存已有豆重复建档。
+
 | 你在 Cursor 里说 | MCP 去做 |
 | ---- | ---- |
-| 用这张图和下面字段建一张豆卡 | 建豆、建批次、拷照片进 `data/photos/` |
+| 用这张图建一张豆卡 | 先查重、复述字段，点头后建豆、挂图（豆卡纸 `card` / 袋子 `pack`），克重价钱清楚才入第一袋 |
 | 给西达摩补开袋实称 198 g | 改当前批次 |
 | 我刚才用了 16 g，谁喝的：戚浩辰 | 记消耗流水，并说出扣的是哪一袋 |
 | 这袋冲完了 | 关袋并结清偏差（你必须明确说） |

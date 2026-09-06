@@ -38,7 +38,10 @@ mcp = MCPServer(
         "器具复用目录：list_kingdom_gear / get_kingdom_gear，score_kingdom_gear 只打总体分和一句话，"
         "favorite_kingdom_gear 收藏。管理员 collect_gear 收到目录就是进王国，不要另收一套。"
         "管理员 collect_kingdom 把公开豆卡收进王国，两张同名卡可挂同一支。"
-        "服务没开就说 coffeebar 未在运行。"
+        "用户丢豆卡/包装图要建档时走这套：先按字段清单读图（读不清写空），"
+        "再 find_similar_beans，对人复述，人点头才 create_bean 带图路径，"
+        "或对已有卡 create_bean_lot 再挂图。不要只建卡不挂图，不要猜克重价钱。"
+        "服务端不识字。服务没开就说 coffeebar 未在运行。"
     ),
 )
 
@@ -99,8 +102,18 @@ def create_bean(
     brew_ratio: float | None = None,
     brew_note: str | None = None,
     visibility: str | None = None,
+    photo_path: str | None = None,
+    photo_kind: str = "card",
 ) -> Any:
-    """建一张豆卡。带 nominal_g 会同时入第一袋。roasted_on 是袋上烘焙日，可空。visibility=public 建完就公开，默认只自己看。返回 id。"""
+    """建一张豆卡。带 nominal_g 会同时入第一袋。roasted_on 是袋上烘焙日，可空。visibility=public 建完就公开，默认只自己看。
+    可选 photo_path 为本机图路径，成功后立刻挂图；photo_kind 默认 card。图失败时卡仍在，返回 photo_error。
+    拍豆卡/包装图建档（五步，没点头不要写）：
+    1. 看图抽出：名字、产地、豆种、处理厂/庄园、海拔、处理法、烘焙；建议水温、粉量、粉水比、店家冲法备注；袋上克重、价钱、购入日、烘焙日 roasted_on；风味标签。读不清写空，不要猜克重价钱。
+    2. 先调 find_similar_beans。名字或「产地+处理法+烘焙」像已有卡时列出 id，问再入一袋还是仍要新建。不要因重名拒绝创建。
+    3. 对人复述字段和查重结果。没点头不写。
+    4. 人点头后：新建用 create_bean 并带 photo_path（豆卡纸 kind=card，袋子正面 kind=pack）；已有卡用 create_bean_lot + add_bean_photo。不要只建卡不挂图。
+    5. 回报豆卡 id，提醒刷新豆库。图没挂上也要说清（卡可能已经建了）。
+    """
     return _call(
         client().create_bean,
         _drop_none(
@@ -124,6 +137,8 @@ def create_bean(
                 "brew_ratio": brew_ratio,
                 "brew_note": brew_note,
                 "visibility": visibility,
+                "photo_path": photo_path,
+                "photo_kind": photo_kind,
             }
         ),
     )
@@ -173,8 +188,35 @@ def delete_bean(bean_id: int, mode: str | None = None) -> Any:
 
 
 @mcp.tool()
+def find_similar_beans(
+    name: str | None = None,
+    origin: str | None = None,
+    process: str | None = None,
+    roast: str | None = None,
+) -> Any:
+    """同账号查重，最多 5 张已有卡（id / 名字 / 产地 / 处理法 / 烘焙）。只读。
+    只给产地或只给烘焙不会扫到所有埃塞/浅烘；要产地+处理法+烘焙都给，或给名字。
+    拍豆卡/包装图建档（五步，没点头不要写）：
+    1. 看图抽出：名字、产地、豆种、处理厂/庄园、海拔、处理法、烘焙；建议水温、粉量、粉水比、店家冲法备注；袋上克重、价钱、购入日、烘焙日 roasted_on；风味标签。读不清写空，不要猜克重价钱。
+    2. 先调 find_similar_beans。名字或「产地+处理法+烘焙」像已有卡时列出 id，问再入一袋还是仍要新建。不要因重名拒绝创建。
+    3. 对人复述字段和查重结果。没点头不写。
+    4. 人点头后：新建用 create_bean 并带 photo_path（豆卡纸 kind=card，袋子正面 kind=pack）；已有卡用 create_bean_lot + add_bean_photo。不要只建卡不挂图。
+    5. 回报豆卡 id，提醒刷新豆库。图没挂上也要说清（卡可能已经建了）。
+    """
+    return _call(client().find_similar_beans, name, origin, process, roast)
+
+
+@mcp.tool()
 def add_bean_photo(bean_id: int, path: str, kind: str = "pack") -> Any:
-    """挂本地图片。kind: pack 包装 / tray 豆盘 / card 店家豆卡。"""
+    """挂本地图片。kind: pack 包装 / tray 豆盘 / card 店家豆卡。
+    新建档优先走 create_bean 带 photo_path；补图或给已有卡加袋子正面才用本工具。
+    拍豆卡/包装图建档（五步，没点头不要写）：
+    1. 看图抽出：名字、产地、豆种、处理厂/庄园、海拔、处理法、烘焙；建议水温、粉量、粉水比、店家冲法备注；袋上克重、价钱、购入日、烘焙日 roasted_on；风味标签。读不清写空，不要猜克重价钱。
+    2. 先调 find_similar_beans。名字或「产地+处理法+烘焙」像已有卡时列出 id，问再入一袋还是仍要新建。不要因重名拒绝创建。
+    3. 对人复述字段和查重结果。没点头不写。
+    4. 人点头后：新建用 create_bean 并带 photo_path（豆卡纸 kind=card，袋子正面 kind=pack）；已有卡用 create_bean_lot + add_bean_photo。不要只建卡不挂图。
+    5. 回报豆卡 id，提醒刷新豆库。图没挂上也要说清（卡可能已经建了）。
+    """
     return _call(client().add_bean_photo, bean_id, path, kind)
 
 

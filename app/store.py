@@ -458,6 +458,75 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
     return out
 
 
+def _compact(text: str | None) -> str:
+    return "".join((text or "").split()).lower()
+
+
+def _text_like(query: str | None, value: str | None) -> bool:
+    """名字或产地这类短句：相等，或较短的一段（至少两字）被较长的包含。"""
+    q, v = _compact(query), _compact(value)
+    if not q or not v:
+        return False
+    if q == v:
+        return True
+    short, long_ = (q, v) if len(q) <= len(v) else (v, q)
+    if len(short) < 2:
+        return False
+    return short in long_
+
+
+def find_similar_beans(
+    conn: sqlite3.Connection,
+    owner_id: int,
+    *,
+    name: str | None = None,
+    origin: str | None = None,
+    process: str | None = None,
+    roast: str | None = None,
+    limit: int = 5,
+) -> list[dict]:
+    """同账号未删卡：名字像，或产地+处理法+烘焙都像。最多 5 张。不拦重名创建。"""
+    name_q = (name or "").strip()
+    origin_q = (origin or "").strip()
+    process_q = (process or "").strip()
+    roast_q = (roast or "").strip()
+    triple = bool(origin_q and process_q and roast_q)
+    if not name_q and not triple:
+        return []
+
+    rows = conn.execute(
+        """SELECT id, name, origin, process, roast
+             FROM bean
+            WHERE owner_id = ? AND deleted_at IS NULL
+            ORDER BY updated_at DESC""",
+        (owner_id,),
+    ).fetchall()
+
+    hits = []
+    for row in rows:
+        bean = dict(row)
+        by_name = bool(name_q) and _text_like(name_q, bean.get("name"))
+        by_triple = triple and (
+            _text_like(origin_q, bean.get("origin"))
+            and _text_like(process_q, bean.get("process"))
+            and _text_like(roast_q, bean.get("roast"))
+        )
+        if not (by_name or by_triple):
+            continue
+        hits.append(
+            {
+                "id": bean["id"],
+                "name": bean["name"],
+                "origin": bean.get("origin"),
+                "process": bean.get("process"),
+                "roast": bean.get("roast"),
+            }
+        )
+        if len(hits) >= limit:
+            break
+    return hits
+
+
 def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None) -> dict | None:
     bean = _row(conn.execute("SELECT * FROM bean WHERE id = ?", (bean_id,)))
     if not bean:

@@ -4,6 +4,7 @@
       "type": "stdio",
       "command": "/Users/dp/Documents/001_gitea/dpmoehre/coffeebar/.venv/bin/coffeebar-mcp",
       "envFile": "/Users/dp/Documents/001_gitea/dpmoehre/coffeebar/.env",
+      "namespaceUseInstructions": "用户丢豆卡/包装图要建档时走这套，不要只建卡不挂图，不要猜克重价钱。",
       "env": {
         "COFFEEBAR_URL": "http://127.0.0.1:8000"
       }

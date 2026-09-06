@@ -52,6 +52,7 @@ def test_tool_catalog_covers_bar():
         "list_beans",
         "get_bean",
         "create_bean",
+        "find_similar_beans",
         "update_bean",
         "delete_bean",
         "add_bean_photo",
@@ -371,3 +372,125 @@ def test_mcp_kingdom_cupping(client, monkeypatch):
     assert [b["id"] for b in saved] == [kid]
     gone = c.unscore_kingdom(kid)
     assert gone["mine"] is None
+
+
+def test_create_bean_with_photo_path(client, tmp_path):
+    c = _mcp(client)
+    pic = _jpg(tmp_path)
+    bean = c.create_bean({"name": "MCP豆卡图", "photo_path": str(pic), "photo_kind": "card"})
+    assert bean["id"]
+    assert "photo_error" not in bean
+    assert any(p["kind"] == "card" for p in bean["photos"])
+
+
+def test_create_bean_bad_photo_keeps_card(client):
+    c = _mcp(client)
+    bean = c.create_bean({"name": "MCP没图也建", "photo_path": "/no/such/bean-card.jpg"})
+    assert bean["id"]
+    assert "没有这个文件" in bean["photo_error"]
+    detail = c.get_bean(bean["id"])
+    assert detail["photos"] == []
+
+
+def test_create_bean_allows_same_name(client):
+    c = _mcp(client)
+    a = c.create_bean({"name": "MCP重名豆"})
+    b = c.create_bean({"name": "MCP重名豆"})
+    assert a["id"] != b["id"]
+
+
+def test_find_similar_beans_name_and_triple(client):
+    c = _mcp(client)
+    hit = c.create_bean({
+        "name": "西达摩 水洗",
+        "origin": "埃塞俄比亚 西达摩",
+        "process": "水洗",
+        "roast": "浅烘",
+    })
+    c.create_bean({
+        "name": "耶加雪菲",
+        "origin": "埃塞俄比亚 耶加雪菲",
+        "process": "日晒",
+        "roast": "浅烘",
+    })
+    by_name = c.find_similar_beans(name="西达摩水洗")
+    assert [b["id"] for b in by_name["beans"]] == [hit["id"]]
+    by_triple = c.find_similar_beans(origin="埃塞俄比亚 西达摩", process="水洗", roast="浅烘")
+    assert [b["id"] for b in by_triple["beans"]] == [hit["id"]]
+    assert c.find_similar_beans(roast="浅烘")["beans"] == []
+    assert c.find_similar_beans(origin="埃塞俄比亚")["beans"] == []
+
+
+def test_find_similar_beans_stays_on_owner(client):
+    c = _mcp(client)
+    mine = c.create_bean({
+        "name": "别人看不见",
+        "origin": "肯尼亚",
+        "process": "水洗",
+        "roast": "中烘",
+    })
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "other-015@coffeebar.local", "password": "testpass1"},
+    )
+    other = _mcp(client)
+    assert other.find_similar_beans(name="别人看不见")["beans"] == []
+    assert client.get("/api/beans/similar", params={"name": "别人看不见"}).json()["beans"] == []
+    listed = client.get(f"/api/beans/{mine['id']}")
+    assert listed.status_code == 404
+
+
+def test_bean_card_tools_describe_workflow():
+    tools = {t.name: (t.description or "") for t in anyio.run(mcp.list_tools)}
+    for name in ("create_bean", "add_bean_photo", "find_similar_beans"):
+        text = tools[name]
+        assert "复述" in text, name
+        assert "find_similar_beans" in text, name
+
+
+def test_find_similar_route_is_not_bean_id(client):
+    r = client.get("/api/beans/similar")
+    assert r.status_code == 200, r.text
+    assert r.json()["beans"] == []
+
+
+def test_find_similar_store_limit_owner_deleted(conn):
+    from app import auth, db, store
+
+    me = auth.register(conn, "sim-a@coffeebar.local", "testpass1")
+    other = auth.register(conn, "sim-b@coffeebar.local", "testpass1")
+    ids = [
+        store.create_bean(
+            conn,
+            {
+                "owner_id": me["id"],
+                "name": f"同款浅烘 {i}",
+                "origin": "哥伦比亚",
+                "process": "水洗",
+                "roast": "浅烘",
+            },
+        )
+        for i in range(6)
+    ]
+    store.create_bean(
+        conn,
+        {
+            "owner_id": other["id"],
+            "name": "同款浅烘 别人的",
+            "origin": "哥伦比亚",
+            "process": "水洗",
+            "roast": "浅烘",
+        },
+    )
+    hits = store.find_similar_beans(
+        conn, me["id"], origin="哥伦比亚", process="水洗", roast="浅烘"
+    )
+    assert len(hits) == 5
+    assert {b["id"] for b in hits} <= set(ids)
+
+    conn.execute("UPDATE bean SET deleted_at = ? WHERE id = ?", (db.now(), ids[-1]))
+    after = store.find_similar_beans(conn, me["id"], name="同款浅烘")
+    assert ids[-1] not in [b["id"] for b in after]
+    assert store.find_similar_beans(conn, other["id"], name="同款浅烘 别人的")[0]["id"]
+    assert all(b["id"] != ids[0] for b in store.find_similar_beans(conn, other["id"], name="同款浅烘"))

@@ -164,8 +164,32 @@ class Client:
     def get_bean(self, bean_id: int):
         return self.request("GET", f"/api/beans/{bean_id}")
 
+    def find_similar_beans(self, name=None, origin=None, process=None, roast=None):
+        params = {}
+        if name:
+            params["name"] = name
+        if origin:
+            params["origin"] = origin
+        if process:
+            params["process"] = process
+        if roast:
+            params["roast"] = roast
+        qs = urlencode(params)
+        return self.request("GET", f"/api/beans/similar{f'?{qs}' if qs else ''}")
+
     def create_bean(self, data: dict):
-        return self.request("POST", "/api/beans", json=data)
+        payload = dict(data)
+        photo_path = payload.pop("photo_path", None)
+        photo_kind = payload.pop("photo_kind", None) or "card"
+        bean = self.request("POST", "/api/beans", json=payload)
+        if not photo_path:
+            return bean
+        try:
+            self.add_bean_photo(bean["id"], photo_path, photo_kind)
+        except ApiError as exc:
+            bean["photo_error"] = str(exc)
+            return bean
+        return self.get_bean(bean["id"])
 
     def update_bean(self, bean_id: int, data: dict):
         return self.request("PATCH", f"/api/beans/{bean_id}", json=data)
