@@ -2,11 +2,10 @@
   "mcpServers": {
     "coffeebar": {
       "type": "stdio",
-      "command": "coffeebar-mcp",
-      "envFile": "${workspaceFolder}/.env",
+      "command": "/Users/dp/Documents/001_gitea/dpmoehre/coffeebar/.venv/bin/coffeebar-mcp",
+      "envFile": "/Users/dp/Documents/001_gitea/dpmoehre/coffeebar/.env",
       "env": {
-        "COFFEEBAR_URL": "http://127.0.0.1:8000",
-        "PATH": "${workspaceFolder}${/}.venv${/}bin${pathSeparator}${workspaceFolder}${/}.venv${/}Scripts${pathSeparator}${env:PATH}"
+        "COFFEEBAR_URL": "http://127.0.0.1:8000"
       }
     }
   }
