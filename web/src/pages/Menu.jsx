@@ -22,6 +22,7 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
   const [recipeOpen, setRecipeOpen] = useState(false);
   const [editing, setEditing] = useState(null);
   const [lockInfo, setLockInfo] = useState(null);
+  const [q, setQ] = useState("");
   const holding = useRef(false);
   const heldRecipe = useRef(null);
 
@@ -88,7 +89,16 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
     api.people().then((d) => setPeople(d.people || [])).catch((e) => oops(e.message));
   }, [load, oops]);
 
-  const shown = (items || []).filter((it) => (edit ? true : it.listed));
+  const shown = (items || []).filter((it) => {
+    if (!edit && !it.listed) return false;
+    const needle = q.trim().toLowerCase();
+    if (!needle) return true;
+    const blob = [it.name, it.kind === "neat" ? "纯饮" : "鸡尾酒", it.steps, linePreview(it)]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return blob.includes(needle);
+  });
   const usedSpirit = new Set((items || []).filter((it) => it.kind === "neat").map((it) => it.spirit_id));
   const unused = spirits.filter((s) => !usedSpirit.has(s.id));
 
@@ -124,6 +134,15 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
           </Chip>
         </div>
       </header>
+
+      <div className="mt-5">
+        <Input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="搜酒单、材料…"
+          className="max-w-xs py-1.5 text-sm"
+        />
+      </div>
 
       {edit && (
         <div className="mt-5 flex flex-wrap gap-2">
@@ -215,9 +234,11 @@ export default function Menu({ onOpenSpirit, toast, oops }) {
 
       {items && shown.length === 0 && (
         <Empty>
-          {edit
-            ? "还没有条目。上架一支纯饮，或写一款鸡尾酒。"
-            : "酒单是空的。点「编辑」把今晚要出的酒摆上来。"}
+          {q.trim()
+            ? "没有对得上的酒单。"
+            : edit
+              ? "还没有条目。上架一支纯饮，或写一款鸡尾酒。"
+              : "酒单是空的。点「编辑」把今晚要出的酒摆上来。"}
         </Empty>
       )}
 

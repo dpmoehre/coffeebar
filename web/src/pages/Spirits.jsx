@@ -79,6 +79,7 @@ export default function Spirits({ onOpen, toast, oops }) {
   const [kind, setKind] = useState("");
   const [sort, setSort] = useState("recent");
   const [q, setQ] = useState("");
+  const [picked, setPicked] = useState([]);
   const [adding, setAdding] = useState(false);
 
   const load = () => api.spirits(scope).then(setData).catch((e) => oops(e.message));
@@ -88,9 +89,15 @@ export default function Spirits({ onOpen, toast, oops }) {
   }, [scope]);
 
   const kinds = data?.kinds || KINDS;
+  const allTags = useMemo(() => {
+    const set = new Set();
+    (data?.spirits || []).forEach((s) => (s.tags || []).forEach((t) => set.add(t)));
+    return [...set].sort();
+  }, [data]);
   const items = useMemo(() => {
     let list = [...(data?.spirits || [])];
     if (kind) list = list.filter((s) => (s.kind || "其他") === kind);
+    if (picked.length) list = list.filter((s) => picked.every((t) => (s.tags || []).includes(t)));
     const needle = q.trim().toLowerCase();
     if (needle) {
       list = list.filter((s) =>
@@ -111,7 +118,7 @@ export default function Spirits({ onOpen, toast, oops }) {
       cost_desc: (a, b) => byNum(a, b, "unit_cost", true),
     };
     return list.sort(by[sort] || by.recent);
-  }, [data, kind, sort, q]);
+  }, [data, kind, sort, q, picked]);
 
   // 没选大类、又是默认排序时按威士忌 / 金酒分组，一眼能分开
   const groups = useMemo(() => {
@@ -167,8 +174,14 @@ export default function Spirits({ onOpen, toast, oops }) {
             </option>
           ))}
         </Select>
-        {kind && (
-          <button className="text-sm text-amber underline" onClick={() => setKind("")}>
+        {(kind || picked.length > 0) && (
+          <button
+            className="text-sm text-amber underline"
+            onClick={() => {
+              setKind("");
+              setPicked([]);
+            }}
+          >
             清除筛选
           </button>
         )}
@@ -181,6 +194,21 @@ export default function Spirits({ onOpen, toast, oops }) {
           </Chip>
         ))}
       </div>
+      {allTags.length > 0 && (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {allTags.map((t) => (
+            <Chip
+              key={t}
+              on={picked.includes(t)}
+              onClick={() =>
+                setPicked((p) => (p.includes(t) ? p.filter((x) => x !== t) : [...p, t]))
+              }
+            >
+              {t}
+            </Chip>
+          ))}
+        </div>
+      )}
 
       <div className="mt-6 space-y-3">
         {groups

@@ -1,5 +1,5 @@
 // 画像 + 人管理：可增、可改名、可停用（停用不删记录），每人一页追踪。
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus } from "../icons.jsx";
@@ -10,6 +10,7 @@ export default function People({ toast, oops, onOpenCalendar }) {
   const [pickedId, setPicked] = useState(null);
   const [profile, setProfile] = useState(null);
   const [manage, setManage] = useState(false);
+  const [q, setQ] = useState("");
 
   const loadPeople = () =>
     api.people(true).then((d) => {
@@ -28,6 +29,12 @@ export default function People({ toast, oops, onOpenCalendar }) {
     api.profile(pickedId).then(setProfile).catch((e) => oops(e.message));
   }, [pickedId, oops]);
 
+  const visible = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return people;
+    return people.filter((p) => String(p.name || "").toLowerCase().includes(needle));
+  }, [people, q]);
+
   return (
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -45,18 +52,26 @@ export default function People({ toast, oops, onOpenCalendar }) {
         <Empty>还没记过谁喝的。冲一次的时候打个名字，这里就有画像了。</Empty>
       ) : (
         <>
-          <div className="mt-5 flex flex-wrap gap-2">
-            {people
+          <div className="mt-5">
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="搜谁喝的…"
+              className="max-w-xs py-1.5 text-sm"
+            />
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {visible
               .filter((p) => p.active)
               .map((p) => (
                 <Chip key={p.id} on={p.id === pickedId} onClick={() => setPicked(p.id)}>
                   {p.name}
                 </Chip>
               ))}
-            {people.some((p) => !p.active) && (
+            {visible.some((p) => !p.active) && (
               <>
                 <span className="mx-1 h-5 w-px bg-line" />
-                {people
+                {visible
                   .filter((p) => !p.active)
                   .map((p) => (
                     <Chip
@@ -71,8 +86,11 @@ export default function People({ toast, oops, onOpenCalendar }) {
               </>
             )}
           </div>
+          {visible.length === 0 && <p className="mt-4 text-muted">没有对得上的人。</p>}
 
-          {profile && <Profile p={profile} onOpenCalendar={onOpenCalendar} />}
+          {profile && visible.some((p) => p.id === pickedId) && (
+            <Profile p={profile} onOpenCalendar={onOpenCalendar} />
+          )}
         </>
       )}
 
