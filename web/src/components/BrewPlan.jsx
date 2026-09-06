@@ -91,6 +91,22 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
   };
 
   const cur = active >= 0 && plan ? plan.stages[active] : null;
+  const current = methods.find((m) => m.key === form.method);
+  const suggested = methods.find((m) => m.suggested);
+  const hintParts = [];
+  if (current?.owned === false && suggested && suggested.key !== form.method) {
+    hintParts.push(`按你的器具，更适合 ${suggested.label}`);
+  }
+  if (current?.gear_names?.length) {
+    hintParts.push(`用 ${current.gear_names.join("、")}`);
+  }
+  if (current?.tips?.length) {
+    hintParts.push(current.tips.join(" "));
+  }
+  if (current?.kettle_tip) {
+    hintParts.push(current.kettle_tip);
+  }
+  const hint = hintParts.join(" · ");
 
   return (
     <Panel className="mt-5">
@@ -99,6 +115,26 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
           <div className="serif text-lg">冲煮指导</div>
           {bean.brew?.note && (
             <p className="mt-1 mb-0 text-[13px] text-muted">店家推荐：{bean.brew.note}</p>
+          )}
+          {bean.grind_hint?.sentence && (
+            <p className="mt-1 mb-0 text-[13px] text-amber">{bean.grind_hint.sentence}</p>
+          )}
+          {hint && (
+            <p className="mt-1 mb-0 text-[13px] text-amber">
+              {hint}
+              {current?.owned === false && suggested && suggested.key !== form.method ? (
+                <>
+                  {" "}
+                  <button
+                    type="button"
+                    className="underline"
+                    onClick={() => setForm({ ...form, method: suggested.key })}
+                  >
+                    换成 {suggested.label}
+                  </button>
+                </>
+              ) : null}
+            </p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -137,6 +173,7 @@ export default function BrewPlan({ bean, onRecord, toast, oops }) {
             {methods.map((m) => (
               <option key={m.key} value={m.key}>
                 {m.label}
+                {m.owned ? "（你有）" : m.owned === false ? "（缺滤杯）" : ""}
               </option>
             ))}
           </Select>

@@ -11,7 +11,7 @@ from __future__ import annotations
 import json
 import sqlite3
 
-from . import db, photos, places
+from . import brew, db, photos, places
 
 # 可用克重：开袋实称有则用之，否则用包装标称（刚拆袋不会称，默认走标称）
 USABLE = "COALESCE(l.measured_g, l.nominal_g)"
@@ -211,6 +211,7 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         clear_certification(conn, bean_id)
 
 
+@db.atomic
 def delete_bean(conn: sqlite3.Connection, bean_id: int, mode: str | None = None) -> dict:
     """从豆库拿掉一张卡。
 
@@ -364,6 +365,7 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
         )
     ) or {"method": "v60", "dose_g": 15, "ratio": 16, "note": None}
     bean["places"] = places.list_places(conn, bean_id)
+    bean["grind_hint"] = grind_hint_for_bean(conn, bean_id)
     return _annotate_bean(bean)
 
 
@@ -400,6 +402,7 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "photos": shots,
         "cover": photos.cover(shots),
         "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
+        "kingdom_id": bean.get("kingdom_id"),
     }
 
 
@@ -576,6 +579,7 @@ def adjust_lot(conn: sqlite3.Connection, lot_id: int, actual_g: float, note: str
     return delta
 
 
+@db.atomic
 def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> float:
     """这袋用完：人确认才关，账面余数记成偏差结清。返回偏差克重。"""
     lot = get_lot(conn, lot_id)
@@ -666,6 +670,7 @@ def set_person_active(conn: sqlite3.Connection, person_id: int, active: bool) ->
     conn.execute("UPDATE person SET active = ? WHERE id = ?", (1 if active else 0, person_id))
 
 
+@db.atomic
 def delete_person(conn: sqlite3.Connection, person_id: int) -> dict:
     """真删掉这个人。
 
@@ -703,6 +708,7 @@ def delete_person(conn: sqlite3.Connection, person_id: int) -> dict:
 # ── 冲一次 / 撤回 ───────────────────────────────────────────
 
 
+@db.atomic
 def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
     """记一次冲煮。袋子由调用方（人）指定；粉量是当次实际用量。"""
     lot = get_lot(conn, int(data["lot_id"]))
@@ -754,7 +760,7 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
         )
 
     after = get_lot(conn, lot["id"])
-    return {
+    out = {
         "id": int(cur.lastrowid),
         "lot_id": lot["id"],
         "amount_g": amount,
@@ -763,8 +769,15 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
         "balance_g": after["balance_g"],
         "near_empty": after["balance_g"] < amount,
     }
+    compared = brew.compare(
+        data.get("brew_method"), amount, data.get("brew_ratio"), data.get("brew_total_s")
+    )
+    if compared:
+        out["brew_compare"] = compared
+    return out
 
 
+@db.atomic
 def record_writeoff(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> dict:
     """整袋补录：克重和钱进统计，不算一杯、不算到人。已关袋只要账面还在也能写。"""
     lot = get_lot(conn, lot_id)
@@ -826,6 +839,7 @@ def retarget_finished_lot(
     return out
 
 
+@db.atomic
 def void_one(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) -> dict:
     """撤回单行。酒单整巡请走 void_consumption / menu.void_serve。"""
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
@@ -858,6 +872,7 @@ def void_one(conn: sqlite3.Connection, cons_id: int, reason: str | None = None) 
     return {"id": cons_id, "voided_at": ts, "closed_lot_adjusted": compensated}
 
 
+@db.atomic
 def unvoid_one(conn: sqlite3.Connection, cons_id: int) -> None:
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
@@ -880,6 +895,7 @@ def unvoid_one(conn: sqlite3.Connection, cons_id: int) -> None:
     )
 
 
+@db.atomic
 def delete_voided_one(conn: sqlite3.Connection, cons_id: int) -> dict:
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
     if not row:
@@ -918,6 +934,7 @@ def unvoid_consumption(conn: sqlite3.Connection, cons_id: int) -> None:
     unvoid_one(conn, cons_id)
 
 
+@db.atomic
 def delete_voided_consumption(conn: sqlite3.Connection, cons_id: int) -> dict:
     """彻底删掉已经撤回的一笔。库存在撤回时已经加回去，这里不再动账。"""
     row = _row(conn.execute("SELECT * FROM consumption_event WHERE id = ?", (cons_id,)))
@@ -1017,4 +1034,34 @@ def list_consumption(
     by_photo = photos.list_consumption_photos(conn, [r["id"] for r in out])
     for row in out:
         row["photos"] = by_photo.get(row["id"], [])
+        attach_brew_compare(row)
     return out
+
+
+def attach_brew_compare(row: dict) -> None:
+    if row.get("kind") != "coffee" or row.get("as_cup") == 0:
+        return
+    compared = brew.compare(
+        row.get("brew_method"), row.get("amount_g"), row.get("brew_ratio"), row.get("brew_total_s")
+    )
+    if compared:
+        row["brew_compare"] = compared
+
+
+def grind_hint_for_bean(conn: sqlite3.Connection, bean_id: int) -> dict | None:
+    rows = conn.execute(
+        """SELECT c.amount_g, c.brew_method, c.brew_ratio, c.brew_total_s
+             FROM consumption_event c
+             JOIN bean_lot l ON l.id = c.lot_id
+            WHERE l.bean_id = ? AND c.kind = 'coffee' AND c.voided_at IS NULL
+              AND c.as_cup = 1 AND c.brew_total_s IS NOT NULL
+              AND c.brew_method IS NOT NULL AND c.brew_ratio IS NOT NULL
+            ORDER BY c.at DESC, c.id DESC
+            LIMIT 20""",
+        (bean_id,),
+    ).fetchall()
+    if not rows:
+        return None
+    method = rows[0]["brew_method"]
+    same = [dict(r) for r in rows if r["brew_method"] == method][:3]
+    return brew.grind_hint(same)

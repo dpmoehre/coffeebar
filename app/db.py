@@ -4,8 +4,11 @@ from __future__ import annotations
 
 import os
 import sqlite3
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+
+_TX_DEPTH: dict[int, int] = {}
 
 # 运行数据只在本机，不入库（.gitignore 已排除 data/）
 DATA_DIR = Path(os.environ.get("COFFEEBAR_DATA", Path(__file__).resolve().parent.parent / "data"))
@@ -28,8 +31,45 @@ def connect() -> sqlite3.Connection:
     conn = sqlite3.connect(db_path(), isolation_level=None, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
-    conn.execute("PRAGMA busy_timeout = 4000")  # 写撞上了就等一会，别直接报 locked
+    conn.execute("PRAGMA busy_timeout = 8000")  # 写撞上了就等一会，别直接报 locked
     return conn
+
+
+@contextmanager
+def transaction(conn: sqlite3.Connection):
+    """BEGIN IMMEDIATE。嵌套时加入已有事务，不另开。"""
+    key = id(conn)
+    depth = _TX_DEPTH.get(key, 0)
+    if depth:
+        _TX_DEPTH[key] = depth + 1
+        try:
+            yield conn
+        finally:
+            _TX_DEPTH[key] = depth
+        return
+    _TX_DEPTH[key] = 1
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        yield conn
+        conn.execute("COMMIT")
+    except Exception:
+        try:
+            conn.execute("ROLLBACK")
+        except sqlite3.Error:
+            pass
+        raise
+    finally:
+        _TX_DEPTH.pop(key, None)
+
+
+def atomic(fn):
+    def wrapped(conn, *args, **kwargs):
+        with transaction(conn):
+            return fn(conn, *args, **kwargs)
+
+    wrapped.__name__ = fn.__name__
+    wrapped.__doc__ = fn.__doc__
+    return wrapped
 
 
 # 给已经建好的库补列。CREATE TABLE IF NOT EXISTS 不会动已存在的表，
@@ -54,6 +94,8 @@ ADDED_COLUMNS = [
     ("bean", "certified_by", "INTEGER"),
     ("bean", "review_note", "TEXT"),
     ("bean", "places_verified_at", "TEXT"),
+    ("account", "claimed_at", "TEXT"),
+    ("bean", "kingdom_id", "INTEGER"),
 ]
 
 
@@ -67,6 +109,7 @@ STALE_CHECKS = {
     "consumption_photo": "kind IN ('beans', 'bed', 'finish')",
     # 人名从全局唯一改成「同一账号下唯一」，两个人才能各有一个戚浩辰
     "person": "name       TEXT    NOT NULL UNIQUE",
+    "auth_token": "purpose IN ('verify', 'reset')",
 }
 
 

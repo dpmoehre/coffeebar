@@ -459,3 +459,35 @@ def test_reading_never_locked(client):
     assert client.get(f"/api/beans/{bean['id']}").status_code == 200
     assert client.get("/api/stats").status_code == 200
     assert client.get("/api/restock").status_code == 200
+
+
+def test_grind_hint_from_slow_cups(client):
+    from app import brew
+
+    bean = new_bean(client, name="【测试】偏慢")
+    lot = bean["lots"][0]["id"]
+    planned = brew.plan("v60", 15.9, 16)["total_seconds"]
+    for _ in range(2):
+        r = client.post(
+            "/api/brews",
+            json={
+                "lot_id": lot,
+                "amount_g": 15.9,
+                "person": "丁瀚舟",
+                "brew_method": "v60",
+                "brew_ratio": 16,
+                "brew_total_s": planned + 22,
+            },
+        )
+        assert r.status_code == 201, r.text
+        assert r.json()["brew_compare"]["key"] == "coarser"
+    card = client.get(f"/api/beans/{bean['id']}").json()
+    assert card["grind_hint"]["key"] == "coarser"
+    assert "粗一点" in card["grind_hint"]["sentence"]
+    assert card["log"][0]["brew_compare"]["planned_s"] == planned
+    for row in card["log"]:
+        if row.get("voided_at"):
+            continue
+        client.post(f"/api/consumption/{row['id']}/void", json={"reason": "测完撤回"})
+    gone = client.get(f"/api/beans/{bean['id']}").json()
+    assert gone.get("grind_hint") is None

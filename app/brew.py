@@ -20,6 +20,28 @@ METHODS = {
     "volcano": "多段式火山冲",
 }
 
+# 每种方式默认要哪种滤杯。具体型号和备注在器具目录里，不写死在这里。
+METHOD_META = {
+    "v60": {"family": "cone", "need": "锥形滤杯（V60 / Origami）", "kettle": "gooseneck"},
+    "hoffmann": {"family": "cone", "need": "锥形滤杯", "kettle": "gooseneck"},
+    "kasuya": {"family": "cone", "need": "锥形滤杯", "kettle": "gooseneck"},
+    "kalita": {"family": "flat", "need": "平底滤杯（Kalita Wave）", "kettle": "gooseneck"},
+    "volcano": {"family": "cone", "need": "锥形滤杯；细嘴壶更好", "kettle": "gooseneck"},
+}
+
+
+def methods_payload() -> list[dict]:
+    return [
+        {
+            "key": key,
+            "label": label,
+            "family": METHOD_META[key]["family"],
+            "need": METHOD_META[key]["need"],
+            "kettle": METHOD_META[key].get("kettle"),
+        }
+        for key, label in METHODS.items()
+    ]
+
 
 def water_ratio(water_g: float, dose_g: float) -> float:
     """本段/累计用水 ÷ 粉量，两位小数，和方程式称上的 1:x 对齐。"""
@@ -149,6 +171,91 @@ def plan(method: str, dose_g: float, ratio: float) -> dict:
         "total_ratio": water_ratio(total, dose),
         "total_seconds": stages[-1].elapsed_s if stages else 0,
         "stages": [asdict(s) for s in stages],
+    }
+
+
+COMPARE_LABELS = {
+    "hold": "这次对上了，研磨先别动",
+    "coarser": "偏慢，下次粗一点",
+    "much_coarser": "明显偏慢，粗半格到一格",
+    "finer": "偏快，下次细一点",
+    "much_finer": "明显偏快，细半格到一格",
+}
+
+
+def _compare_key(delta_s: float) -> str:
+    ad = abs(delta_s)
+    if ad < 15:
+        return "hold"
+    if delta_s > 0:
+        return "coarser" if ad <= 40 else "much_coarser"
+    return "finer" if ad <= 40 else "much_finer"
+
+
+def compare(method: str, dose_g: float, ratio: float, actual_s) -> dict | None:
+    """实际总秒对照这杯自己的方案尺子。缺方式、比例或秒数就不给建议。"""
+    if actual_s is None or ratio is None or method is None or method == "":
+        return None
+    try:
+        actual = int(round(float(actual_s)))
+        dose = float(dose_g)
+        ratio_f = float(ratio)
+    except (TypeError, ValueError):
+        return None
+    if dose <= 0 or ratio_f <= 0:
+        return None
+    p = plan(method, dose, ratio_f)
+    planned = int(p["total_seconds"])
+    delta = actual - planned
+    key = _compare_key(delta)
+    return {
+        "planned_s": planned,
+        "actual_s": actual,
+        "delta_s": delta,
+        "key": key,
+        "label": COMPARE_LABELS[key],
+        "method": p["method"],
+        "method_label": p["method_label"],
+    }
+
+
+def grind_hint(cups: list[dict]) -> dict | None:
+    """同一方式最近几杯，用时长差中位数套阈值。"""
+    comps = []
+    for cup in cups:
+        c = compare(
+            cup.get("brew_method"),
+            cup.get("amount_g"),
+            cup.get("brew_ratio"),
+            cup.get("brew_total_s"),
+        )
+        if c:
+            comps.append(c)
+    if not comps:
+        return None
+    deltas = sorted(c["delta_s"] for c in comps)
+    mid = len(deltas) // 2
+    median = deltas[mid] if len(deltas) % 2 else (deltas[mid - 1] + deltas[mid]) / 2
+    key = _compare_key(median)
+    method_label = comps[0]["method_label"]
+    n = len(comps)
+    ad = abs(int(round(median)))
+    if key == "hold":
+        sentence = f"最近 {n} 杯 {method_label} 中位差 {ad} 秒，研磨先别动。"
+    elif median > 0:
+        extra = "下次粗一点" if key == "coarser" else "粗半格到一格"
+        sentence = f"最近 {n} 杯 {method_label} 中位偏慢 {ad} 秒，{extra}。"
+    else:
+        extra = "下次细一点" if key == "finer" else "细半格到一格"
+        sentence = f"最近 {n} 杯 {method_label} 中位偏快 {ad} 秒，{extra}。"
+    return {
+        "method": comps[0]["method"],
+        "method_label": method_label,
+        "n": n,
+        "median_delta_s": int(round(median)),
+        "key": key,
+        "label": COMPARE_LABELS[key],
+        "sentence": sentence,
     }
 
 

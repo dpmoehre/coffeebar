@@ -270,6 +270,9 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
 
       <Panel className="mt-5">
         <div className="serif text-lg">冲煮记录</div>
+        {bean.grind_hint?.sentence && (
+          <p className="mt-1 mb-0 text-[13px] text-amber">{bean.grind_hint.sentence}</p>
+        )}
         <p className="mt-1 mb-3 text-[13px] text-muted">
           每次怎么冲都留在这支豆上，称豆、粉床、冲完、器具（称盘、壶、滤杯）的照片也可以挂上。记错了先撤回（只划掉、库存加回去）；划掉的那笔可以再点彻底删除。
         </p>
@@ -614,6 +617,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
   const [lotId, setLotId] = useState(null);
   const [amount, setAmount] = useState("");
   const [who, setWho] = useState("");
+  const [totalS, setTotalS] = useState("");
 
   useEffect(() => {
     if (!open) return;
@@ -621,6 +625,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
     setLotId(lots[0]?.id ?? null);
     setAmount(String(prefill?.dose ?? dose.avg_g ?? 15));
     setWho(localStorage.getItem("coffeebar-last-person") || "");
+    setTotalS(prefill?.total_s != null ? String(prefill.total_s) : "");
   }, [open, lots, prefill, dose]);
 
   const lot = lots.find((l) => l.id === lotId);
@@ -635,7 +640,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
         person: who.trim() || undefined,
         brew_method: prefill?.method,
         brew_ratio: prefill?.ratio,
-        brew_total_s: prefill?.total_s,
+        brew_total_s: totalS ? Number(totalS) : undefined,
         brew_stages: prefill?.stages,
       });
       if (who.trim()) localStorage.setItem("coffeebar-last-person", who.trim());
@@ -710,6 +715,14 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
           value={amount}
           onChange={(e) => setAmount(e.target.value)}
           autoFocus
+        />
+      </Field>
+      <Field label="实际总秒" hint="可空。播完会带上；手填也能对照方案给研磨建议">
+        <Input
+          type="number"
+          value={totalS}
+          onChange={(e) => setTotalS(e.target.value)}
+          placeholder="例如 168"
         />
       </Field>
       <p className={`text-[13px] ${short ? "text-warn" : "text-muted"}`}>
@@ -841,6 +854,11 @@ function brewHeadline(r) {
   if (r.brew_method) bits.push(METHOD[r.brew_method] || r.brew_method);
   if (r.brew_ratio) bits.push(wr(r.brew_ratio));
   if (r.brew_total_s) bits.push(fmtSec(r.brew_total_s));
+  if (r.brew_compare) {
+    bits.push(`方案 ${fmtSec(r.brew_compare.planned_s)}`);
+    if (r.brew_compare.key === "hold") bits.push("对上了");
+    else bits.push(r.brew_compare.delta_s > 0 ? "偏慢" : "偏快");
+  }
   return bits.join(" · ");
 }
 

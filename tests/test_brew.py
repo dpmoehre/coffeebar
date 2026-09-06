@@ -87,3 +87,27 @@ def test_stage_ratios_match_grams_over_dose():
     assert p["stages"][0]["target_ratio"] == 2.01
     assert p["stages"][-1]["add_ratio"] == 0
     assert p["stages"][-1]["target_ratio"] == 15.97
+
+
+def test_compare_v60_slow_and_hold():
+    p = brew.plan("v60", 15.9, 16)
+    slow = brew.compare("v60", 15.9, 16, p["total_seconds"] + 20)
+    assert slow["planned_s"] == p["total_seconds"]
+    assert slow["key"] == "coarser"
+    hold = brew.compare("v60", 15.9, 16, p["total_seconds"] + 10)
+    assert hold["key"] == "hold"
+    assert brew.compare("v60", 15.9, 16, None) is None
+    assert brew.compare("v60", 15.9, None, 120) is None
+
+
+def test_grind_hint_median_same_method():
+    p = brew.plan("v60", 15.9, 16)
+    cups = [
+        {"brew_method": "v60", "amount_g": 15.9, "brew_ratio": 16, "brew_total_s": p["total_seconds"] + 22},
+        {"brew_method": "v60", "amount_g": 15.9, "brew_ratio": 16, "brew_total_s": p["total_seconds"] + 18},
+        {"brew_method": "volcano", "amount_g": 15, "brew_ratio": 14, "brew_total_s": 200},
+    ]
+    hint = brew.grind_hint(cups[:2])
+    assert hint["key"] == "coarser"
+    assert hint["n"] == 2
+    assert "粗一点" in hint["sentence"]
