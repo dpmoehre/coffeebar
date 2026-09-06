@@ -111,6 +111,12 @@ def test_tool_catalog_covers_bar():
         "get_map",
         "set_bean_places",
         "guess_bean_places",
+        "list_review_queue",
+        "get_review_bean",
+        "certify_bean",
+        "uncertify_bean",
+        "review_set_places",
+        "review_guess_places",
     ):
         assert n in names, n
     assert "delete_account" not in names

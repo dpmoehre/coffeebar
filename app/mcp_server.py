@@ -18,6 +18,11 @@ mcp = MCPServer(
         "关袋、撤回、删卡、删人必须人明确说。"
         "多袋/多瓶未关时不要自己挑，先列出再等 lot_id。"
         "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升，同类可换支。自制基酒还没有。"
+        "豆卡默认只自己看；主人可改成公开。公开未认证也能上广场。"
+        "认证必须管理员账号：list_review_queue / get_review_bean，先对照 places.gazetteer 校对落点，"
+        "不对就 review_set_places 或 review_guess_places，再 certify_bean。"
+        "对不上又坚持认证时带 force_places。普通人调审核工具会 403。"
+        "改名字/产地/豆种/处理厂/处理法/烘焙/海拔或改钉会掉认证，要重审。"
         "服务没开就说 coffeebar 未在运行。"
     ),
 )
@@ -77,8 +82,9 @@ def create_bean(
     brew_dose_g: float | None = None,
     brew_ratio: float | None = None,
     brew_note: str | None = None,
+    visibility: str | None = None,
 ) -> Any:
-    """建一张豆卡。带 nominal_g 会同时入第一袋。返回 id。"""
+    """建一张豆卡。带 nominal_g 会同时入第一袋。visibility=public 建完就公开，默认只自己看。返回 id。"""
     return _call(
         client().create_bean,
         _drop_none(
@@ -100,6 +106,7 @@ def create_bean(
                 "brew_dose_g": brew_dose_g,
                 "brew_ratio": brew_ratio,
                 "brew_note": brew_note,
+                "visibility": visibility,
             }
         ),
     )
@@ -118,8 +125,9 @@ def update_bean(
     water_temp: str | None = None,
     note: str | None = None,
     tags: list[str] | None = None,
+    visibility: str | None = None,
 ) -> Any:
-    """改豆卡产地、烘焙、风味、标签。网页占锁时会被拒。"""
+    """改豆卡产地、烘焙、风味、标签、公开状态。改认证相关字段会掉认证。网页占锁时会被拒。"""
     return _call(
         client().update_bean,
         bean_id,
@@ -135,6 +143,7 @@ def update_bean(
                 "water_temp": water_temp,
                 "note": note,
                 "tags": tags,
+                "visibility": visibility,
             }
         ),
     )
@@ -675,6 +684,47 @@ def set_bean_places(bean_id: int, places_json: str) -> Any:
 def guess_bean_places(bean_id: int) -> Any:
     """清掉手定点，用词典重猜。"""
     return _call(client().guess_bean_places, bean_id)
+
+
+@mcp.tool()
+def list_review_queue(status: str = "pending") -> Any:
+    """管理员：待审公开豆卡。status: pending 未认证 / certified 已认证 / public 全部公开。普通人 403。"""
+    return _call(client().list_review_queue, status)
+
+
+@mcp.tool()
+def get_review_bean(bean_id: int) -> Any:
+    """管理员：取一张待审/已公开豆卡，含字段、照片、当前钉和词典对照。普通人 403。"""
+    return _call(client().get_review_bean, bean_id)
+
+
+@mcp.tool()
+def certify_bean(
+    bean_id: int,
+    note: str = "",
+    verify_places: bool = True,
+    force_places: bool = False,
+) -> Any:
+    """管理员：认证一张已公开豆卡。默认先校对地图钉，对不上会拒绝；force_places 才强行过。普通人 403。"""
+    return _call(client().certify_bean, bean_id, note, verify_places, force_places)
+
+
+@mcp.tool()
+def uncertify_bean(bean_id: int, note: str = "") -> Any:
+    """管理员：取消认证。卡仍可公开。普通人 403。"""
+    return _call(client().uncertify_bean, bean_id, note)
+
+
+@mcp.tool()
+def review_set_places(bean_id: int, places_json: str) -> Any:
+    """管理员：审核时改正地图钉。places_json 是 JSON 数组，每项 {lat, lng, label}。会掉认证。普通人 403。"""
+    return _call(client().review_set_places, bean_id, places_json)
+
+
+@mcp.tool()
+def review_guess_places(bean_id: int) -> Any:
+    """管理员：审核时按词典重猜落点。会掉认证。普通人 403。"""
+    return _call(client().review_guess_places, bean_id)
 
 
 def run() -> None:

@@ -2,7 +2,20 @@
 import { useCallback, useEffect, useState } from "react";
 
 import { api } from "./api.js";
-import { Bean, Calendar as CalIcon, Cart, Chart, CupMark, Glass, Globe, Log, MenuBoard, People } from "./icons.jsx";
+import {
+  Bean,
+  Calendar as CalIcon,
+  Cart,
+  Chart,
+  CupMark,
+  Glass,
+  Globe,
+  Log,
+  MenuBoard,
+  People,
+  Plaza as PlazaIcon,
+  Shield,
+} from "./icons.jsx";
 import { Btn, Field, Input, Modal, useToast } from "./ui.jsx";
 
 import BeanCard from "./pages/BeanCard.jsx";
@@ -16,9 +29,12 @@ import SpiritCard from "./pages/SpiritCard.jsx";
 import Spirits from "./pages/Spirits.jsx";
 import Stats from "./pages/Stats.jsx";
 import Updates from "./pages/Updates.jsx";
+import Admin from "./pages/Admin.jsx";
+import Plaza from "./pages/Plaza.jsx";
 
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
+  { key: "plaza", label: "广场", Icon: PlazaIcon },
   { key: "spirits", label: "酒水", Icon: Glass },
   { key: "menu", label: "酒单", Icon: MenuBoard },
   { key: "restock", label: "补货", Icon: Cart },
@@ -29,10 +45,13 @@ const NAV = [
   { key: "updates", label: "更新", Icon: Log },
 ];
 
+const ADMIN_NAV = { key: "admin", label: "后台", Icon: Shield };
+
 export default function App() {
   const [page, setPage] = useState("beans");
   const [beanId, setBeanId] = useState(null);
   const [spiritId, setSpiritId] = useState(null);
+  const [plazaId, setPlazaId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   const [calendarPerson, setCalendarPerson] = useState(null);
   const { toast, oops, node } = useToast();
@@ -69,8 +88,17 @@ export default function App() {
   const openBean = useCallback((id) => {
     setBeanId(id);
     setSpiritId(null);
+    setPlazaId(null);
     setMapFocus(null);
     setPage("bean");
+  }, []);
+
+  const openPlaza = useCallback((id) => {
+    setPlazaId(id);
+    setBeanId(null);
+    setSpiritId(null);
+    setMapFocus(null);
+    setPage("plaza-bean");
   }, []);
 
   const openMap = useCallback((id) => {
@@ -97,6 +125,7 @@ export default function App() {
   const go = (key) => {
     setBeanId(null);
     setSpiritId(null);
+    setPlazaId(null);
     setMapFocus(null);
     setCalendarPerson(null);
     setPage(key);
@@ -146,8 +175,13 @@ export default function App() {
     }
   };
 
+  const navItems = me?.admin ? [...NAV, ADMIN_NAV] : NAV;
+
   const navOn = (key) =>
-    page === key || (key === "beans" && page === "bean") || (key === "spirits" && page === "spirit");
+    page === key ||
+    (key === "beans" && page === "bean") ||
+    (key === "plaza" && page === "plaza-bean") ||
+    (key === "spirits" && page === "spirit");
 
   const gateLink =
     typeof window !== "undefined" &&
@@ -226,7 +260,7 @@ export default function App() {
           </div>
         </div>
         <div className="-mx-1 mt-3 flex gap-0.5 overflow-x-auto pb-1 md:hidden">
-          {NAV.map(({ key, label, Icon }) => (
+          {navItems.map(({ key, label, Icon }) => (
             <button
               key={key}
               title={label}
@@ -254,7 +288,7 @@ export default function App() {
         )}
 
         <div className="hidden md:block">
-          {NAV.map(({ key, label, Icon }) => {
+          {navItems.map(({ key, label, Icon }) => {
             const on = navOn(key);
             return (
               <button
@@ -305,6 +339,16 @@ export default function App() {
         }
       >
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
+        {page === "plaza" && <Plaza onOpen={openPlaza} toast={toast} oops={oops} />}
+        {page === "plaza-bean" && (
+          <Plaza
+            openId={plazaId}
+            onBack={() => go("plaza")}
+            onOpenMine={openBean}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "bean" && (
           <BeanCard
             id={beanId}
@@ -333,6 +377,7 @@ export default function App() {
           <PeoplePage toast={toast} oops={oops} onOpenCalendar={openCalendar} />
         )}
         {page === "updates" && <Updates />}
+        {page === "admin" && me?.admin && <Admin toast={toast} oops={oops} />}
       </main>
 
       {node}

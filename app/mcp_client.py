@@ -474,3 +474,45 @@ class Client:
 
     def guess_bean_places(self, bean_id: int):
         return self.request("POST", f"/api/beans/{bean_id}/places/guess", json={})
+
+    def list_review_queue(self, status: str = "pending"):
+        return self.request("GET", f"/api/admin/review/beans?status={status}")
+
+    def get_review_bean(self, bean_id: int):
+        return self.request("GET", f"/api/admin/review/beans/{bean_id}")
+
+    def certify_bean(
+        self,
+        bean_id: int,
+        note: str = "",
+        verify_places: bool = True,
+        force_places: bool = False,
+    ):
+        return self.request(
+            "POST",
+            f"/api/admin/review/beans/{bean_id}/certify",
+            json={
+                "note": note,
+                "verify_places": verify_places,
+                "force_places": force_places,
+            },
+        )
+
+    def uncertify_bean(self, bean_id: int, note: str = ""):
+        return self.request(
+            "POST",
+            f"/api/admin/review/beans/{bean_id}/uncertify",
+            json={"note": note},
+        )
+
+    def review_set_places(self, bean_id: int, places):
+        if isinstance(places, str):
+            places = json.loads(places)
+        return self.request(
+            "PUT",
+            f"/api/admin/review/beans/{bean_id}/places",
+            json={"places": places},
+        )
+
+    def review_guess_places(self, bean_id: int):
+        return self.request("POST", f"/api/admin/review/beans/{bean_id}/places/guess", json={})

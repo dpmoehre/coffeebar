@@ -7,7 +7,7 @@ import OpenBag from "../components/OpenBag.jsx";
 import Photos from "../components/Photos.jsx";
 import Radar from "../components/Radar.jsx";
 import { Plus, Trash, Undo } from "../icons.jsx";
-import { Bar, Btn, Chip, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
+import { Bar, Btn, Chip, Field, Input, Modal, Panel, Select, g, money } from "../ui.jsx";
 
 export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
   const [bean, setBean] = useState(null);
@@ -19,6 +19,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
   const [lockInfo, setLockInfo] = useState(null);
   const [wipe, setWipe] = useState(null);
   const [killCard, setKillCard] = useState(false);
+  const [editing, setEditing] = useState(false);
   const holding = useRef(false);
 
   const load = useCallback(
@@ -102,7 +103,16 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
           <button onClick={onBack} className="mb-1.5 text-sm text-muted hover:text-amber">
             ‹ 回豆库
           </button>
-          <h1 className="serif m-0 truncate text-3xl font-semibold">{bean.name}</h1>
+          <div className="flex flex-wrap items-baseline gap-3">
+            <h1 className="serif m-0 truncate text-3xl font-semibold">{bean.name}</h1>
+            {bean.certified ? (
+              <span className="text-xs text-amber">已认证</span>
+            ) : bean.visibility === "public" ? (
+              <span className="text-xs text-muted">公开 · 未认证</span>
+            ) : (
+              <span className="text-xs text-muted">只自己看</span>
+            )}
+          </div>
           <p className="mt-2 mb-0 text-muted">
             {[
               bean.origin,
@@ -138,6 +148,27 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
+          <Btn
+            variant="ghost"
+            onClick={() =>
+              guarded(async () => {
+                const next = bean.visibility === "public" ? "private" : "public";
+                const out = await api.updateBean(id, { visibility: next });
+                toast(
+                  next === "public"
+                    ? "已公开。别人能在广场看见，认证要等管理员审"
+                    : "已改回只自己看",
+                );
+                if (out.certification_dropped) toast("认证掉了，要重新审");
+                await load();
+              })
+            }
+          >
+            {bean.visibility === "public" ? "改回只自己看" : "公开这张卡"}
+          </Btn>
+          <Btn variant="ghost" onClick={() => setEditing(true)}>
+            改资料
+          </Btn>
           <Btn
             onClick={() =>
               guarded(async () => {
@@ -405,6 +436,22 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
           撤回时库存已经加回去了，删除不会再改克重和钱。过程照会一起从盘上清掉，恢复不了。
         </p>
       </Modal>
+
+      <EditBean
+        open={editing}
+        bean={bean}
+        onClose={() => setEditing(false)}
+        onSave={(patch) =>
+          guarded(async () => {
+            const out = await api.updateBean(id, patch);
+            setEditing(false);
+            setBean({ ...bean, ...out });
+            toast("资料已改");
+            if (out.certification_dropped) toast("改了认证相关字段，认证掉了，要重新审");
+            load();
+          })
+        }
+      />
 
       <BrewOnce
         open={brewOpen}
@@ -893,6 +940,99 @@ function BrewPhotos({ consId, photos, onDone, toast, oops }) {
         </div>
       ) : null}
     </div>
+  );
+}
+
+function EditBean({ open, bean, onClose, onSave }) {
+  const [f, setF] = useState({});
+  const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
+
+  useEffect(() => {
+    if (open && bean) {
+      setF({
+        name: bean.name || "",
+        origin: bean.origin || "",
+        varietal: bean.varietal || "",
+        producer: bean.producer || "",
+        altitude: bean.altitude || "",
+        process: bean.process || "",
+        roast: bean.roast || "浅烘",
+        note: bean.note || "",
+        tags: (bean.tags || []).join(" "),
+      });
+    }
+  }, [open, bean]);
+
+  return (
+    <Modal
+      open={open}
+      onClose={onClose}
+      title="改资料"
+      sub="改名字、产地、豆种、处理厂、处理法、烘焙或海拔后，已有的认证会掉，要重新审。"
+      footer={
+        <>
+          <Btn variant="ghost" onClick={onClose}>
+            取消
+          </Btn>
+          <Btn
+            onClick={() =>
+              onSave({
+                name: f.name,
+                origin: f.origin,
+                varietal: f.varietal,
+                producer: f.producer,
+                altitude: f.altitude,
+                process: f.process,
+                roast: f.roast,
+                note: f.note,
+                tags: (f.tags || "").split(/[,，\s]+/).filter(Boolean),
+              })
+            }
+            disabled={!f.name?.trim()}
+          >
+            保存
+          </Btn>
+        </>
+      }
+    >
+      <Field label="名字">
+        <Input value={f.name || ""} onChange={set("name")} />
+      </Field>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="产地">
+          <Input value={f.origin || ""} onChange={set("origin")} />
+        </Field>
+        <Field label="豆种">
+          <Input value={f.varietal || ""} onChange={set("varietal")} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="处理厂 / 庄园">
+          <Input value={f.producer || ""} onChange={set("producer")} />
+        </Field>
+        <Field label="海拔">
+          <Input value={f.altitude || ""} onChange={set("altitude")} />
+        </Field>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="处理法">
+          <Input value={f.process || ""} onChange={set("process")} />
+        </Field>
+        <Field label="烘焙">
+          <Select value={f.roast || "浅烘"} onChange={set("roast")} className="w-full">
+            {["浅烘", "中浅烘", "中烘", "中深烘", "深烘"].map((r) => (
+              <option key={r}>{r}</option>
+            ))}
+          </Select>
+        </Field>
+      </div>
+      <Field label="标签">
+        <Input value={f.tags || ""} onChange={set("tags")} />
+      </Field>
+      <Field label="备注">
+        <Input value={f.note || ""} onChange={set("note")} />
+      </Field>
+    </Modal>
   );
 }
 

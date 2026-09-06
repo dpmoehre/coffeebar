@@ -6,10 +6,14 @@
 
 from __future__ import annotations
 
+import math
 import re
 import sqlite3
 
 from . import db
+
+# 词典钉是产区中心，和手点庄园差几十公里都正常；超过这个再警告
+PLACE_WARN_KM = 80
 
 # level: 0 国家 / 1 产区 / 2 处理站或庄园
 # 坐标取产区中心附近，不是某座农场的测绘点。
@@ -581,6 +585,9 @@ def set_click_places(conn: sqlite3.Connection, bean_id: int, pins: list[dict]) -
     conn.execute("DELETE FROM bean_place WHERE bean_id = ?", (bean_id,))
     _insert(conn, bean_id, cleaned, "click")
     conn.execute("UPDATE bean SET updated_at = ? WHERE id = ?", (db.now(), bean_id))
+    from . import store
+
+    store.clear_certification(conn, bean_id)
     return list_places(conn, bean_id)
 
 
@@ -589,7 +596,52 @@ def guess_again(
 ) -> list[dict]:
     """清掉手定，按词典重猜。"""
     conn.execute("DELETE FROM bean_place WHERE bean_id = ?", (bean_id,))
-    return sync_gazetteer(conn, bean_id, origin, producer)
+    pins = sync_gazetteer(conn, bean_id, origin, producer)
+    from . import store
+
+    store.clear_certification(conn, bean_id)
+    return pins
+
+
+def _km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
+    r = 6371.0
+    p1, p2 = math.radians(lat1), math.radians(lat2)
+    dp = math.radians(lat2 - lat1)
+    dl = math.radians(lng2 - lng1)
+    h = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
+    return 2 * r * math.asin(min(1.0, math.sqrt(h)))
+
+
+def review_places(
+    conn: sqlite3.Connection, bean_id: int, origin: str | None, producer: str | None
+) -> dict:
+    """对照当前钉和词典推测，给审核用。"""
+    current = list_places(conn, bean_id)
+    gazetteer = guess(origin, producer)
+    warnings: list[str] = []
+    if not current:
+        warnings.append("还没有地图落点")
+    elif not gazetteer:
+        if origin or producer:
+            warnings.append("词典对不上产地文字，请手校")
+    else:
+        for pin in current:
+            nearest = min(
+                gazetteer,
+                key=lambda g: _km(pin["lat"], pin["lng"], g["lat"], g["lng"]),
+            )
+            dist = _km(pin["lat"], pin["lng"], nearest["lat"], nearest["lng"])
+            if dist > PLACE_WARN_KM:
+                label = pin.get("label") or "钉"
+                warnings.append(
+                    f"「{label}」离词典「{nearest['label']}」约 {int(dist)} km，请确认"
+                )
+    return {
+        "current": current,
+        "gazetteer": gazetteer,
+        "warnings": warnings,
+        "ok": not warnings,
+    }
 
 
 def backfill(conn: sqlite3.Connection) -> int:

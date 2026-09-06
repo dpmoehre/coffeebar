@@ -110,6 +110,20 @@ export const Globe = ({ className = "" }) => (
   </svg>
 );
 
+export const Plaza = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M4.6 10.2 12 4.6l7.4 5.6V19a1.2 1.2 0 0 1-1.2 1.2H5.8A1.2 1.2 0 0 1 4.6 19z" />
+    <path d="M9.4 20.2V13.4h5.2v6.8" />
+  </svg>
+);
+
+export const Shield = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M12 3.6l7 2.4v6.2c0 4.2-2.8 7.2-7 8.8-4.2-1.6-7-4.6-7-8.8V6z" />
+    <path d="M9.2 12.2l1.8 1.8 3.8-4" />
+  </svg>
+);
+
 export const Trash = ({ className = "" }) => (
   <svg {...base} className={className}>
     <path d="M4.5 7h15" />

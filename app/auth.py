@@ -56,15 +56,43 @@ def normalize_email(email: str) -> str:
     return (email or "").strip().lower()
 
 
+DEFAULT_ADMIN_EMAIL = "1821601734@qq.com"
+
+
+def admin_emails() -> frozenset[str]:
+    extra = {
+        normalize_email(x)
+        for x in (os.environ.get("COFFEEBAR_ADMIN_EMAILS") or "").split(",")
+        if x.strip()
+    }
+    return frozenset({DEFAULT_ADMIN_EMAIL} | extra)
+
+
+def is_admin_email(email: str) -> bool:
+    return normalize_email(email) in admin_emails()
+
+
+def is_admin(account: dict | None) -> bool:
+    return bool(account) and is_admin_email(account.get("email") or "")
+
+
+def require_admin(account: dict) -> dict:
+    if not is_admin(account):
+        raise HTTPException(403, "只有管理员能进这里")
+    return account
+
+
 def public_account(row: sqlite3.Row | dict) -> dict:
     try:
         verified = row["email_verified"]
     except (KeyError, IndexError):
         verified = 1
+    email = row["email"]
     return {
         "id": row["id"],
-        "email": row["email"],
+        "email": email,
         "email_verified": bool(verified),
+        "admin": is_admin_email(email),
     }
 
 

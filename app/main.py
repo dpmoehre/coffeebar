@@ -12,6 +12,7 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from . import auth, brew as brew_mod
+from . import admin as admin_mod
 from . import db, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
@@ -42,9 +43,16 @@ def current_account(request: Request, conn: sqlite3.Connection = Depends(get_con
     return auth.require_account(request, conn)
 
 
+def current_admin(account: dict = Depends(current_account)) -> dict:
+    return auth.require_admin(account)
+
+
 @app.exception_handler(store.Conflict)
 async def _conflict(request: Request, exc: store.Conflict):
-    return JSONResponse(status_code=409, content={"error": "conflict", "message": str(exc)})
+    body = {"error": "conflict", "message": str(exc)}
+    if getattr(exc, "extra", None):
+        body.update(exc.extra)
+    return JSONResponse(status_code=409, content=body)
 
 
 @app.exception_handler(locks.Locked)
@@ -295,8 +303,12 @@ def api_update_bean(
 ):
     auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    before = store.get_bean(conn, bean_id, owner_id=account["id"])
     store.update_bean(conn, bean_id, payload)
-    return store.get_bean(conn, bean_id, owner_id=account["id"])
+    bean = store.get_bean(conn, bean_id, owner_id=account["id"])
+    if before and before.get("certified_at") and bean and not bean.get("certified_at"):
+        bean["certification_dropped"] = True
+    return bean
 
 
 @app.get("/api/map")
@@ -325,7 +337,8 @@ def api_set_places(
         pins = places.set_click_places(conn, bean_id, payload.get("places") or [])
     except places.Conflict as exc:
         raise store.Conflict(str(exc)) from exc
-    return {"places": pins}
+    bean = store.get_bean(conn, bean_id, owner_id=account["id"])
+    return {"places": pins, "certification_dropped": bool(bean and not bean.get("certified"))}
 
 
 @app.post("/api/beans/{bean_id}/places/guess")
@@ -342,7 +355,8 @@ def api_guess_places(
     if not bean:
         raise HTTPException(404, "没有这支豆")
     pins = places.guess_again(conn, bean_id, bean.get("origin"), bean.get("producer"))
-    return {"places": pins}
+    bean = store.get_bean(conn, bean_id, owner_id=account["id"])
+    return {"places": pins, "certification_dropped": bool(bean and not bean.get("certified"))}
 
 
 @app.delete("/api/beans/{bean_id}")
@@ -1155,6 +1169,165 @@ def api_unlock(
     auth.assert_lock_resource(conn, resource, account["id"])
     locks.release(conn, resource, x_session)
     return {"ok": True}
+
+
+@app.get("/api/public/beans")
+def api_public_beans(
+    certified: str = "any",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    only = certified in ("1", "true", "yes")
+    return {"beans": store.list_public_beans(conn, certified_only=only, viewer_id=account["id"])}
+
+
+@app.get("/api/public/beans/{bean_id}")
+def api_public_bean(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = store.public_card(conn, bean_id, viewer_id=account["id"])
+    if not card:
+        raise HTTPException(404, "没有这张公开豆卡")
+    return card
+
+
+@app.get("/api/admin/review/beans")
+def api_review_queue(
+    status: str = "pending",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return {"beans": admin_mod.review_queue(conn, status)}
+
+
+@app.get("/api/admin/review/beans/{bean_id}")
+def api_review_bean(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.review_bean(conn, bean_id)
+
+
+@app.post("/api/admin/review/beans/{bean_id}/certify")
+def api_certify_bean(
+    bean_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    data = payload or {}
+    return admin_mod.certify_bean(
+        conn,
+        account,
+        bean_id,
+        note=data.get("note") or "",
+        verify_places=data.get("verify_places", True),
+        force_places=bool(data.get("force_places")),
+    )
+
+
+@app.post("/api/admin/review/beans/{bean_id}/uncertify")
+def api_uncertify_bean(
+    bean_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    data = payload or {}
+    return admin_mod.uncertify_bean(conn, account, bean_id, note=data.get("note") or "")
+
+
+@app.put("/api/admin/review/beans/{bean_id}/places")
+def api_review_set_places(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    return admin_mod.review_set_places(conn, bean_id, payload.get("places") or [])
+
+
+@app.post("/api/admin/review/beans/{bean_id}/places/guess")
+def api_review_guess_places(
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    return admin_mod.review_guess_places(conn, bean_id)
+
+
+@app.get("/api/admin/accounts")
+def api_admin_accounts(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return {"accounts": admin_mod.list_accounts(conn)}
+
+
+@app.get("/api/admin/accounts/{account_id}")
+def api_admin_account(
+    account_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.dossier(conn, account_id)
+
+
+@app.get("/api/admin/accounts/{account_id}/beans/{bean_id}")
+def api_admin_bean(
+    account_id: int,
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.bean_detail(conn, account_id, bean_id)
+
+
+@app.get("/api/admin/accounts/{account_id}/spirits/{bottle_id}")
+def api_admin_spirit(
+    account_id: int,
+    bottle_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.spirit_detail(conn, account_id, bottle_id)
+
+
+@app.patch("/api/admin/accounts/{account_id}")
+def api_admin_patch_account(
+    account_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    status = payload.get("status")
+    if not status:
+        raise HTTPException(400, "要改状态")
+    return admin_mod.set_status(conn, account, account_id, status)
+
+
+@app.post("/api/admin/accounts/{account_id}/kick")
+def api_admin_kick(
+    account_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.kick(conn, account, account_id)
 
 
 @app.get("/api/health")

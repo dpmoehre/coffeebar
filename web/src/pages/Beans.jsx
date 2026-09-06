@@ -192,11 +192,17 @@ function Card({ bean, onClick }) {
       <div className="p-5">
         <div className="flex items-baseline justify-between gap-2">
           <div className="serif truncate text-lg">{bean.name}</div>
-          {bean.pending ? (
-            <span className="shrink-0 text-xs text-amber">待入袋</span>
-          ) : (
-            !bean.in_stock && <span className="shrink-0 text-xs text-muted">历史</span>
-          )}
+          <span className="shrink-0 text-xs text-muted">
+            {bean.certified
+              ? "已认证"
+              : bean.visibility === "public"
+                ? "公开"
+                : bean.pending
+                  ? "待入袋"
+                  : !bean.in_stock
+                    ? "历史"
+                    : ""}
+          </span>
         </div>
         <div className="mt-1 truncate text-[13px] text-muted">
           {[bean.origin, bean.varietal, bean.roast].filter(Boolean).join(" · ") || "还没填产地"}
@@ -246,7 +252,7 @@ function NewBean({ open, onClose, onDone, oops }) {
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
-    if (open) setF({ roast: "浅烘", nominal_g: 200 });
+    if (open) setF({ roast: "浅烘", nominal_g: 200, visibility: "private" });
   }, [open]);
 
   const submit = async () => {
@@ -335,6 +341,20 @@ function NewBean({ open, onClose, onDone, oops }) {
       <Field label="备注" hint="品牌、坐标这类写这里">
         <Input value={f.note || ""} onChange={set("note")} placeholder='61" coffee · 7°N 40°W' />
       </Field>
+      <label className="mt-1 flex items-start gap-2 text-sm text-cream">
+        <input
+          type="checkbox"
+          className="mt-0.5"
+          checked={f.visibility === "public"}
+          onChange={(e) => setF({ ...f, visibility: e.target.checked ? "public" : "private" })}
+        />
+        <span>
+          建完就公开
+          <span className="mt-0.5 block text-[13px] text-muted">
+            别人能在广场看见产地和照片，看不见价钱和还剩多少。认证要等管理员审。
+          </span>
+        </span>
+      </label>
       <Field label="店家推荐冲法" hint="豆卡上印的滤器、研磨、水质、目标时长">
         <Input
           value={f.brew_note || ""}

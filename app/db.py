@@ -49,6 +49,11 @@ ADDED_COLUMNS = [
     ("bean", "deleted_at", "TEXT"),
     ("bottle", "deleted_at", "TEXT"),
     ("consumption_event", "serve_id", "INTEGER"),
+    ("bean", "visibility", "TEXT NOT NULL DEFAULT 'private'"),
+    ("bean", "certified_at", "TEXT"),
+    ("bean", "certified_by", "INTEGER"),
+    ("bean", "review_note", "TEXT"),
+    ("bean", "places_verified_at", "TEXT"),
 ]
 
 

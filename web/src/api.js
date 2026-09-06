@@ -200,6 +200,21 @@ export const api = {
   exportZip: (period = "month") =>
     download(`/api/export?period=${period}`, `coffeebar-${period}.zip`),
   restock: () => req("GET", "/api/restock"),
+  adminAccounts: () => req("GET", "/api/admin/accounts"),
+  adminAccount: (id) => req("GET", `/api/admin/accounts/${id}`),
+  adminBean: (accountId, beanId) => req("GET", `/api/admin/accounts/${accountId}/beans/${beanId}`),
+  adminSpirit: (accountId, bottleId) =>
+    req("GET", `/api/admin/accounts/${accountId}/spirits/${bottleId}`),
+  adminSetStatus: (id, status) => req("PATCH", `/api/admin/accounts/${id}`, { status }),
+  adminKick: (id) => req("POST", `/api/admin/accounts/${id}/kick`, {}),
+  publicBeans: (certifiedOnly = false) =>
+    req("GET", `/api/public/beans${certifiedOnly ? "?certified=1" : ""}`),
+  publicBean: (id) => req("GET", `/api/public/beans/${id}`),
+  reviewQueue: (status = "pending") => req("GET", `/api/admin/review/beans?status=${status}`),
+  reviewBean: (id) => req("GET", `/api/admin/review/beans/${id}`),
+  certifyBean: (id, data = {}) => req("POST", `/api/admin/review/beans/${id}/certify`, data),
+  uncertifyBean: (id, data = {}) => req("POST", `/api/admin/review/beans/${id}/uncertify`, data),
+  reviewGuessPlaces: (id) => req("POST", `/api/admin/review/beans/${id}/places/guess`, {}),
   map: () => req("GET", "/api/map"),
   setPlaces: (id, places) => req("PUT", `/api/beans/${id}/places`, { places }),
   guessPlaces: (id) => req("POST", `/api/beans/${id}/places/guess`, {}),

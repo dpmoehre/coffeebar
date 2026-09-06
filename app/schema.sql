@@ -48,6 +48,11 @@ CREATE TABLE IF NOT EXISTS bean (
   water_temp  INTEGER,                   -- 建议水温 °C
   note        TEXT,
   deleted_at  TEXT,                      -- 非空 = 从豆库收起；流水和花掉的钱还在统计里
+  visibility  TEXT    NOT NULL DEFAULT 'private',  -- private 只自己 / public 公开
+  certified_at TEXT,                     -- 管理员审过并认证
+  certified_by INTEGER REFERENCES account(id),
+  review_note TEXT,
+  places_verified_at TEXT,               -- 地图钉校对过
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );

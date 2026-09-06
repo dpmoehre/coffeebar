@@ -69,6 +69,57 @@ def unit_cost_of(lots: list[dict]) -> float | None:
 class Conflict(Exception):
     """业务上不该继续的情况，路由层转成 409。"""
 
+    def __init__(self, message: str, extra: dict | None = None):
+        super().__init__(message)
+        self.extra = extra or {}
+
+
+IDENTITY_FIELDS = ("name", "origin", "varietal", "producer", "altitude", "process", "roast")
+SCORE_PUBLIC_KEYS = (
+    "dry",
+    "flavor",
+    "aftertaste",
+    "acidity",
+    "sweetness",
+    "body",
+    "balance",
+    "overall",
+    "comment",
+    "at",
+)
+
+
+def parse_visibility(value) -> str:
+    vis = (value or "private").strip()
+    if vis not in ("private", "public"):
+        raise Conflict("公开状态只能是 private 或 public")
+    return vis
+
+
+def clear_certification(conn: sqlite3.Connection, bean_id: int) -> None:
+    """改了认证相关字段或收回公开后，认证作废，要重新审。"""
+    conn.execute(
+        """UPDATE bean
+              SET certified_at = NULL,
+                  certified_by = NULL,
+                  places_verified_at = NULL,
+                  updated_at = ?
+            WHERE id = ?""",
+        (db.now(), bean_id),
+    )
+
+
+def _annotate_bean(bean: dict) -> dict:
+    bean["visibility"] = bean.get("visibility") or "private"
+    bean["certified"] = bool(bean.get("certified_at"))
+    return bean
+
+
+def _public_score(score: dict | None) -> dict | None:
+    if not score:
+        return None
+    return {k: score.get(k) for k in SCORE_PUBLIC_KEYS}
+
 
 def _rows(cur) -> list[dict]:
     return [dict(r) for r in cur.fetchall()]
@@ -83,6 +134,7 @@ def _row(cur) -> dict | None:
 
 
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
+    vis = parse_visibility(data["visibility"]) if "visibility" in data else "private"
     ts = db.now()
     cur = conn.execute(
         """INSERT INTO bean (owner_id, name, origin, varietal, producer, altitude, process, roast,
@@ -117,19 +169,34 @@ def create_bean(conn: sqlite3.Connection, data: dict) -> int:
     )
     set_tags(conn, bean_id, data.get("tags") or [])
     places.sync_gazetteer(conn, bean_id, data.get("origin"), data.get("producer"))
+    if vis != "private":
+        conn.execute("UPDATE bean SET visibility = ? WHERE id = ?", (vis, bean_id))
     return bean_id
 
 
 def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
+    before = _row(conn.execute("SELECT * FROM bean WHERE id = ?", (bean_id,)))
+    if not before:
+        raise Conflict("没有这支豆")
     fields = [
         "name", "origin", "varietal", "producer", "altitude",
         "process", "roast", "water_temp", "note",
     ]
     sets, vals = [], []
+    identity_changed = False
     for f in fields:
-        if f in data:
-            sets.append(f"{f} = ?")
-            vals.append(data[f])
+        if f not in data:
+            continue
+        sets.append(f"{f} = ?")
+        vals.append(data[f])
+        if f in IDENTITY_FIELDS and (data[f] or None) != (before.get(f) or None):
+            identity_changed = True
+    vis_changed_to_private = False
+    if "visibility" in data:
+        vis = parse_visibility(data.get("visibility"))
+        sets.append("visibility = ?")
+        vals.append(vis)
+        vis_changed_to_private = vis == "private" and (before.get("visibility") or "private") != "private"
     if sets:
         sets.append("updated_at = ?")
         vals.extend([db.now(), bean_id])
@@ -140,6 +207,8 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         row = _row(conn.execute("SELECT origin, producer FROM bean WHERE id = ?", (bean_id,)))
         if row:
             places.sync_gazetteer(conn, bean_id, row["origin"], row["producer"])
+    if identity_changed or vis_changed_to_private:
+        clear_certification(conn, bean_id)
 
 
 def delete_bean(conn: sqlite3.Connection, bean_id: int, mode: str | None = None) -> dict:
@@ -270,7 +339,7 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
         del b["remaining_value"], b["priced_g"], b["last_unit_cost"]
         b["tags"] = bean_tags(conn, b["id"])
         b["scores"] = latest_score(conn, b["id"])
-        out.append(b)
+        out.append(_annotate_bean(b))
     return out
 
 
@@ -295,7 +364,62 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
         )
     ) or {"method": "v60", "dose_g": 15, "ratio": 16, "note": None}
     bean["places"] = places.list_places(conn, bean_id)
-    return bean
+    return _annotate_bean(bean)
+
+
+def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = None) -> dict | None:
+    """广场上看的豆卡：产地/照片/杯测/落点可以，钱和库存一律不给。"""
+    bean = _row(
+        conn.execute(
+            "SELECT * FROM bean WHERE id = ? AND deleted_at IS NULL",
+            (bean_id,),
+        )
+    )
+    if not bean or (bean.get("visibility") or "private") != "public":
+        return None
+    shots = photos.list_bean_photos(conn, bean_id)
+    return {
+        "id": bean["id"],
+        "name": bean["name"],
+        "origin": bean.get("origin"),
+        "varietal": bean.get("varietal"),
+        "producer": bean.get("producer"),
+        "altitude": bean.get("altitude"),
+        "process": bean.get("process"),
+        "roast": bean.get("roast"),
+        "water_temp": bean.get("water_temp"),
+        "note": bean.get("note"),
+        "visibility": "public",
+        "certified": bool(bean.get("certified_at")),
+        "certified_at": bean.get("certified_at"),
+        "places_verified_at": bean.get("places_verified_at"),
+        "updated_at": bean.get("updated_at"),
+        "tags": bean_tags(conn, bean_id),
+        "scores": _public_score(latest_score(conn, bean_id)),
+        "places": places.list_places(conn, bean_id),
+        "photos": shots,
+        "cover": photos.cover(shots),
+        "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
+    }
+
+
+def list_public_beans(
+    conn: sqlite3.Connection,
+    *,
+    certified_only: bool = False,
+    viewer_id: int | None = None,
+) -> list[dict]:
+    sql = """SELECT id FROM bean
+              WHERE visibility = 'public' AND deleted_at IS NULL"""
+    if certified_only:
+        sql += " AND certified_at IS NOT NULL"
+    sql += " ORDER BY updated_at DESC"
+    out = []
+    for row in conn.execute(sql):
+        card = public_card(conn, row["id"], viewer_id)
+        if card:
+            out.append(card)
+    return out
 
 
 def latest_score(conn: sqlite3.Connection, bean_id: int) -> dict | None:
