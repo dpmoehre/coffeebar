@@ -369,8 +369,32 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     return _annotate_bean(bean)
 
 
+def plaza_offer(conn: sqlite3.Connection, bean_id: int) -> dict | None:
+    """广场给人看的买袋价和袋上克重。最近一袋；不带剩余、实称、批次明细。"""
+    row = _row(
+        conn.execute(
+            """SELECT price, nominal_g
+                 FROM bean_lot
+                WHERE bean_id = ? AND (price IS NOT NULL OR nominal_g IS NOT NULL)
+                ORDER BY created_at DESC, id DESC
+                LIMIT 1""",
+            (bean_id,),
+        )
+    )
+    if not row:
+        return None
+    price = row.get("price")
+    nominal = row.get("nominal_g")
+    offer = {}
+    if price is not None:
+        offer["price"] = price
+    if nominal is not None:
+        offer["nominal_g"] = nominal
+    return offer or None
+
+
 def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = None) -> dict | None:
-    """广场上看的豆卡：产地/照片/杯测/落点可以，钱和库存一律不给。"""
+    """广场上看的豆卡：产地/照片/杯测/买袋价/袋上克重可以，剩余和流水不给。"""
     bean = _row(
         conn.execute(
             "SELECT * FROM bean WHERE id = ? AND deleted_at IS NULL",
@@ -403,7 +427,70 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "cover": photos.cover(shots),
         "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
         "kingdom_id": bean.get("kingdom_id"),
+        "kingdom": _kingdom_teaser(conn, bean.get("kingdom_id")),
+        "offer": plaza_offer(conn, bean_id),
     }
+
+
+def _kingdom_teaser(conn: sqlite3.Connection, kingdom_id) -> dict | None:
+    if not kingdom_id:
+        return None
+    from . import kingdom
+
+    return kingdom.teaser(conn, kingdom_id)
+
+
+def split_csv(value) -> list[str]:
+    """roast/process/tag 查询：英文或中文逗号都行。列表会摊平。"""
+    if value is None:
+        return []
+    if isinstance(value, (list, tuple)):
+        out = []
+        for item in value:
+            out.extend(split_csv(item))
+        return out
+    return [p.strip() for p in str(value).replace("，", ",").split(",") if p.strip()]
+
+
+def plaza_card_matches(
+    card: dict,
+    *,
+    q: str | None = None,
+    roast=None,
+    process=None,
+    tags=None,
+    in_kingdom: bool | None = None,
+) -> bool:
+    """广场筛：烘焙/处理法同一栏多选是或，标签多选是且。"""
+    roasts = {r.lower() for r in split_csv(roast)}
+    if roasts and (card.get("roast") or "").lower() not in roasts:
+        return False
+    processes = {p.lower() for p in split_csv(process)}
+    if processes and (card.get("process") or "").lower() not in processes:
+        return False
+    want_tags = split_csv(tags)
+    if want_tags:
+        have = {t.lower() for t in (card.get("tags") or [])}
+        if not all(t.lower() in have for t in want_tags):
+            return False
+    needle = (q or "").strip().lower()
+    if needle:
+        hay = [
+            card.get("name"),
+            card.get("origin"),
+            card.get("varietal"),
+            card.get("producer"),
+            *(card.get("tags") or []),
+        ]
+        if not any(needle in str(x).lower() for x in hay if x):
+            return False
+    kid = card.get("kingdom_id")
+    has_kingdom = bool(kid)
+    if in_kingdom is True and not has_kingdom:
+        return False
+    if in_kingdom is False and has_kingdom:
+        return False
+    return True
 
 
 def list_public_beans(
@@ -411,6 +498,11 @@ def list_public_beans(
     *,
     certified_only: bool = False,
     viewer_id: int | None = None,
+    q: str | None = None,
+    roast=None,
+    process=None,
+    tags=None,
+    in_kingdom: bool | None = None,
 ) -> list[dict]:
     sql = """SELECT id FROM bean
               WHERE visibility = 'public' AND deleted_at IS NULL"""
@@ -420,7 +512,9 @@ def list_public_beans(
     out = []
     for row in conn.execute(sql):
         card = public_card(conn, row["id"], viewer_id)
-        if card:
+        if card and plaza_card_matches(
+            card, q=q, roast=roast, process=process, tags=tags, in_kingdom=in_kingdom
+        ):
             out.append(card)
     return out
 

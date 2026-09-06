@@ -17,6 +17,14 @@ export const CupMark = ({ className = "" }) => (
   </svg>
 );
 
+export const Dripper = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M7 6.2h10l-2.2 5.2H9.2z" />
+    <path d="M9.4 11.4h5.2L12 19.2z" />
+    <path d="M8.2 20.2h7.6" />
+  </svg>
+);
+
 export const Bean = ({ className = "" }) => (
   <svg {...base} className={className}>
     <ellipse cx="12" cy="12" rx="7.2" ry="8.4" transform="rotate(28 12 12)" />
@@ -107,6 +115,16 @@ export const Globe = ({ className = "" }) => (
   <svg {...base} className={className}>
     <circle cx="12" cy="12" r="8.2" />
     <path d="M3.8 12h16.4M12 3.8c2.4 2.4 3.6 5.2 3.6 8.2s-1.2 5.8-3.6 8.2M12 3.8C9.6 6.2 8.4 9 8.4 12s1.2 5.8 3.6 8.2" />
+  </svg>
+);
+
+export const Crown = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M4.6 16.8h14.8L17.2 8.6 12 12.2 6.8 8.6z" />
+    <path d="M5.4 19.2h13.2" />
+    <circle cx="6.8" cy="7.4" r="1.2" />
+    <circle cx="12" cy="5.6" r="1.2" />
+    <circle cx="17.2" cy="7.4" r="1.2" />
   </svg>
 );
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import Any
 
 from mcp.server.mcpserver import MCPServer
@@ -19,10 +20,19 @@ mcp = MCPServer(
         "多袋/多瓶未关时不要自己挑，先列出再等 lot_id。"
         "酒单可上架纯饮或鸡尾酒；倒一杯可改实际毫升，同类可换支。自制基酒还没有。"
         "豆卡默认只自己看；主人可改成公开。公开未认证也能上广场。"
-        "认证必须管理员账号：list_review_queue / get_review_bean，先对照 places.gazetteer 校对落点，"
-        "不对就 review_set_places 或 review_guess_places，再 certify_bean。"
+        "逛广场用 list_plaza / get_plaza_bean，和网页同一套卡：有买袋价和袋上克重，没有还剩多少和流水。"
+        "roast、process 逗号分隔是或选，tags 逗号分隔是且选。in_kingdom 只看已进王国的。"
+        "认证必须管理员账号：list_review_queue / get_review_bean。"
+        "先看 checklist（照片/杯测/描述/进价/产地/落点）和档案是不是正常豆子，再对照 places.gazetteer。"
+        "空卡或乱钉不要过。不对就 review_set_places 或 review_guess_places，再 certify_bean。"
         "对不上又坚持认证时带 force_places。普通人调审核工具会 403。"
         "改名字/产地/豆种/处理厂/处理法/烘焙/海拔或改钉会掉认证，要重审。"
+        "咖啡器具挂在账号台面上：list_gear / create_gear。滤杯要写 family=cone 或 flat，"
+        "才能按器具给冲煮建议。管理员用 list_gear_queue / collect_gear 收到公共目录，"
+        "再 update_gear_catalog 挂 brew_method 和冲煮备注。"
+        "咖啡王国是公共豆种：list_kingdom / get_kingdom，score_kingdom 一人一豆一条可改，"
+        "add_kingdom_score_photo 给自己的杯测挂图，favorite_kingdom 开关收藏。"
+        "管理员 collect_kingdom 把公开卡收进王国，两张同名卡可挂同一支。"
         "服务没开就说 coffeebar 未在运行。"
     ),
 )
@@ -266,8 +276,175 @@ def brew_plan(method: str = "v60", dose_g: float = 15, ratio: float = 16) -> Any
 
 @mcp.tool()
 def list_brew_methods() -> Any:
-    """列出冲煮方式。"""
+    """列出冲煮方式。已登录时按台面上的滤杯标 owned / suggested。"""
     return _call(client().list_brew_methods)
+
+
+@mcp.tool()
+def list_gear() -> Any:
+    """看自己台面上的器具，以及管理员已收录的公共目录。"""
+    return _call(client().list_gear)
+
+
+@mcp.tool()
+def get_gear(gear_id: int) -> Any:
+    """看一件自己的器具。"""
+    return _call(client().get_gear, gear_id)
+
+
+@mcp.tool()
+def create_gear(
+    name: str,
+    kind: str = "dripper",
+    family: str | None = None,
+    brand: str | None = None,
+    model: str | None = None,
+    brew_method: str | None = None,
+    note: str | None = None,
+) -> Any:
+    """登记一件器具。kind: dripper / kettle / grinder / scale / server / other。
+    滤杯 family: cone 锥形 / flat 平底 / immersion 浸泡；壶 family: gooseneck 细嘴。
+    brew_method 可挂 v60 / hoffmann / kasuya / kalita / volcano。"""
+    return _call(
+        client().create_gear,
+        _drop_none(
+            {
+                "name": name,
+                "kind": kind,
+                "family": family,
+                "brand": brand,
+                "model": model,
+                "brew_method": brew_method,
+                "note": note,
+            }
+        ),
+    )
+
+
+@mcp.tool()
+def update_gear(
+    gear_id: int,
+    name: str | None = None,
+    kind: str | None = None,
+    family: str | None = None,
+    brand: str | None = None,
+    model: str | None = None,
+    brew_method: str | None = None,
+    note: str | None = None,
+) -> Any:
+    """改一件自己的器具。"""
+    return _call(
+        client().update_gear,
+        gear_id,
+        _drop_none(
+            {
+                "name": name,
+                "kind": kind,
+                "family": family,
+                "brand": brand,
+                "model": model,
+                "brew_method": brew_method,
+                "note": note,
+            }
+        ),
+    )
+
+
+@mcp.tool()
+def delete_gear(gear_id: int) -> Any:
+    """从台面拿掉一件器具。人明确说才删。目录里已收录的那条还在。"""
+    return _call(client().delete_gear, gear_id)
+
+
+@mcp.tool()
+def add_gear_photo(gear_id: int, path: str) -> Any:
+    """给自己的器具挂一张照片。"""
+    return _call(client().add_gear_photo, gear_id, path)
+
+
+@mcp.tool()
+def delete_gear_photo(photo_id: int) -> Any:
+    """删一张器具照片。"""
+    return _call(client().delete_gear_photo, photo_id)
+
+
+@mcp.tool()
+def add_gear_from_catalog(catalog_id: int) -> Any:
+    """从管理员收录的目录领一件到自己台面。已经有了会 409。"""
+    return _call(client().add_gear_from_catalog, catalog_id)
+
+
+@mcp.tool()
+def list_gear_catalog() -> Any:
+    """看公共器具目录。"""
+    return _call(client().list_gear_catalog)
+
+
+@mcp.tool()
+def list_gear_queue() -> Any:
+    """管理员：还没收录的私人器具。普通人 403。"""
+    return _call(client().list_gear_queue)
+
+
+@mcp.tool()
+def collect_gear(
+    gear_id: int,
+    catalog_id: int | None = None,
+    name: str | None = None,
+    kind: str | None = None,
+    family: str | None = None,
+    brand: str | None = None,
+    model: str | None = None,
+    brew_method: str | None = None,
+    note: str | None = None,
+) -> Any:
+    """管理员：把一件私人器具收到目录。给 catalog_id 就是挂到已有条目，否则新建。
+    可改名字、形状、冲煮方式和备注。普通人 403。"""
+    return _call(
+        client().collect_gear,
+        gear_id,
+        _drop_none(
+            {
+                "catalog_id": catalog_id,
+                "name": name,
+                "kind": kind,
+                "family": family,
+                "brand": brand,
+                "model": model,
+                "brew_method": brew_method,
+                "note": note,
+            }
+        ),
+    )
+
+
+@mcp.tool()
+def update_gear_catalog(
+    catalog_id: int,
+    name: str | None = None,
+    kind: str | None = None,
+    family: str | None = None,
+    brand: str | None = None,
+    model: str | None = None,
+    brew_method: str | None = None,
+    note: str | None = None,
+) -> Any:
+    """管理员：改目录里一件器具，把冲煮方式和备注挂到配方上。普通人 403。"""
+    return _call(
+        client().update_gear_catalog,
+        catalog_id,
+        _drop_none(
+            {
+                "name": name,
+                "kind": kind,
+                "family": family,
+                "brand": brand,
+                "model": model,
+                "brew_method": brew_method,
+                "note": note,
+            }
+        ),
+    )
 
 
 @mcp.tool()
@@ -295,10 +472,14 @@ def record_brew(
     brew_method: str | None = None,
     brew_ratio: float | None = None,
     brew_total_s: float | None = None,
+    brew_stages_json: str | None = None,
     note: str | None = None,
     as_cup: bool = True,
 ) -> Any:
-    """记一次冲煮。多袋未关必须给 lot_id，我会回报扣的是哪一袋。"""
+    """记一次冲煮。多袋未关必须给 lot_id，我会回报扣的是哪一袋。带 brew_total_s 会对照方案给研磨建议。"""
+    extra = {}
+    if brew_stages_json:
+        extra["brew_stages"] = json.loads(brew_stages_json)
     return _call(
         client().record_brew,
         _drop_none(
@@ -312,6 +493,7 @@ def record_brew(
                 "brew_total_s": brew_total_s,
                 "note": note,
                 "as_cup": as_cup,
+                **extra,
             }
         ),
     )
@@ -694,7 +876,7 @@ def list_review_queue(status: str = "pending") -> Any:
 
 @mcp.tool()
 def get_review_bean(bean_id: int) -> Any:
-    """管理员：取一张待审/已公开豆卡，含字段、照片、当前钉和词典对照。普通人 403。"""
+    """管理员：取一张待审/已公开豆卡。含产地处理烘焙、描述、杯测、照片、进价摘要、checklist，以及当前钉和词典对照。先看是不是正常档案再认证。普通人 403。"""
     return _call(client().get_review_bean, bean_id)
 
 
@@ -725,6 +907,122 @@ def review_set_places(bean_id: int, places_json: str) -> Any:
 def review_guess_places(bean_id: int) -> Any:
     """管理员：审核时按词典重猜落点。会掉认证。普通人 403。"""
     return _call(client().review_guess_places, bean_id)
+
+
+@mcp.tool()
+def list_plaza(
+    certified_only: bool = False,
+    q: str | None = None,
+    roast: str | None = None,
+    process: str | None = None,
+    tags: str | None = None,
+    in_kingdom: bool | None = None,
+) -> Any:
+    """逛广场：别人公开的豆卡。有买袋价和袋上克重（offer），没有还剩多少和流水。roast/process 逗号分隔（多选=或）；tags 逗号分隔（多选=且）。in_kingdom=true 只看已进王国的。"""
+    return _call(
+        client().list_plaza,
+        certified_only,
+        q,
+        roast,
+        process,
+        tags,
+        in_kingdom,
+    )
+
+
+@mcp.tool()
+def get_plaza_bean(bean_id: int) -> Any:
+    """看一张广场公开卡：产地、照片、杯测、落点、买袋价和袋上克重。没有还剩多少和流水。私卡会 404。"""
+    return _call(client().get_plaza_bean, bean_id)
+
+
+@mcp.tool()
+def list_kingdom(saved: bool = False) -> Any:
+    """咖啡王国公共豆种。saved=true 只看自己收藏的。"""
+    return _call(client().list_kingdom, saved)
+
+
+@mcp.tool()
+def get_kingdom(kingdom_id: int) -> Any:
+    """看一支王国豆：平均分、大家的杯测和评价。"""
+    return _call(client().get_kingdom, kingdom_id)
+
+
+@mcp.tool()
+def score_kingdom(
+    kingdom_id: int,
+    overall: float | None = None,
+    dry: float | None = None,
+    flavor: float | None = None,
+    aftertaste: float | None = None,
+    acidity: float | None = None,
+    sweetness: float | None = None,
+    body: float | None = None,
+    balance: float | None = None,
+    comment: str | None = None,
+) -> Any:
+    """给王国里这支豆打杯测。一人一豆一条，再打会改掉自己上次的。分 1–10。"""
+    return _call(
+        client().score_kingdom,
+        kingdom_id,
+        _drop_none(
+            {
+                "overall": overall,
+                "dry": dry,
+                "flavor": flavor,
+                "aftertaste": aftertaste,
+                "acidity": acidity,
+                "sweetness": sweetness,
+                "body": body,
+                "balance": balance,
+                "comment": comment,
+            }
+        ),
+    )
+
+
+@mcp.tool()
+def unscore_kingdom(kingdom_id: int) -> Any:
+    """撤回自己在王国里这支豆的杯测（图一起走）。人明确说才删。"""
+    return _call(client().unscore_kingdom, kingdom_id)
+
+
+@mcp.tool()
+def add_kingdom_score_photo(kingdom_id: int, path: str) -> Any:
+    """给自己在王国里这支豆的杯测挂一张图。要先 score_kingdom。一杯最多 8 张。"""
+    return _call(client().add_kingdom_score_photo, kingdom_id, path)
+
+
+@mcp.tool()
+def delete_kingdom_score_photo(photo_id: int) -> Any:
+    """删掉自己杯测上的一张图。人明确说才删。"""
+    return _call(client().delete_kingdom_score_photo, photo_id)
+
+
+@mcp.tool()
+def favorite_kingdom(kingdom_id: int) -> Any:
+    """收藏或取消收藏王国里的一支豆。再调一次就反过来。"""
+    return _call(client().favorite_kingdom, kingdom_id)
+
+
+@mcp.tool()
+def list_kingdom_queue() -> Any:
+    """管理员：公开了还没进王国的豆卡。普通人 403。"""
+    return _call(client().list_kingdom_queue)
+
+
+@mcp.tool()
+def collect_kingdom(
+    bean_id: int,
+    kingdom_id: int | None = None,
+    name: str | None = None,
+) -> Any:
+    """管理员：把一张公开豆卡收进王国。给 kingdom_id 就挂到已有那支（大家评同一支），否则新建。普通人 403。"""
+    return _call(
+        client().collect_kingdom,
+        bean_id,
+        _drop_none({"kingdom_id": kingdom_id, "name": name}),
+    )
 
 
 def run() -> None:

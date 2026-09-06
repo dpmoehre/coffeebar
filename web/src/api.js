@@ -169,6 +169,25 @@ export const api = {
   brewMethods: () => req("GET", "/api/brew/methods"),
   setBrewDefault: (beanId, data) => req("POST", `/api/beans/${beanId}/brew-default`, data),
 
+  gearMeta: () => req("GET", "/api/gear/meta"),
+  gear: () => req("GET", "/api/gear"),
+  gearItem: (id) => req("GET", `/api/gear/${id}`),
+  createGear: (data) => req("POST", "/api/gear", data),
+  updateGear: (id, data) => req("PATCH", `/api/gear/${id}`, data),
+  deleteGear: (id) => req("DELETE", `/api/gear/${id}`),
+  gearFromCatalog: (id) => req("POST", `/api/gear/from-catalog/${id}`, {}),
+  addGearPhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return upload(`/api/gear/${id}/photos`, fd);
+  },
+  delGearPhoto: (id) => req("DELETE", `/api/gear-photos/${id}`),
+  adminGearQueue: () => req("GET", "/api/admin/gear/queue"),
+  adminCollectGear: (id, data = {}) => req("POST", `/api/admin/gear/${id}/collect`, data),
+  adminCreateCatalog: (data) => req("POST", "/api/admin/gear/catalog", data),
+  adminUpdateCatalog: (id, data) => req("PATCH", `/api/admin/gear/catalog/${id}`, data),
+  adminDeleteCatalog: (id) => req("DELETE", `/api/admin/gear/catalog/${id}`),
+
   recordBrew: (data) => req("POST", "/api/brews", data),
   consumption: (params = "") => req("GET", `/api/consumption${params}`),
   voidBrew: (id, reason) => req("POST", `/api/consumption/${id}/void`, { reason }),
@@ -243,6 +262,21 @@ export const api = {
   publicBeans: (certifiedOnly = false) =>
     req("GET", `/api/public/beans${certifiedOnly ? "?certified=1" : ""}`),
   publicBean: (id) => req("GET", `/api/public/beans/${id}`),
+  kingdom: (saved = false) => req("GET", `/api/kingdom${saved ? "?saved=1" : ""}`),
+  kingdomItem: (id) => req("GET", `/api/kingdom/${id}`),
+  kingdomScore: (id, data) => req("PUT", `/api/kingdom/${id}/score`, data),
+  kingdomUnscore: (id) => req("DELETE", `/api/kingdom/${id}/score`),
+  addKingdomScorePhoto: (id, file) => {
+    const fd = new FormData();
+    fd.append("file", file);
+    return upload(`/api/kingdom/${id}/score/photos`, fd);
+  },
+  delKingdomScorePhoto: (id) => req("DELETE", `/api/kingdom-score-photos/${id}`),
+  kingdomFavorite: (id) => req("POST", `/api/kingdom/${id}/favorite`, {}),
+  adminKingdomQueue: () => req("GET", "/api/admin/kingdom/queue"),
+  adminCollectKingdom: (beanId, data = {}) =>
+    req("POST", `/api/admin/kingdom/collect/${beanId}`, data),
+  adminPatchKingdom: (id, data) => req("PATCH", `/api/admin/kingdom/${id}`, data),
   reviewQueue: (status = "pending") => req("GET", `/api/admin/review/beans?status=${status}`),
   reviewBean: (id) => req("GET", `/api/admin/review/beans/${id}`),
   certifyBean: (id, data = {}) => req("POST", `/api/admin/review/beans/${id}/certify`, data),

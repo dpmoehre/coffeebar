@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import io
+import shutil
 import sqlite3
 import uuid
 from pathlib import Path
@@ -276,10 +277,152 @@ def paths_for_owner(conn: sqlite3.Connection, owner_id: int) -> list[str]:
            LEFT JOIN bottle sp ON sp.id = bl.bottle_id
            WHERE b.owner_id = ? OR sp.owner_id = ?
          )
+        UNION ALL
+        SELECT path FROM user_gear_photo
+         WHERE gear_id IN (SELECT id FROM user_gear WHERE owner_id = ?)
+        UNION ALL
+        SELECT path FROM kingdom_score_photo
+         WHERE score_id IN (SELECT id FROM kingdom_score WHERE author_id = ?)
         """,
-        (owner_id, owner_id, owner_id, owner_id, owner_id),
+        (owner_id, owner_id, owner_id, owner_id, owner_id, owner_id, owner_id),
     ).fetchall()
     return [r["path"] for r in rows]
+
+
+def copy_file(rel_path: str) -> str:
+    """复制一张已入库的图（连缩略图），给管理员收录用。原图还在主人那边。"""
+    name = Path(rel_path).name
+    src = db.PHOTO_DIR / name
+    if not src.exists():
+        raise BadPhoto("原图不在了")
+    new = f"{uuid.uuid4().hex}.jpg"
+    shutil.copy2(src, db.PHOTO_DIR / new)
+    thumb = db.PHOTO_DIR / f"t_{name}"
+    if thumb.exists():
+        shutil.copy2(thumb, db.PHOTO_DIR / f"t_{new}")
+    return f"photos/{new}"
+
+
+def attach_gear_photo(conn: sqlite3.Connection, gear_id: int, raw: bytes, filename: str) -> dict:
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO user_gear_photo (gear_id, path, created_at) VALUES (?, ?, ?)",
+        (gear_id, rel, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "gear_id": gear_id,
+        "path": rel,
+        "url": f"/{rel}",
+        "thumb": thumb_url(rel),
+    }
+
+
+def delete_gear_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute("SELECT path FROM user_gear_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM user_gear_photo WHERE id = ?", (photo_id,))
+
+
+def purge_gear_photos(conn: sqlite3.Connection, gear_id: int) -> int:
+    rows = conn.execute(
+        "SELECT id, path FROM user_gear_photo WHERE gear_id = ?", (gear_id,)
+    ).fetchall()
+    for r in rows:
+        remove(r["path"])
+        conn.execute("DELETE FROM user_gear_photo WHERE id = ?", (r["id"],))
+    return len(rows)
+
+
+SCORE_PHOTO_LIMIT = 8
+
+
+def list_kingdom_score_photos(conn: sqlite3.Connection, score_id: int) -> list[dict]:
+    rows = conn.execute(
+        "SELECT id, path, created_at FROM kingdom_score_photo WHERE score_id = ? ORDER BY created_at, id",
+        (score_id,),
+    ).fetchall()
+    return [
+        {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])} for r in rows
+    ]
+
+
+def attach_kingdom_score_photo(
+    conn: sqlite3.Connection, score_id: int, raw: bytes, filename: str
+) -> dict:
+    n = conn.execute(
+        "SELECT COUNT(*) FROM kingdom_score_photo WHERE score_id = ?", (score_id,)
+    ).fetchone()[0]
+    if n >= SCORE_PHOTO_LIMIT:
+        raise BadPhoto(f"一杯最多 {SCORE_PHOTO_LIMIT} 张")
+    rel = save(raw, filename)
+    cur = conn.execute(
+        "INSERT INTO kingdom_score_photo (score_id, path, created_at) VALUES (?, ?, ?)",
+        (score_id, rel, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "score_id": score_id,
+        "path": rel,
+        "url": f"/{rel}",
+        "thumb": thumb_url(rel),
+    }
+
+
+def delete_kingdom_score_photo(conn: sqlite3.Connection, photo_id: int) -> None:
+    row = conn.execute("SELECT path FROM kingdom_score_photo WHERE id = ?", (photo_id,)).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    remove(row["path"])
+    conn.execute("DELETE FROM kingdom_score_photo WHERE id = ?", (photo_id,))
+
+
+def purge_kingdom_score_photos(conn: sqlite3.Connection, score_id: int) -> int:
+    rows = conn.execute(
+        "SELECT id, path FROM kingdom_score_photo WHERE score_id = ?", (score_id,)
+    ).fetchall()
+    for r in rows:
+        remove(r["path"])
+        conn.execute("DELETE FROM kingdom_score_photo WHERE id = ?", (r["id"],))
+    return len(rows)
+
+
+def copy_to_kingdom(conn: sqlite3.Connection, kingdom_id: int, rel_path: str) -> dict | None:
+    try:
+        copied = copy_file(rel_path)
+    except BadPhoto:
+        return None
+    cur = conn.execute(
+        "INSERT INTO kingdom_photo (kingdom_id, path, created_at) VALUES (?, ?, ?)",
+        (kingdom_id, copied, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "kingdom_id": kingdom_id,
+        "path": copied,
+        "url": f"/{copied}",
+        "thumb": thumb_url(copied),
+    }
+
+
+def copy_to_catalog(conn: sqlite3.Connection, catalog_id: int, rel_path: str) -> dict | None:
+    try:
+        copied = copy_file(rel_path)
+    except BadPhoto:
+        return None
+    cur = conn.execute(
+        "INSERT INTO gear_catalog_photo (catalog_id, path, created_at) VALUES (?, ?, ?)",
+        (catalog_id, copied, db.now()),
+    )
+    return {
+        "id": int(cur.lastrowid),
+        "catalog_id": catalog_id,
+        "path": copied,
+        "url": f"/{copied}",
+        "thumb": thumb_url(copied),
+    }
 
 
 def attach_restock_photo(conn: sqlite3.Connection, bean_id: int, raw: bytes, filename: str,

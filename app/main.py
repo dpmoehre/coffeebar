@@ -15,7 +15,7 @@ from starlette.background import BackgroundTask
 
 from . import auth, brew as brew_mod
 from . import admin as admin_mod
-from . import backup, db, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
+from . import backup, db, gear, kingdom, ledger, locks, menu, photos, places, ratelimit, restore, spirits, stats, store
 
 WEB_DIST = Path(__file__).resolve().parent.parent / "web" / "dist"
 
@@ -47,6 +47,10 @@ def current_account(request: Request, conn: sqlite3.Connection = Depends(get_con
 
 def current_admin(account: dict = Depends(current_account)) -> dict:
     return auth.require_admin(account)
+
+
+def optional_account(request: Request, conn: sqlite3.Connection = Depends(get_conn)) -> dict | None:
+    return auth.account_from_token(conn, auth.cookie_token(request))
 
 
 @app.exception_handler(store.Conflict)
@@ -339,6 +343,7 @@ def api_bean(
         lot["cups_left"] = stats.cups_left(lot["balance_g"], dose["avg_g"])
     bean["log"] = store.list_consumption(conn, bean_id=bean_id, owner_id=account["id"], limit=30)
     bean["lock"] = locks.status(conn, f"bean:{bean_id}")
+    bean["grind_hint"] = store.grind_hint_for_bean(conn, bean_id)
     return bean
 
 
@@ -578,8 +583,118 @@ def api_brew_plan(
 
 
 @app.get("/api/brew/methods")
-def api_brew_methods():
-    return {"methods": [{"key": k, "label": v} for k, v in brew_mod.METHODS.items()]}
+def api_brew_methods(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict | None = Depends(optional_account),
+):
+    owner = account["id"] if account else None
+    return {"methods": gear.annotate_methods(conn, owner)}
+
+
+# ── 咖啡器具 ────────────────────────────────────────────────
+
+
+@app.get("/api/gear/meta")
+def api_gear_meta():
+    return gear.meta()
+
+
+@app.get("/api/gear")
+def api_list_gear(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return {"gear": gear.list_gear(conn, account["id"]), "catalog": gear.list_catalog(conn)}
+
+
+@app.get("/api/gear/catalog")
+def api_gear_catalog(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return {"catalog": gear.list_catalog(conn)}
+
+
+@app.post("/api/gear", status_code=201)
+def api_create_gear(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return gear.create_gear(conn, account["id"], payload or {})
+
+
+@app.post("/api/gear/from-catalog/{catalog_id}", status_code=201)
+def api_gear_from_catalog(
+    catalog_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return gear.add_from_catalog(conn, account["id"], catalog_id)
+
+
+@app.get("/api/gear/{gear_id}")
+def api_get_gear(
+    gear_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    item = gear.get_gear(conn, gear_id, account["id"])
+    if not item:
+        raise HTTPException(404, "没有这件器具")
+    return item
+
+
+@app.patch("/api/gear/{gear_id}")
+def api_update_gear(
+    gear_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return gear.update_gear(conn, gear_id, account["id"], payload or {})
+
+
+@app.delete("/api/gear/{gear_id}")
+def api_delete_gear(
+    gear_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    gear.delete_gear(conn, gear_id, account["id"])
+    return {"ok": True}
+
+
+@app.post("/api/gear/{gear_id}/photos", status_code=201)
+async def api_add_gear_photo(
+    gear_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
+    if not gear.get_gear(conn, gear_id, account["id"]):
+        raise HTTPException(404, "没有这件器具")
+    return photos.attach_gear_photo(conn, gear_id, await file.read(), file.filename or "")
+
+
+@app.delete("/api/gear-photos/{photo_id}")
+def api_del_gear_photo(
+    photo_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    row = conn.execute(
+        """SELECT g.owner_id FROM user_gear_photo p
+             JOIN user_gear g ON g.id = p.gear_id WHERE p.id = ?""",
+        (photo_id,),
+    ).fetchone()
+    if not row:
+        raise HTTPException(404, "没有这张图")
+    auth.assert_owner(row["owner_id"], account["id"], "没有这张图")
+    photos.delete_gear_photo(conn, photo_id)
+    return {"ok": True}
 
 
 @app.post("/api/beans/{bean_id}/brew-default")
@@ -1221,14 +1336,143 @@ def api_unlock(
     return {"ok": True}
 
 
+@app.get("/api/kingdom")
+def api_kingdom_list(
+    saved: str = "",
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    only = saved in ("1", "true", "yes")
+    return {"beans": kingdom.list_kingdom(conn, account["id"], saved=only)}
+
+
+@app.get("/api/kingdom/{kingdom_id}")
+def api_kingdom_get(
+    kingdom_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = kingdom.get_kingdom(conn, kingdom_id, account["id"])
+    if not card:
+        raise HTTPException(404, "王国里没有这一支")
+    return card
+
+
+@app.put("/api/kingdom/{kingdom_id}/score")
+def api_kingdom_score(
+    kingdom_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom.upsert_score(conn, kingdom_id, account["id"], payload or {})
+
+
+@app.delete("/api/kingdom/{kingdom_id}/score")
+def api_kingdom_unscore(
+    kingdom_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    card = kingdom.get_kingdom(conn, kingdom_id, account["id"])
+    if not card:
+        raise HTTPException(404, "王国里没有这一支")
+    return kingdom.delete_score(conn, kingdom_id, account["id"])
+
+
+@app.post("/api/kingdom/{kingdom_id}/score/photos", status_code=201)
+async def api_add_kingdom_score_photo(
+    kingdom_id: int,
+    request: Request,
+    file: UploadFile = File(...),
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
+    return kingdom.add_score_photo(
+        conn, kingdom_id, account["id"], await file.read(), file.filename or ""
+    )
+
+
+@app.delete("/api/kingdom-score-photos/{photo_id}")
+def api_del_kingdom_score_photo(
+    photo_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom.delete_score_photo(conn, photo_id, account["id"])
+
+
+@app.post("/api/kingdom/{kingdom_id}/favorite")
+def api_kingdom_fav(
+    kingdom_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+):
+    return kingdom.toggle_favorite(conn, kingdom_id, account["id"])
+
+
+@app.get("/api/admin/kingdom/queue")
+def api_admin_kingdom_queue(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return {"queue": kingdom.queue(conn), "beans": kingdom.list_kingdom(conn, account["id"])}
+
+
+@app.post("/api/admin/kingdom/collect/{bean_id}")
+def api_admin_kingdom_collect(
+    bean_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return kingdom.collect(conn, account, bean_id, payload or {})
+
+
+@app.patch("/api/admin/kingdom/{kingdom_id}")
+def api_admin_kingdom_patch(
+    kingdom_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return kingdom.update_kingdom(conn, kingdom_id, payload or {})
+
+
+def _tri_flag(value: str | None) -> bool | None:
+    raw = (value or "").strip().lower()
+    if raw in ("1", "true", "yes"):
+        return True
+    if raw in ("0", "false", "no"):
+        return False
+    return None
+
+
 @app.get("/api/public/beans")
 def api_public_beans(
     certified: str = "any",
+    q: str | None = None,
+    roast: str | None = None,
+    process: str | None = None,
+    tag: str | None = None,
+    in_kingdom: str = "any",
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
     only = certified in ("1", "true", "yes")
-    return {"beans": store.list_public_beans(conn, certified_only=only, viewer_id=account["id"])}
+    return {
+        "beans": store.list_public_beans(
+            conn,
+            certified_only=only,
+            viewer_id=account["id"],
+            q=q,
+            roast=roast,
+            process=process,
+            tags=tag,
+            in_kingdom=_tri_flag(in_kingdom),
+        )
+    }
 
 
 @app.get("/api/public/beans/{bean_id}")
@@ -1319,6 +1563,53 @@ def api_review_guess_places(
 ):
     locks.check(conn, f"bean:{bean_id}", x_session, x_source)
     return admin_mod.review_guess_places(conn, bean_id)
+
+
+@app.get("/api/admin/gear/queue")
+def api_admin_gear_queue(
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return {"queue": gear.queue(conn), "catalog": gear.list_catalog(conn, owners=True)}
+
+
+@app.post("/api/admin/gear/catalog", status_code=201)
+def api_admin_create_catalog(
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return gear.create_catalog(conn, account, payload or {})
+
+
+@app.patch("/api/admin/gear/catalog/{catalog_id}")
+def api_admin_update_catalog(
+    catalog_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return gear.update_catalog(conn, catalog_id, payload or {})
+
+
+@app.delete("/api/admin/gear/catalog/{catalog_id}")
+def api_admin_delete_catalog(
+    catalog_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    gear.delete_catalog(conn, catalog_id)
+    return {"ok": True}
+
+
+@app.post("/api/admin/gear/{gear_id}/collect")
+def api_admin_collect_gear(
+    gear_id: int,
+    payload: dict | None = None,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return gear.collect(conn, account, gear_id, payload or {})
 
 
 @app.get("/api/admin/accounts")

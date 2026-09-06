@@ -8,11 +8,13 @@ import {
   Cart,
   Chart,
   CupMark,
+  Dripper,
   Glass,
   Globe,
   Log,
   MenuBoard,
   People,
+  Crown,
   Plaza as PlazaIcon,
   Shield,
 } from "./icons.jsx";
@@ -30,11 +32,15 @@ import Spirits from "./pages/Spirits.jsx";
 import Stats from "./pages/Stats.jsx";
 import Updates from "./pages/Updates.jsx";
 import Admin from "./pages/Admin.jsx";
+import Gear from "./pages/Gear.jsx";
 import Plaza from "./pages/Plaza.jsx";
+import Kingdom from "./pages/Kingdom.jsx";
 
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
+  { key: "gear", label: "器具", Icon: Dripper },
   { key: "plaza", label: "广场", Icon: PlazaIcon },
+  { key: "kingdom", label: "王国", Icon: Crown },
   { key: "spirits", label: "酒水", Icon: Glass },
   { key: "menu", label: "酒单", Icon: MenuBoard },
   { key: "restock", label: "补货", Icon: Cart },
@@ -52,6 +58,7 @@ export default function App() {
   const [beanId, setBeanId] = useState(null);
   const [spiritId, setSpiritId] = useState(null);
   const [plazaId, setPlazaId] = useState(null);
+  const [kingdomId, setKingdomId] = useState(null);
   const [mapFocus, setMapFocus] = useState(null);
   const [calendarPerson, setCalendarPerson] = useState(null);
   const { toast, oops, node } = useToast();
@@ -91,6 +98,7 @@ export default function App() {
     setBeanId(id);
     setSpiritId(null);
     setPlazaId(null);
+    setKingdomId(null);
     setMapFocus(null);
     setPage("bean");
   }, []);
@@ -99,13 +107,25 @@ export default function App() {
     setPlazaId(id);
     setBeanId(null);
     setSpiritId(null);
+    setKingdomId(null);
     setMapFocus(null);
     setPage("plaza-bean");
+  }, []);
+
+  const openKingdom = useCallback((id) => {
+    setKingdomId(id);
+    setBeanId(null);
+    setSpiritId(null);
+    setPlazaId(null);
+    setMapFocus(null);
+    setPage("kingdom-bean");
   }, []);
 
   const openMap = useCallback((id) => {
     setBeanId(null);
     setSpiritId(null);
+    setPlazaId(null);
+    setKingdomId(null);
     setMapFocus(id || null);
     setPage("map");
   }, []);
@@ -113,12 +133,16 @@ export default function App() {
   const openSpirit = useCallback((id) => {
     setSpiritId(id);
     setBeanId(null);
+    setPlazaId(null);
+    setKingdomId(null);
     setPage("spirit");
   }, []);
 
   const openCalendar = useCallback((personId) => {
     setBeanId(null);
     setSpiritId(null);
+    setPlazaId(null);
+    setKingdomId(null);
     setMapFocus(null);
     setCalendarPerson(personId || null);
     setPage("calendar");
@@ -128,6 +152,7 @@ export default function App() {
     setBeanId(null);
     setSpiritId(null);
     setPlazaId(null);
+    setKingdomId(null);
     setMapFocus(null);
     setCalendarPerson(null);
     setPage(key);
@@ -211,6 +236,7 @@ export default function App() {
     page === key ||
     (key === "beans" && page === "bean") ||
     (key === "plaza" && page === "plaza-bean") ||
+    (key === "kingdom" && page === "kingdom-bean") ||
     (key === "spirits" && page === "spirit");
 
   const gateLink =
@@ -378,12 +404,33 @@ export default function App() {
         }
       >
         {page === "beans" && <Beans onOpen={openBean} toast={toast} oops={oops} />}
-        {page === "plaza" && <Plaza onOpen={openPlaza} toast={toast} oops={oops} />}
+        {page === "gear" && <Gear toast={toast} oops={oops} />}
+        {page === "plaza" && (
+          <Plaza
+            onOpen={openPlaza}
+            onOpenKingdom={openKingdom}
+            admin={!!me?.admin}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "plaza-bean" && (
           <Plaza
             openId={plazaId}
             onBack={() => go("plaza")}
             onOpenMine={openBean}
+            onOpenKingdom={openKingdom}
+            admin={!!me?.admin}
+            toast={toast}
+            oops={oops}
+          />
+        )}
+        {page === "kingdom" && <Kingdom onOpen={openKingdom} toast={toast} oops={oops} />}
+        {page === "kingdom-bean" && (
+          <Kingdom
+            openId={kingdomId}
+            onBack={() => go("kingdom")}
+            onOpenPlaza={openPlaza}
             toast={toast}
             oops={oops}
           />
@@ -466,7 +513,7 @@ export default function App() {
         open={bye}
         onClose={() => !byeBusy && setBye(false)}
         title="注销账号"
-        sub="会删掉你的豆、酒、照片和流水，不可恢复。别人的库不动。接手过库存的号必须先下载备份。"
+        sub="会删掉你的豆、酒、器具、照片和流水，不可恢复。别人的库和已收录的公共目录不动。接手过库存的号必须先下载备份。"
         footer={
           <>
             <Btn variant="ghost" onClick={() => { setBye(false); setByeToken(""); }} disabled={byeBusy}>
@@ -719,7 +766,7 @@ function Gate({ onIn, oops, toast }) {
                 }
               }}
             >
-              只要空库，库存先留在机器上
+              只要空库（库存还在机器上）
             </Btn>
           </div>
         )}

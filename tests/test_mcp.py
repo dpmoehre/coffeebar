@@ -117,6 +117,29 @@ def test_tool_catalog_covers_bar():
         "uncertify_bean",
         "review_set_places",
         "review_guess_places",
+        "list_plaza",
+        "get_plaza_bean",
+        "list_gear",
+        "get_gear",
+        "create_gear",
+        "update_gear",
+        "delete_gear",
+        "add_gear_photo",
+        "delete_gear_photo",
+        "add_gear_from_catalog",
+        "list_gear_catalog",
+        "list_gear_queue",
+        "collect_gear",
+        "update_gear_catalog",
+        "list_kingdom",
+        "get_kingdom",
+        "score_kingdom",
+        "unscore_kingdom",
+        "add_kingdom_score_photo",
+        "delete_kingdom_score_photo",
+        "favorite_kingdom",
+        "list_kingdom_queue",
+        "collect_kingdom",
     ):
         assert n in names, n
     assert "delete_account" not in names
@@ -217,3 +240,92 @@ def test_mcp_recipe_can_swap_spirits(client):
     assert all(it["id"] != listed["id"] for it in c.list_menu(False)["items"])
     c.delete_recipe(rec["id"])
     assert all(r["id"] != rec["id"] for r in c.list_recipes()["recipes"])
+
+
+def test_mcp_gear_and_brew_methods(client):
+    c = _mcp(client)
+    item = c.create_gear(
+        {
+            "name": "【测试】MCP滤杯",
+            "kind": "dripper",
+            "family": "flat",
+        }
+    )
+    assert item["name"] == "【测试】MCP滤杯"
+    listed = c.list_gear()["gear"]
+    assert any(g["id"] == item["id"] for g in listed)
+    methods = {m["key"]: m for m in c.list_brew_methods()["methods"]}
+    assert methods["kalita"]["owned"] is True
+    assert methods["v60"]["owned"] is False
+    c.delete_gear(item["id"])
+    assert all(g["id"] != item["id"] for g in c.list_gear()["gear"])
+
+
+def test_mcp_plaza_is_sanitized(client):
+    public = client.post(
+        "/api/beans",
+        json={
+            "name": "MCP广场浅烘",
+            "origin": "埃塞俄比亚",
+            "roast": "浅烘",
+            "process": "水洗",
+            "tags": ["柑橘"],
+            "visibility": "public",
+            "nominal_g": 200,
+            "price": 88,
+        },
+    ).json()
+    private = client.post("/api/beans", json={"name": "MCP广场私库", "visibility": "private"}).json()
+    c = _mcp(client)
+    listed = c.list_plaza(q="MCP广场浅烘")["beans"]
+    assert any(b["id"] == public["id"] for b in listed)
+    assert all(b["id"] != private["id"] for b in listed)
+    hit = next(b for b in listed if b["id"] == public["id"])
+    assert hit["offer"]["price"] == 88
+    assert hit["offer"]["nominal_g"] == 200
+    for key in ("unit_cost", "balance_g", "lots", "log", "owner_id", "price", "remaining_value"):
+        assert key not in hit
+    card = c.get_plaza_bean(public["id"])
+    assert card["name"] == "MCP广场浅烘"
+    assert card["offer"]["price"] == 88
+    assert card["offer"]["nominal_g"] == 200
+    assert "unit_cost" not in card
+    assert "balance_g" not in card
+    roast = c.list_plaza(roast="浅烘", q="MCP广场")["beans"]
+    assert any(b["id"] == public["id"] for b in roast)
+    mid = c.list_plaza(roast="中烘", q="MCP广场浅烘")["beans"]
+    assert all(b["id"] != public["id"] for b in mid)
+    try:
+        c.get_plaza_bean(private["id"])
+        raise AssertionError("私卡不应出现在广场")
+    except ApiError as exc:
+        assert exc.status == 404
+
+
+def test_mcp_kingdom_cupping(client, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
+    bean = client.post("/api/beans", json={"name": "【测试】MCP王国", "origin": "埃塞俄比亚"}).json()
+    client.patch(f"/api/beans/{bean['id']}", json={"visibility": "public"})
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/register",
+        json={"email": "boss@coffeebar.local", "password": "testpass1"},
+    )
+    kid = client.post(f"/api/admin/kingdom/collect/{bean['id']}", json={}).json()["id"]
+    client.post("/api/auth/logout")
+    client.post(
+        "/api/auth/login",
+        json={"email": "test@coffeebar.local", "password": "testpass1"},
+    )
+
+    c = _mcp(client)
+    listed = c.list_kingdom()["beans"]
+    assert any(b["id"] == kid for b in listed)
+    scored = c.score_kingdom(kid, {"overall": 8, "comment": "MCP杯测"})
+    assert scored["mine"]["overall"] == 8
+    fav = c.favorite_kingdom(kid)
+    assert fav["favorited"] is True
+    saved = c.list_kingdom(True)["beans"]
+    assert [b["id"] for b in saved] == [kid]
+    gone = c.unscore_kingdom(kid)
+    assert gone["mine"] is None

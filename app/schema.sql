@@ -54,6 +54,7 @@ CREATE TABLE IF NOT EXISTS bean (
   certified_by INTEGER REFERENCES account(id),
   review_note TEXT,
   places_verified_at TEXT,               -- 地图钉校对过
+  kingdom_id  INTEGER,                   -- 收入咖啡王国后挂到公共豆种
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -323,6 +324,111 @@ CREATE TABLE IF NOT EXISTS bean_place (
   created_at TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_place_bean ON bean_place(bean_id);
+
+-- ── 咖啡器具：私人台面 + 管理员收录的公共目录 ──────────────
+-- 器具挂在账号上，不是「谁喝的」。冲煮建议按这张台面来。
+
+CREATE TABLE IF NOT EXISTS gear_catalog (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT    NOT NULL,
+  kind           TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')),
+  family         TEXT,
+  brand          TEXT,
+  model          TEXT,
+  brew_method    TEXT,
+  note           TEXT,
+  source_gear_id INTEGER,
+  collected_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at     TEXT    NOT NULL,
+  updated_at     TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS gear_catalog_photo (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  catalog_id INTEGER NOT NULL REFERENCES gear_catalog(id) ON DELETE CASCADE,
+  path       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_gcat_photo ON gear_catalog_photo(catalog_id);
+
+CREATE TABLE IF NOT EXISTS user_gear (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  owner_id    INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  catalog_id  INTEGER REFERENCES gear_catalog(id) ON DELETE SET NULL,
+  name        TEXT    NOT NULL,
+  kind        TEXT    NOT NULL CHECK (kind IN ('dripper', 'kettle', 'grinder', 'scale', 'server', 'other')),
+  family      TEXT,
+  brand       TEXT,
+  model       TEXT,
+  brew_method TEXT,
+  note        TEXT,
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ugear_owner ON user_gear(owner_id);
+CREATE INDEX IF NOT EXISTS idx_ugear_catalog ON user_gear(catalog_id);
+
+CREATE TABLE IF NOT EXISTS user_gear_photo (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  gear_id    INTEGER NOT NULL REFERENCES user_gear(id) ON DELETE CASCADE,
+  path       TEXT    NOT NULL,
+  created_at TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_ugear_photo ON user_gear_photo(gear_id);
+
+-- ── 咖啡王国：公共豆种。大家杯测、评价、收藏都挂这里，不挂私人袋子 ──
+
+CREATE TABLE IF NOT EXISTS kingdom_bean (
+  id             INTEGER PRIMARY KEY AUTOINCREMENT,
+  name           TEXT    NOT NULL,
+  origin         TEXT,
+  varietal       TEXT,
+  producer       TEXT,
+  altitude       TEXT,
+  process        TEXT,
+  roast          TEXT,
+  note           TEXT,
+  source_bean_id INTEGER,
+  collected_by   INTEGER REFERENCES account(id) ON DELETE SET NULL,
+  created_at     TEXT    NOT NULL,
+  updated_at     TEXT    NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS kingdom_photo (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kingdom_id  INTEGER NOT NULL REFERENCES kingdom_bean(id) ON DELETE CASCADE,
+  path        TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kphoto ON kingdom_photo(kingdom_id);
+
+CREATE TABLE IF NOT EXISTS kingdom_score (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  kingdom_id  INTEGER NOT NULL REFERENCES kingdom_bean(id) ON DELETE CASCADE,
+  author_id   INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  dry         REAL, flavor REAL, aftertaste REAL, acidity REAL,
+  sweetness   REAL, body   REAL, balance    REAL, overall REAL,
+  comment     TEXT,
+  created_at  TEXT    NOT NULL,
+  updated_at  TEXT    NOT NULL,
+  UNIQUE (kingdom_id, author_id)
+);
+CREATE INDEX IF NOT EXISTS idx_kscore ON kingdom_score(kingdom_id);
+
+CREATE TABLE IF NOT EXISTS kingdom_score_photo (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  score_id    INTEGER NOT NULL REFERENCES kingdom_score(id) ON DELETE CASCADE,
+  path        TEXT    NOT NULL,
+  created_at  TEXT    NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_kscore_photo ON kingdom_score_photo(score_id);
+
+CREATE TABLE IF NOT EXISTS kingdom_favorite (
+  kingdom_id INTEGER NOT NULL REFERENCES kingdom_bean(id) ON DELETE CASCADE,
+  account_id INTEGER NOT NULL REFERENCES account(id) ON DELETE CASCADE,
+  created_at TEXT    NOT NULL,
+  PRIMARY KEY (kingdom_id, account_id)
+);
 
 -- ── 写锁：网页之间软锁可接管，非网页来源硬拒绝 ──────────────
 

@@ -6,6 +6,7 @@ import json
 import mimetypes
 import os
 from pathlib import Path
+from urllib.parse import urlencode
 
 import httpx
 
@@ -53,6 +54,14 @@ def _msg(res: httpx.Response) -> str:
             return detail
         return str(data.get("message") or data.get("error") or data)
     return str(data)
+
+
+def _csv_query(value) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, (list, tuple)):
+        return ",".join(str(x).strip() for x in value if str(x).strip())
+    return str(value).strip()
 
 
 class Client:
@@ -199,6 +208,42 @@ class Client:
 
     def list_brew_methods(self):
         return self.request("GET", "/api/brew/methods")
+
+    def list_gear(self):
+        return self.request("GET", "/api/gear")
+
+    def get_gear(self, gear_id: int):
+        return self.request("GET", f"/api/gear/{gear_id}")
+
+    def create_gear(self, data: dict):
+        return self.request("POST", "/api/gear", json=data)
+
+    def update_gear(self, gear_id: int, data: dict):
+        return self.request("PATCH", f"/api/gear/{gear_id}", json=data)
+
+    def delete_gear(self, gear_id: int):
+        return self.request("DELETE", f"/api/gear/{gear_id}")
+
+    def add_gear_photo(self, gear_id: int, file_path: str):
+        return self.upload(f"/api/gear/{gear_id}/photos", file_path)
+
+    def delete_gear_photo(self, photo_id: int):
+        return self.request("DELETE", f"/api/gear-photos/{photo_id}")
+
+    def add_gear_from_catalog(self, catalog_id: int):
+        return self.request("POST", f"/api/gear/from-catalog/{catalog_id}", json={})
+
+    def list_gear_catalog(self):
+        return self.request("GET", "/api/gear/catalog")
+
+    def list_gear_queue(self):
+        return self.request("GET", "/api/admin/gear/queue")
+
+    def collect_gear(self, gear_id: int, data: dict | None = None):
+        return self.request("POST", f"/api/admin/gear/{gear_id}/collect", json=data or {})
+
+    def update_gear_catalog(self, catalog_id: int, data: dict):
+        return self.request("PATCH", f"/api/admin/gear/catalog/{catalog_id}", json=data)
 
     def set_brew_default(self, bean_id: int, data: dict):
         return self.request("POST", f"/api/beans/{bean_id}/brew-default", json=data)
@@ -516,3 +561,63 @@ class Client:
 
     def review_guess_places(self, bean_id: int):
         return self.request("POST", f"/api/admin/review/beans/{bean_id}/places/guess", json={})
+
+    def list_plaza(
+        self,
+        certified_only: bool = False,
+        q: str | None = None,
+        roast=None,
+        process=None,
+        tags=None,
+        in_kingdom: bool | None = None,
+    ):
+        params: dict[str, str] = {}
+        if certified_only:
+            params["certified"] = "1"
+        if q:
+            params["q"] = q
+        roast_s = _csv_query(roast)
+        if roast_s:
+            params["roast"] = roast_s
+        process_s = _csv_query(process)
+        if process_s:
+            params["process"] = process_s
+        tags_s = _csv_query(tags)
+        if tags_s:
+            params["tag"] = tags_s
+        if in_kingdom is True:
+            params["in_kingdom"] = "1"
+        elif in_kingdom is False:
+            params["in_kingdom"] = "0"
+        qs = urlencode(params)
+        return self.request("GET", f"/api/public/beans{f'?{qs}' if qs else ''}")
+
+    def get_plaza_bean(self, bean_id: int):
+        return self.request("GET", f"/api/public/beans/{bean_id}")
+
+    def list_kingdom(self, saved: bool = False):
+        return self.request("GET", f"/api/kingdom{'?saved=1' if saved else ''}")
+
+    def get_kingdom(self, kingdom_id: int):
+        return self.request("GET", f"/api/kingdom/{kingdom_id}")
+
+    def score_kingdom(self, kingdom_id: int, data: dict):
+        return self.request("PUT", f"/api/kingdom/{kingdom_id}/score", json=data)
+
+    def unscore_kingdom(self, kingdom_id: int):
+        return self.request("DELETE", f"/api/kingdom/{kingdom_id}/score")
+
+    def add_kingdom_score_photo(self, kingdom_id: int, file_path: str):
+        return self.upload(f"/api/kingdom/{kingdom_id}/score/photos", file_path)
+
+    def delete_kingdom_score_photo(self, photo_id: int):
+        return self.request("DELETE", f"/api/kingdom-score-photos/{photo_id}")
+
+    def favorite_kingdom(self, kingdom_id: int):
+        return self.request("POST", f"/api/kingdom/{kingdom_id}/favorite", json={})
+
+    def list_kingdom_queue(self):
+        return self.request("GET", "/api/admin/kingdom/queue")
+
+    def collect_kingdom(self, bean_id: int, data: dict | None = None):
+        return self.request("POST", f"/api/admin/kingdom/collect/{bean_id}", json=data or {})

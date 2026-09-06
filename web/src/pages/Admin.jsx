@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import Radar from "../components/Radar.jsx";
-import { Btn, Chip, Empty, Panel, g, ml, money } from "../ui.jsx";
+import { Btn, Chip, Empty, Field, Input, Panel, Select, g, ml, money } from "../ui.jsx";
 
 function clock(at) {
   return at ? at.slice(0, 16).replace("T", " ") : "";
@@ -86,7 +86,7 @@ export default function Admin({ toast, oops }) {
       <header>
         <h1 className="serif m-0 text-3xl font-semibold">后台</h1>
         <p className="mt-2 mb-0 text-muted">
-          只有管理员看得见。能看每个人的豆卡、酒卡和消耗，也能审公开豆卡。普通人仍然只能看自己的。
+          只有管理员看得见。能看每个人的豆卡、酒卡和消耗，也能审公开豆卡、收录器具和王国豆种。普通人仍然只能看自己的。
         </p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Chip on={view === "accounts"} onClick={() => setView("accounts")}>
@@ -95,11 +95,21 @@ export default function Admin({ toast, oops }) {
           <Chip on={view === "review"} onClick={() => setView("review")}>
             审豆卡
           </Chip>
+          <Chip on={view === "gear"} onClick={() => setView("gear")}>
+            收器具
+          </Chip>
+          <Chip on={view === "kingdom"} onClick={() => setView("kingdom")}>
+            收进王国
+          </Chip>
         </div>
       </header>
 
       {view === "review" ? (
         <ReviewPane toast={toast} oops={oops} />
+      ) : view === "gear" ? (
+        <GearPane toast={toast} oops={oops} />
+      ) : view === "kingdom" ? (
+        <KingdomPane toast={toast} oops={oops} />
       ) : !accounts ? (
         <p className="mt-6 text-muted">读取中…</p>
       ) : (
@@ -212,6 +222,7 @@ function AccountView({
         {[
           ["beans", `豆子 ${dossier.beans.length}`],
           ["spirits", `酒水 ${dossier.spirits.length}`],
+          ["gear", `器具 ${(dossier.gear || []).length}`],
           ["log", `流水 ${dossier.consumption.length}`],
           ["people", `谁喝的 ${dossier.people.length}`],
         ].map(([k, label]) => (
@@ -309,6 +320,24 @@ function AccountView({
         </Panel>
       )}
 
+      {tab === "gear" && (
+        <Panel className="mt-4">
+          {(dossier.gear || []).length === 0 ? (
+            <p className="m-0 text-muted">还没有登记器具。</p>
+          ) : (
+            dossier.gear.map((g) => (
+              <div key={g.id} className="border-b border-line py-2 last:border-0">
+                {g.name}
+                <span className="ml-2 text-xs text-muted">
+                  {[g.kind_label, g.family_label].filter(Boolean).join(" · ")}
+                  {g.collected ? " · 已收录" : " · 未收录"}
+                </span>
+              </div>
+            ))
+          )}
+        </Panel>
+      )}
+
       {tab === "people" && (
         <Panel className="mt-4">
           {dossier.people.length === 0 ? (
@@ -363,6 +392,350 @@ function AccountView({
         </Panel>
       )}
     </>
+  );
+}
+
+function KingdomPane({ toast, oops }) {
+  const [queue, setQueue] = useState(null);
+  const [catalog, setCatalog] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [kid, setKid] = useState("");
+  const [name, setName] = useState("");
+
+  const load = () =>
+    api
+      .adminKingdomQueue()
+      .then((d) => {
+        setQueue(d.queue);
+        setCatalog(d.beans || []);
+      })
+      .catch((e) => oops(e.message));
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const collect = async () => {
+    if (!picked) return;
+    try {
+      await api.adminCollectKingdom(picked.id, {
+        name: name || picked.name,
+        kingdom_id: kid ? Number(kid) : undefined,
+      });
+      toast(kid ? "已挂到这支" : "已收进王国");
+      setPicked(null);
+      setKid("");
+      load();
+    } catch (e) {
+      oops(e.message);
+    }
+  };
+
+  return (
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+      <Panel className="h-fit">
+        <div className="serif text-lg">待收入</div>
+        <p className="mt-1 mb-0 text-[13px] text-muted">已经公开、还没进王国的豆卡。</p>
+        <div className="mt-3 space-y-1">
+          {(queue || []).map((b) => (
+            <button
+              key={b.id}
+              type="button"
+              onClick={() => {
+                setPicked(b);
+                setName(b.name);
+                setKid("");
+              }}
+              className={`flex w-full flex-col rounded-xl px-3 py-2.5 text-left text-sm ${
+                picked?.id === b.id ? "bg-chip text-cream" : "text-muted hover:bg-chip/60"
+              }`}
+            >
+              <span className="truncate text-cream">{b.name}</span>
+              <span className="mt-0.5 text-xs">
+                {b.owner_email} · {b.origin || "没填产地"}
+                {b.certified ? " · 已认证" : ""}
+              </span>
+            </button>
+          ))}
+          {queue && queue.length === 0 && <p className="text-sm text-muted">没有待收的公开卡。</p>}
+          {!queue && <p className="text-sm text-muted">读取中…</p>}
+        </div>
+      </Panel>
+      <div className="space-y-4">
+        {!picked ? (
+          <Empty>左边点一张。新建一支，或挂到已有的同名豆上，大家就评同一支。</Empty>
+        ) : (
+          <Panel>
+            <h2 className="serif m-0 text-2xl">{picked.name}</h2>
+            <p className="mt-1 mb-0 text-sm text-muted">
+              {picked.owner_email} · {picked.origin || "没填产地"}
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Field label="王国里的名字">
+                <Input value={name} onChange={(e) => setName(e.target.value)} />
+              </Field>
+              {catalog.length > 0 && (
+                <Field label="或挂到已有">
+                  <Select className="w-full" value={kid} onChange={(e) => setKid(e.target.value)}>
+                    <option value="">新建一支</option>
+                    {catalog.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              )}
+            </div>
+            <div className="mt-4">
+              <Btn onClick={collect}>{kid ? "挂到这支" : "收进王国"}</Btn>
+            </div>
+          </Panel>
+        )}
+        <Panel>
+          <div className="serif text-lg">王国里已有</div>
+          {catalog.length === 0 ? (
+            <p className="mt-2 mb-0 text-sm text-muted">还是空的。</p>
+          ) : (
+            <div className="mt-3 space-y-2">
+              {catalog.map((c) => (
+                <div key={c.id} className="border-b border-line py-2 last:border-0">
+                  <div className="text-cream">{c.name}</div>
+                  <div className="text-xs text-muted">
+                    {c.cups} 杯测 · {c.favorites} 收藏
+                    {c.avg?.overall != null ? ` · 总体 ${c.avg.overall}` : ""}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+    </div>
+  );
+}
+
+function GearPane({ toast, oops }) {
+  const [queue, setQueue] = useState(null);
+  const [catalog, setCatalog] = useState([]);
+  const [picked, setPicked] = useState(null);
+  const [catId, setCatId] = useState("");
+  const [form, setForm] = useState({ brew_method: "", note: "", name: "" });
+  const [editing, setEditing] = useState(null);
+
+  const load = () =>
+    api
+      .adminGearQueue()
+      .then((d) => {
+        setQueue(d.queue);
+        setCatalog(d.catalog || []);
+      })
+      .catch((e) => oops(e.message));
+
+  useEffect(() => {
+    load();
+  }, []);
+
+  const open = (item) => {
+    setPicked(item);
+    setCatId("");
+    setForm({
+      name: item.name || "",
+      brew_method: item.brew_method || "",
+      note: item.note || "",
+    });
+  };
+
+  const collect = async () => {
+    if (!picked) return;
+    try {
+      const payload = catId
+        ? { catalog_id: Number(catId) }
+        : {
+            name: form.name || picked.name,
+            brew_method: form.brew_method || null,
+            note: form.note,
+            kind: picked.kind,
+            family: picked.family,
+          };
+      await api.adminCollectGear(picked.id, payload);
+      toast(catId ? "已挂到目录" : "已收到目录");
+      setPicked(null);
+      load();
+    } catch (e) {
+      oops(e.message);
+    }
+  };
+
+  const saveCatalog = async () => {
+    if (!editing) return;
+    try {
+      await api.adminUpdateCatalog(editing.id, {
+        name: editing.name,
+        kind: editing.kind,
+        family: editing.family,
+        brew_method: editing.brew_method || null,
+        note: editing.note,
+      });
+      toast("目录已改");
+      setEditing(null);
+      load();
+    } catch (e) {
+      oops(e.message);
+    }
+  };
+
+  return (
+    <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
+      <Panel className="h-fit">
+        <div className="serif text-lg">待收录</div>
+        <div className="mt-3 space-y-1">
+          {(queue || []).map((g) => (
+            <button
+              key={g.id}
+              type="button"
+              onClick={() => open(g)}
+              className={`flex w-full flex-col rounded-xl px-3 py-2.5 text-left text-sm ${
+                picked?.id === g.id ? "bg-chip text-cream" : "text-muted hover:bg-chip/60"
+              }`}
+            >
+              <span className="truncate text-cream">{g.name}</span>
+              <span className="mt-0.5 text-xs">
+                {g.owner_email} · {[g.kind_label, g.family_label].filter(Boolean).join(" · ")}
+              </span>
+            </button>
+          ))}
+          {queue && queue.length === 0 && <p className="text-sm text-muted">没有待收的器具。</p>}
+          {!queue && <p className="text-sm text-muted">读取中…</p>}
+        </div>
+      </Panel>
+
+      <div className="space-y-4">
+        {!picked ? (
+          <Empty>左边点一件。收到目录后，可以挂冲煮方式和备注，有这件的人冲煮时能看见。</Empty>
+        ) : (
+          <Panel>
+            <h2 className="serif m-0 text-2xl">{picked.name}</h2>
+            <p className="mt-1 mb-0 text-sm text-muted">
+              {picked.owner_email} · {[picked.kind_label, picked.family_label, picked.brand].filter(Boolean).join(" · ")}
+            </p>
+            {picked.cover ? (
+              <img src={picked.cover.thumb} alt="" className="mt-3 h-40 rounded-xl object-cover" />
+            ) : null}
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              <Field label="目录名字">
+                <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              </Field>
+              <Field label="挂到冲煮方式">
+                <Select
+                  className="w-full"
+                  value={form.brew_method}
+                  onChange={(e) => setForm({ ...form, brew_method: e.target.value })}
+                >
+                  <option value="">不指定</option>
+                  <option value="v60">V60 四段</option>
+                  <option value="hoffmann">Hoffmann 一杯</option>
+                  <option value="kasuya">4:6 粕谷</option>
+                  <option value="kalita">Kalita</option>
+                  <option value="volcano">多段式火山冲</option>
+                </Select>
+              </Field>
+            </div>
+            <div className="mt-3">
+              <Field label="冲煮备注" hint="有这件器具的人，冲煮指导里会看到">
+                <Input
+                  value={form.note}
+                  onChange={(e) => setForm({ ...form, note: e.target.value })}
+                  placeholder="细水流、中心小圈…"
+                />
+              </Field>
+            </div>
+            {catalog.length > 0 && (
+              <div className="mt-3">
+                <Field label="或挂到已有目录">
+                  <Select className="w-full" value={catId} onChange={(e) => setCatId(e.target.value)}>
+                    <option value="">新建一条</option>
+                    {catalog.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+              </div>
+            )}
+            <div className="mt-4">
+              <Btn onClick={collect}>{catId ? "挂到这条" : "收到目录"}</Btn>
+            </div>
+          </Panel>
+        )}
+
+        <Panel>
+          <div className="serif text-lg">公共目录</div>
+          {catalog.length === 0 ? (
+            <p className="mt-2 mb-0 text-sm text-muted">还是空的。收录第一件之后会出现在这里。</p>
+          ) : (
+            <div className="mt-3 space-y-3">
+              {catalog.map((c) => (
+                <div key={c.id} className="border-b border-line pb-3 last:border-0 last:pb-0">
+                  {editing?.id === c.id ? (
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <Input
+                        value={editing.name}
+                        onChange={(e) => setEditing({ ...editing, name: e.target.value })}
+                      />
+                      <Select
+                        className="w-full"
+                        value={editing.brew_method || ""}
+                        onChange={(e) => setEditing({ ...editing, brew_method: e.target.value })}
+                      >
+                        <option value="">不指定冲煮</option>
+                        <option value="v60">V60 四段</option>
+                        <option value="hoffmann">Hoffmann 一杯</option>
+                        <option value="kasuya">4:6 粕谷</option>
+                        <option value="kalita">Kalita</option>
+                        <option value="volcano">多段式火山冲</option>
+                      </Select>
+                      <Input
+                        className="sm:col-span-2"
+                        value={editing.note || ""}
+                        onChange={(e) => setEditing({ ...editing, note: e.target.value })}
+                        placeholder="冲煮备注"
+                      />
+                      <div className="flex gap-2 sm:col-span-2">
+                        <Btn onClick={saveCatalog}>保存</Btn>
+                        <Btn variant="ghost" onClick={() => setEditing(null)}>
+                          取消
+                        </Btn>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <div className="text-cream">{c.name}</div>
+                        <div className="mt-0.5 text-xs text-muted">
+                          {[c.kind_label, c.family_label, c.brew_method, `${c.owners || 0} 人有`]
+                            .filter(Boolean)
+                            .join(" · ")}
+                          {c.note ? ` · ${c.note}` : ""}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        className="text-sm text-amber underline"
+                        onClick={() => setEditing({ ...c })}
+                      >
+                        改
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Panel>
+      </div>
+    </div>
   );
 }
 
