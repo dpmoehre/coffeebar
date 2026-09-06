@@ -43,10 +43,12 @@ function ringRadius(n, gap) {
   return gap / (2 * Math.sin(Math.PI / n));
 }
 
-/** 平面图：按屏幕像素聚类。放大后间距够了就各自回到真点。 */
+/** 平面图：按屏幕像素聚类。放大后间距够了就各自回到真点。
+ * 缩小时 k<1 仍按 1 算，避免国家变小钉子还按原像素散开，整片产区被拉歪。 */
 export function spreadScreen(items, k = 1, gap = 26) {
   if (!items.length) return [];
-  const mapGap = gap / k;
+  const zoom = Math.max(Number(k) || 1, 1);
+  const mapGap = gap / zoom;
   const groups = clusterBy(items, mapGap * 0.85, (a, b) => Math.hypot(a.x - b.x, a.y - b.y));
   const out = [];
   for (const raw of groups) {

@@ -7,6 +7,7 @@
 
 ## 2026-09-06
 
+- **地图缩小钉子不跑偏**：缩小时钉子跟着地图收，散开不再按放大像素硬拉开。见 [docs/007-🚧](docs/007-🚧-豆子地图.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`node --test web/src/geo/spread.test.js`。
 - **拍豆卡 MCP 建档**：Cursor 读图，服务端不识字；`find_similar_beans` 查重，`create_bean` 可带本机图一次挂上。见 [docs/015-✅](docs/015-✅-拍豆卡MCP建档.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest` 318 passed。
 - **代码结构**：`main.py` 只留启动和静态文件；HTTP 按领域进 `app/routers/`；人名标签进 `people.py`。接口没变。见 [docs/021-✅](docs/021-✅-代码结构.md)。**验收**：`uv run pytest` 310 passed。
 - **王国器具**：复用目录，王国里豆子 / 器具两栏；总体分 + 一句话 + 收藏，不套八维。见 [docs/020-🚧](docs/020-🚧-咖啡王国.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest` 310 passed。

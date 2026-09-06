@@ -31,6 +31,8 @@ export default function WorldMap2d({
   onPlace,
 }) {
   const wrap = useRef(null);
+  const svgRef = useRef(null);
+  const layerRef = useRef(null);
   const [size, setSize] = useState({ w: 640, h: 420 });
   const [view, setView] = useState({ k: 1, x: 0, y: 0 });
   const [tip, setTip] = useState(null);
@@ -39,9 +41,9 @@ export default function WorldMap2d({
   useEffect(() => {
     const el = wrap.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const r = el.getBoundingClientRect();
-      if (r.width && r.height) setSize({ w: r.width, h: r.height });
+    const ro = new ResizeObserver((entries) => {
+      const r = entries[0]?.contentRect;
+      if (r?.width && r?.height) setSize({ w: r.width, h: r.height });
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -100,11 +102,13 @@ export default function WorldMap2d({
   );
 
   const spreadDots = useMemo(() => spreadScreen(dots, view.k), [dots, view.k]);
-  const inv = 1 / view.k;
+  // 放大时钉子保持屏幕大小；缩小时跟着地图收，免得盖住整块产区。
+  const inv = view.k > 1 ? 1 / view.k : 1;
 
   const localXY = (e) => {
-    const box = wrap.current.getBoundingClientRect();
-    return { x: e.clientX - box.left, y: e.clientY - box.top };
+    const el = wrap.current;
+    const box = el.getBoundingClientRect();
+    return { x: e.clientX - box.left - el.clientLeft, y: e.clientY - box.top - el.clientTop };
   };
 
   const hoverOrigin = (origin, e) => {
@@ -117,9 +121,22 @@ export default function WorldMap2d({
   };
 
   const toLatLng = (clientX, clientY) => {
-    const rect = wrap.current.getBoundingClientRect();
-    const px = (clientX - rect.left - view.x) / view.k;
-    const py = (clientY - rect.top - view.y) / view.k;
+    const svg = svgRef.current;
+    const layer = layerRef.current;
+    if (svg && layer) {
+      const ctm = layer.getScreenCTM();
+      if (ctm) {
+        const pt = svg.createSVGPoint();
+        pt.x = clientX;
+        pt.y = clientY;
+        const p = pt.matrixTransform(ctm.inverse());
+        return projection.invert([p.x, p.y]);
+      }
+    }
+    const el = wrap.current;
+    const rect = el.getBoundingClientRect();
+    const px = (clientX - rect.left - el.clientLeft - view.x) / view.k;
+    const py = (clientY - rect.top - el.clientTop - view.y) / view.k;
     return projection.invert([px, py]);
   };
 
@@ -159,9 +176,10 @@ export default function WorldMap2d({
 
   const onWheel = (e) => {
     e.preventDefault();
-    const rect = wrap.current.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-    const my = e.clientY - rect.top;
+    const el = wrap.current;
+    const rect = el.getBoundingClientRect();
+    const mx = e.clientX - rect.left - el.clientLeft;
+    const my = e.clientY - rect.top - el.clientTop;
     const factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
     setView((v) => {
       const k = Math.min(8, Math.max(0.7, v.k * factor));
@@ -184,8 +202,14 @@ export default function WorldMap2d({
       onPointerUp={onPointerUp}
       onWheel={onWheel}
     >
-      <svg width={w} height={h} className="block">
-        <g transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
+      <svg
+        ref={svgRef}
+        width={w}
+        height={h}
+        viewBox={`0 0 ${w} ${h}`}
+        className="block h-full w-full"
+      >
+        <g ref={layerRef} transform={`translate(${view.x},${view.y}) scale(${view.k})`}>
           <path
             d={grid}
             fill="none"

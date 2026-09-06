@@ -32,6 +32,21 @@ test("离得远的钉仍停在真点", () => {
   assert.equal(b.sx, 200);
 });
 
+test("缩小时不会把本来分得开的钉拉成一圈", () => {
+  const out = spreadScreen(
+    [
+      { bean_id: 1, place_id: 1, x: 0, y: 0 },
+      { bean_id: 2, place_id: 2, x: 30, y: 0 },
+    ],
+    0.7,
+    26
+  );
+  const a = out.find((p) => p.bean_id === 1);
+  const b = out.find((p) => p.bean_id === 2);
+  assert.equal(a.sx, 0);
+  assert.equal(b.sx, 30);
+});
+
 test("放大后本来挨着的两颗会各自回到真点", () => {
   const pair = [
     { bean_id: 1, place_id: 1, x: 0, y: 0 },
