@@ -483,7 +483,7 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
         <p className="mt-4 mb-0 text-[13px] text-muted">这张卡还没被收进王国。收进去之后才能和大家一起评。</p>
       )}
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div className="mt-6 grid items-start gap-4 lg:grid-cols-2">
         <Panel>
           <div className="serif text-lg">照片</div>
           <DetailPhotos photos={bean.photos} empty="还没有包装或豆盘照片。" />

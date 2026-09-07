@@ -193,7 +193,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         </div>
       </header>
 
-      <div className="mt-6 grid gap-4 lg:grid-cols-2">
+      <div className="mt-6 grid items-start gap-4 lg:grid-cols-2">
         <Panel>
           <div className="flex items-baseline justify-between">
             <div className="serif text-lg">库存</div>
