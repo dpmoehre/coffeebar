@@ -167,6 +167,7 @@ function Find-Cpolar {
     if ($cmd) { return $cmd.Source }
     $candidates = @(
         (Join-Path $env:LOCALAPPDATA "cpolar\cpolar.exe"),
+        (Join-Path $env:LOCALAPPDATA "cpolar\cpolar\cpolar.exe"),
         (Join-Path $env:LOCALAPPDATA "Programs\cpolar\cpolar.exe"),
         "C:\Program Files\cpolar\cpolar.exe",
         "C:\cpolar\cpolar.exe"
@@ -203,9 +204,11 @@ function Start-CpolarDetached {
         return
     }
     $token = [Environment]::GetEnvironmentVariable("CPOLAR_AUTHTOKEN", "Process")
-    if ($token) {
-        & $exe authtoken $token 2>$null
+    if (-not $token) {
+        Write-Log "cpolar installed; put CPOLAR_AUTHTOKEN in .env to open the tunnel"
+        return
     }
+    & $exe authtoken $token 2>$null
     $running = Get-Process -Name "cpolar" -ErrorAction SilentlyContinue
     if ($running) {
         Write-Log ("cpolar already running pid " + ($running.Id -join ","))
@@ -214,7 +217,7 @@ function Start-CpolarDetached {
     }
     $out = Join-Path $env:USERPROFILE "coffeebar-cpolar.log"
     $err = Join-Path $env:USERPROFILE "coffeebar-cpolar.err.log"
-    Start-Process -FilePath $exe -ArgumentList @("http", "8000", "--log=stdout") -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
+    Start-Process -FilePath $exe -ArgumentList @("http", "8000", "-log=stdout", "-inspect-addr=127.0.0.1:4040") -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
     Start-Sleep -Seconds 3
     if (Get-Process -Name "cpolar" -ErrorAction SilentlyContinue) {
         Write-Log "cpolar started in background"
