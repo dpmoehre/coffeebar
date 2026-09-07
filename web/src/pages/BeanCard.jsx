@@ -242,30 +242,6 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         </Panel>
 
         <Panel>
-          <div className="serif text-lg">杯测雷达</div>
-          <Radar scores={bean.scores} />
-          {scoreFreshnessLine(bean.scores) && (
-            <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
-          )}
-          {bean.scores?.comment && (
-            <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
-              {bean.scores.comment}
-            </p>
-          )}
-          {(bean.score_log || []).length > 1 && (
-            <div className="mt-4 space-y-1.5">
-              {(bean.score_log || []).map((s) => (
-                <div key={s.id} className="flex flex-wrap justify-between gap-2 text-[13px] text-muted">
-                  <span>
-                    {s.at?.slice(0, 10)}
-                    {s.lot_seq ? ` · 第 ${s.lot_seq} 袋` : ""}
-                    {s.overall != null ? ` · 总体 ${s.overall}` : ""}
-                  </span>
-                  <span className="text-amber">{scoreFreshnessLine(s) || "没填烘焙日"}</span>
-                </div>
-              ))}
-            </div>
-          )}
           <ScoreForm bean={bean} onDone={load} toast={toast} oops={oops} />
         </Panel>
       </div>
@@ -555,6 +531,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
 function ScoreForm({ bean, onDone, toast, oops }) {
   const lots = bean.lots || [];
   const current = lots.find((l) => !l.closed_at) || lots[0];
+  const [open, setOpen] = useState(false);
   const [lotId, setLotId] = useState(current?.id ?? "");
   const [roastedOn, setRoastedOn] = useState(current?.roasted_on || "");
   const [form, setForm] = useState(() => blankScore());
@@ -564,6 +541,13 @@ function ScoreForm({ bean, onDone, toast, oops }) {
     const lot = (bean.lots || []).find((l) => l.id === lotId);
     setRoastedOn(lot?.roasted_on || "");
   }, [lotId, bean.id]);
+
+  const setDim = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+
+  const close = () => {
+    setOpen(false);
+    setForm(blankScore());
+  };
 
   const save = async () => {
     const payload = { comment: form.comment || undefined, roasted_on: roastedOn || null };
@@ -575,11 +559,12 @@ function ScoreForm({ bean, onDone, toast, oops }) {
         filled = true;
       }
     }
-    if (!filled) return oops("先打一个分，或写一句");
+    if (!filled) return oops("先在雷达上点一个分，或写一句");
     setBusy(true);
     try {
       await api.addScore(bean.id, payload);
       setForm(blankScore());
+      setOpen(false);
       toast("杯测记下了");
       onDone();
     } catch (e) {
@@ -590,55 +575,91 @@ function ScoreForm({ bean, onDone, toast, oops }) {
   };
 
   return (
-    <div className="mt-5 border-t border-line pt-4">
-      <div className="serif text-base">新打一杯</div>
-      <p className="mt-1 mb-0 text-[13px] text-muted">选袋、八维、评语。烘焙日有就带出，可改；袋上还空着会写回这袋。</p>
-      {lots.length > 0 && (
-        <div className="mt-3 space-y-2">
-          {lots.map((l) => (
-            <button
-              key={l.id}
-              type="button"
-              onClick={() => setLotId(l.id)}
-              className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-[13px] transition ${
-                l.id === lotId ? "border-amber bg-amber/10" : "border-line hover:border-[#6b5438]"
-              }`}
-            >
+    <div>
+      <div className="serif text-lg">{open ? "新打一杯" : "杯测雷达"}</div>
+      {open ? (
+        <p className="mt-1 mb-0 text-[13px] text-muted">在图上点或拖一条轴。格子可以收着不用。</p>
+      ) : null}
+      <Radar
+        scores={open ? form : bean.scores}
+        editable={open}
+        onChange={setDim}
+      />
+      {!open && scoreFreshnessLine(bean.scores) && (
+        <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
+      )}
+      {!open && bean.scores?.comment && (
+        <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">{bean.scores.comment}</p>
+      )}
+      {!open && (bean.score_log || []).length > 1 && (
+        <div className="mt-4 space-y-1.5">
+          {(bean.score_log || []).map((s) => (
+            <div key={s.id} className="flex flex-wrap justify-between gap-2 text-[13px] text-muted">
               <span>
-                第 {l.seq} 袋 · {l.closed_at ? "已关袋" : l.opened_on ? "在喝这袋" : "未开封"}
-                {l.roasted_on ? ` · 烘于 ${l.roasted_on}` : ""}
+                {s.at?.slice(0, 10)}
+                {s.lot_seq ? ` · 第 ${s.lot_seq} 袋` : ""}
+                {s.overall != null ? ` · 总体 ${s.overall}` : ""}
               </span>
-            </button>
+              <span className="text-amber">{scoreFreshnessLine(s) || "没填烘焙日"}</span>
+            </div>
           ))}
         </div>
       )}
-      <div className="mt-3">
-        <Field label="烘焙日" hint="袋上印的 Roast Date，可空">
-          <Input type="date" value={roastedOn} onChange={(e) => setRoastedOn(e.target.value)} />
-        </Field>
-      </div>
-      <div className="mt-3">
-        <ScorePick
-          dims={SCORE_DIMS}
-          values={form}
-          onChange={(k, v) => setForm({ ...form, [k]: v })}
-        />
-        <p className="mt-2 mb-0 text-xs text-muted">1–10，点到几就是几。再点一下取消。</p>
-      </div>
-      <div className="mt-3">
-        <Field label="一句评语">
-          <Input
-            value={form.comment}
-            onChange={(e) => setForm({ ...form, comment: e.target.value })}
-            placeholder="明亮的柠檬、尾段有可可…"
-          />
-        </Field>
-      </div>
-      <div className="mt-3">
-        <Btn onClick={save} disabled={busy}>
-          记下这杯
-        </Btn>
-      </div>
+      {!open ? (
+        <div className="mt-4">
+          <Btn onClick={() => setOpen(true)}>新打一杯</Btn>
+        </div>
+      ) : (
+        <div className="mt-3">
+          {lots.length > 0 && (
+            <div className="space-y-2">
+              {lots.map((l) => (
+                <button
+                  key={l.id}
+                  type="button"
+                  onClick={() => setLotId(l.id)}
+                  className={`flex w-full items-center gap-3 rounded-xl border px-3 py-2 text-left text-[13px] transition ${
+                    l.id === lotId ? "border-amber bg-amber/10" : "border-line hover:border-[#6b5438]"
+                  }`}
+                >
+                  <span>
+                    第 {l.seq} 袋 · {l.closed_at ? "已关袋" : l.opened_on ? "在喝这袋" : "未开封"}
+                    {l.roasted_on ? ` · 烘于 ${l.roasted_on}` : ""}
+                  </span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="mt-3">
+            <Field label="烘焙日" hint="袋上印的 Roast Date，可空">
+              <Input type="date" value={roastedOn} onChange={(e) => setRoastedOn(e.target.value)} />
+            </Field>
+          </div>
+          <details className="mt-3">
+            <summary className="cursor-pointer text-[13px] text-muted">用格子打分</summary>
+            <div className="mt-2">
+              <ScorePick dims={SCORE_DIMS} values={form} onChange={setDim} />
+            </div>
+          </details>
+          <div className="mt-3">
+            <Field label="一句评语">
+              <Input
+                value={form.comment}
+                onChange={(e) => setForm({ ...form, comment: e.target.value })}
+                placeholder="明亮的柠檬、尾段有可可…"
+              />
+            </Field>
+          </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Btn onClick={save} disabled={busy}>
+              记下这杯
+            </Btn>
+            <Btn variant="ghost" onClick={close} disabled={busy}>
+              取消
+            </Btn>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

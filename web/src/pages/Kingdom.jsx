@@ -346,11 +346,18 @@ function ScoreForm({ bean, onDone, toast, oops }) {
   return (
     <Panel className="mt-5">
       <div className="serif text-lg">{bean.mine ? "改我的杯测" : "我也评一杯"}</div>
-      <p className="mt-1 mb-0 text-[13px] text-muted">一人一豆一条，可改。分 1–10，可空；至少打一个分或写一句。</p>
-      <div className="mt-4">
-        <ScorePick dims={DIMS} values={form} onChange={(k, v) => setForm({ ...form, [k]: v })} />
-        <p className="mt-2 mb-0 text-xs text-muted">1–10，点到几就是几。再点一下取消。</p>
-      </div>
+      <p className="mt-1 mb-0 text-[13px] text-muted">在雷达上点或拖一条轴。格子可以收着。一人一豆一条，可改。</p>
+      <Radar
+        scores={form}
+        editable
+        onChange={(k, v) => setForm((f) => ({ ...f, [k]: v }))}
+      />
+      <details className="mt-2">
+        <summary className="cursor-pointer text-[13px] text-muted">用格子打分</summary>
+        <div className="mt-2">
+          <ScorePick dims={DIMS} values={form} onChange={(k, v) => setForm((f) => ({ ...f, [k]: v }))} />
+        </div>
+      </details>
       <div className="mt-3">
         <Field label="一句话评价">
           <Input
