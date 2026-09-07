@@ -206,6 +206,25 @@ function Write-CpolarUrl {
     Write-Log "cpolar running; public url not read yet"
 }
 
+function Get-CpolarHostname {
+    $h = [Environment]::GetEnvironmentVariable("CPOLAR_HOSTNAME", "Process")
+    if ($h) { return $h.Trim() }
+    return "coffeebar.nas.cpolar.cn"
+}
+
+function Test-CpolarOnHost([string]$HostName) {
+    $log = Join-Path $env:USERPROFILE "coffeebar-cpolar.log"
+    if (Test-Path $log) {
+        $pat = "Tunnel established at https://{0}" -f [regex]::Escape($HostName)
+        if (Select-String -Path $log -Pattern $pat -Quiet) { return $true }
+    }
+    if (Test-Path $UrlFile) {
+        $cur = (Get-Content $UrlFile -Raw -ErrorAction SilentlyContinue)
+        if ($cur -and $cur.Contains($HostName)) { return $true }
+    }
+    return $false
+}
+
 function Start-CpolarDetached {
     Import-DotEnv
     $exe = Find-Cpolar
@@ -219,20 +238,39 @@ function Start-CpolarDetached {
         return
     }
     & $exe authtoken $token 2>$null
+    $hostName = Get-CpolarHostname
+    $wantUrl = "https://{0}" -f $hostName
     $running = Get-Process -Name "cpolar" -ErrorAction SilentlyContinue
-    if ($running) {
-        Write-Log ("cpolar already running pid " + ($running.Id -join ","))
-        Write-CpolarUrl
+    if ($running -and (Test-CpolarOnHost $hostName)) {
+        Write-Log ("cpolar already running pid " + ($running.Id -join ",") + " on " + $hostName)
+        Set-Content -Path $UrlFile -Value $wantUrl -Encoding utf8
         return
+    }
+    if ($running) {
+        Write-Log ("restarting cpolar onto " + $hostName)
+        Stop-Process -Name "cpolar" -Force -ErrorAction SilentlyContinue
+        Start-Sleep -Seconds 1
     }
     $out = Join-Path $env:USERPROFILE "coffeebar-cpolar.log"
     $err = Join-Path $env:USERPROFILE "coffeebar-cpolar.err.log"
-    Start-Process -FilePath $exe -ArgumentList @("http", "8000", "-log=stdout", "-inspect-addr=127.0.0.1:4040") -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
-    Start-Sleep -Seconds 3
+    Set-Content -Path $out -Value "" -Encoding utf8
+    Set-Content -Path $err -Value "" -Encoding utf8
+    $sub = [Environment]::GetEnvironmentVariable("CPOLAR_SUBDOMAIN", "Process")
+    if (-not $sub) {
+        if ($hostName -match "^([^.]+)\.") { $sub = $Matches[1] }
+        else { $sub = $hostName }
+    }
+    Start-Process -FilePath $exe -ArgumentList @("http", "8000", "-subdomain=$sub", "-log=stdout", "-inspect-addr=127.0.0.1:4040") -WindowStyle Hidden -RedirectStandardOutput $out -RedirectStandardError $err
+    Start-Sleep -Seconds 6
     if (Get-Process -Name "cpolar" -ErrorAction SilentlyContinue) {
         Write-Log "cpolar started in background"
-        Start-Sleep -Seconds 2
-        Write-CpolarUrl
+        Start-Sleep -Seconds 3
+        if (Test-CpolarOnHost $hostName) {
+            Set-Content -Path $UrlFile -Value $wantUrl -Encoding utf8
+            Write-Log ("cpolar url " + $wantUrl)
+        } else {
+            Write-CpolarUrl
+        }
     } else {
         Write-Log "cpolar failed; set CPOLAR_AUTHTOKEN in .env"
     }
