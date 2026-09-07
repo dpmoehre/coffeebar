@@ -20,6 +20,41 @@ export function Panel({ className = "", children }) {
   );
 }
 
+export function ScorePick({ dims, values, onChange }) {
+  return (
+    <div className="space-y-2.5">
+      {dims.map(([k, label]) => {
+        const raw = values[k];
+        const n = raw === "" || raw == null ? 0 : Number(raw);
+        return (
+          <div key={k} className="flex items-center gap-2">
+            <span className="w-10 shrink-0 text-[13px] text-muted">{label}</span>
+            <div className="flex min-w-0 flex-1 gap-0.5">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((v) => {
+                const on = n >= v;
+                return (
+                  <button
+                    key={v}
+                    type="button"
+                    title={`${label} ${v}`}
+                    aria-pressed={n === v}
+                    onClick={() => onChange(k, n === v ? "" : v)}
+                    className={`h-7 min-w-0 flex-1 rounded-md text-[11px] font-semibold transition ${
+                      on ? "bg-amber text-[#1a120a]" : "bg-chip text-muted hover:bg-line"
+                    }`}
+                  >
+                    {v}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 export function Chip({ on, className = "", ...rest }) {
   return (
     <button

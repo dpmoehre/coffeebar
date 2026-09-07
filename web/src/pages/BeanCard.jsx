@@ -8,7 +8,7 @@ import Photos from "../components/Photos.jsx";
 import Radar from "../components/Radar.jsx";
 import { SCORE_DIMS, freshnessLine, scoreFreshnessLine } from "../freshness.js";
 import { Plus, Trash, Undo } from "../icons.jsx";
-import { Bar, Btn, Chip, Field, Input, Modal, Panel, Select, g, money } from "../ui.jsx";
+import { Bar, Btn, Chip, Field, Input, Modal, Panel, ScorePick, Select, g, money } from "../ui.jsx";
 
 export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
   const [bean, setBean] = useState(null);
@@ -617,19 +617,13 @@ function ScoreForm({ bean, onDone, toast, oops }) {
           <Input type="date" value={roastedOn} onChange={(e) => setRoastedOn(e.target.value)} />
         </Field>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {SCORE_DIMS.map(([k, label]) => (
-          <Field key={k} label={label}>
-            <Input
-              type="number"
-              min="1"
-              max="10"
-              step="0.5"
-              value={form[k]}
-              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-            />
-          </Field>
-        ))}
+      <div className="mt-3">
+        <ScorePick
+          dims={SCORE_DIMS}
+          values={form}
+          onChange={(k, v) => setForm({ ...form, [k]: v })}
+        />
+        <p className="mt-2 mb-0 text-xs text-muted">1–10，点到几就是几。再点一下取消。</p>
       </div>
       <div className="mt-3">
         <Field label="一句评语">

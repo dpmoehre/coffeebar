@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-07",
+    title: "杯测打分改成点一下",
+    notes: [
+      "新打一杯那八个空格改成 1 到 10 的格子，点到几就是几，不用再调出键盘。",
+      "点错了再点一下就取消。王国里评一杯也这样。",
+    ],
+  },
+  {
+    date: "2026-09-07",
     title: "豆卡上库存那一块不再空一截",
     notes: [
       "打开豆卡时，左边库存不再被右边杯测拉得一样高，克数和袋子写完就收住。",

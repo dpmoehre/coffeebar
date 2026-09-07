@@ -6,7 +6,7 @@ import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
 import { KingdomGearCard, KingdomGearList } from "../components/KingdomGear.jsx";
-import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
+import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, ScorePick, coverSrc } from "../ui.jsx";
 
 const DIMS = [
   ["dry", "干香"],
@@ -347,19 +347,9 @@ function ScoreForm({ bean, onDone, toast, oops }) {
     <Panel className="mt-5">
       <div className="serif text-lg">{bean.mine ? "改我的杯测" : "我也评一杯"}</div>
       <p className="mt-1 mb-0 text-[13px] text-muted">一人一豆一条，可改。分 1–10，可空；至少打一个分或写一句。</p>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {DIMS.map(([k, label]) => (
-          <Field key={k} label={label}>
-            <Input
-              type="number"
-              min="1"
-              max="10"
-              step="0.5"
-              value={form[k]}
-              onChange={(e) => setForm({ ...form, [k]: e.target.value })}
-            />
-          </Field>
-        ))}
+      <div className="mt-4">
+        <ScorePick dims={DIMS} values={form} onChange={(k, v) => setForm({ ...form, [k]: v })} />
+        <p className="mt-2 mb-0 text-xs text-muted">1–10，点到几就是几。再点一下取消。</p>
       </div>
       <div className="mt-3">
         <Field label="一句话评价">
