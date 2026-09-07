@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-07",
+    title: "杯测直接在雷达上打",
+    notes: [
+      "点「新打一杯」之后，在雷达上点或拖一条轴就是 1 到 10，不用先摊开八排格子。",
+      "格子还在，点「用格子打分」才展开。看旧分时只留一张雷达。",
+    ],
+  },
+  {
+    date: "2026-09-07",
     title: "杯测打分改成点一下",
     notes: [
       "新打一杯那八个空格改成 1 到 10 的格子，点到几就是几，不用再调出键盘。",
