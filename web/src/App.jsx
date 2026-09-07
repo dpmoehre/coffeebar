@@ -579,7 +579,12 @@ export default function App() {
           <BeanMap focusId={mapFocus} onOpen={openBean} toast={toast} oops={oops} />
         )}
         {page === "people" && (
-          <PeoplePage toast={toast} oops={oops} onOpenCalendar={openCalendar} />
+          <PeoplePage
+            toast={toast}
+            oops={oops}
+            onOpenCalendar={openCalendar}
+            onOpenBean={openBean}
+          />
         )}
         {page === "updates" && <Updates />}
         {page === "admin" && me?.admin && <Admin toast={toast} oops={oops} />}

@@ -5,8 +5,8 @@ import pytest
 from app import stats, store
 
 
-def make_bean(conn, name="西达摩", nominal=200, price=128.0):
-    bean_id = store.create_bean(conn, {"name": name})
+def make_bean(conn, name="西达摩", nominal=200, price=128.0, **bean):
+    bean_id = store.create_bean(conn, {"name": name, **bean})
     lot_id = store.add_lot(conn, bean_id, {"nominal_g": nominal, "price": price})
     return bean_id, lot_id
 
@@ -266,6 +266,44 @@ def test_restock_flags_not_enough_for_one_cup(conn):
     assert len(items) == 1
     assert "不够一杯了" in items[0]["reasons"]
     assert items[0]["cups_left"] == 0
+
+
+def test_suggest_null_under_three_cups(conn):
+    """不足 3 杯不给推荐。"""
+    _, lot_id = make_bean(conn, roast="浅烘")
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    pid = store.ensure_person(conn, "戚浩辰")
+    p = stats.person_profile(conn, pid)
+    assert p["enough_sample"] is False
+    assert p["suggest"] is None
+
+
+def test_suggest_empty_stock_has_note_no_primary(conn):
+    """样本够但只有历史豆：有说明、无主推。"""
+    _, lot_id = make_bean(conn, name="喝完的浅烘", nominal=200, roast="浅烘")
+    for _ in range(3):
+        store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    store.close_lot(conn, lot_id, "喝完了")
+    pid = store.ensure_person(conn, "戚浩辰")
+    p = stats.person_profile(conn, pid)
+    assert p["enough_sample"] is True
+    assert p["suggest"]["primary"] is None
+    assert p["suggest"]["alternates"] == []
+    assert "分不出先后" in p["suggest"]["note"]
+
+
+def test_suggest_recent_bean_not_primary(conn):
+    """刚喝过的那支不当主推。"""
+    _, a_lot = make_bean(conn, name="常喝浅烘", nominal=500, roast="浅烘", origin="埃塞俄比亚")
+    b_id, _ = make_bean(conn, name="备选浅烘", nominal=200, roast="浅烘", origin="埃塞俄比亚")
+    for _ in range(3):
+        store.record_brew(conn, {"lot_id": a_lot, "amount_g": 15, "person": "戚浩辰"})
+    pid = store.ensure_person(conn, "戚浩辰")
+    p = stats.person_profile(conn, pid)
+    assert p["suggest"]["primary"]["bean_id"] == b_id
+    assert p["suggest"]["primary"]["name"] == "备选浅烘"
+    assert p["suggest"]["primary"]["reason"]
 
 
 def test_restock_flags_low_spirit(conn):

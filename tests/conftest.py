@@ -38,7 +38,7 @@ def client(monkeypatch):
     from app import db as db_mod
 
     importlib.reload(db_mod)
-    from app import freshness, store, stats, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, kingdom_gear, today, people, deps, main as main_mod
+    from app import freshness, store, stats, suggest, locks, photos, places, spirits, ledger, auth, menu, admin, brew, gear, kingdom, kingdom_gear, today, people, deps, main as main_mod
     from app.routers import (
         admin_http,
         auth as auth_rt,
@@ -62,6 +62,7 @@ def client(monkeypatch):
     importlib.reload(store)
     importlib.reload(spirits)
     importlib.reload(menu)
+    importlib.reload(suggest)
     importlib.reload(stats)
     importlib.reload(ledger)
     importlib.reload(locks)

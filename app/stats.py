@@ -10,6 +10,7 @@ from __future__ import annotations
 import sqlite3
 
 from . import db, photos, store
+from . import suggest as suggest_mod
 
 FALLBACK_DOSE = 15.0   # 一杯都还没冲过时的兜底
 BEAN_WINDOW = 20       # 这支豆看最近多少杯
@@ -440,6 +441,13 @@ def person_profile(
         args,
     ).fetchone()
 
+    taste_out = {
+        "acidity": round(taste[0], 1) if taste[0] else None,
+        "sweetness": round(taste[1], 1) if taste[1] else None,
+        "dry": round(taste[2], 1) if taste[2] else None,
+    }
+    enough = cups >= 3
+    owner = person["owner_id"] if owner_id is None else owner_id
     return {
         "id": person_id,
         "name": person["name"],
@@ -449,10 +457,13 @@ def person_profile(
         "spent": round(spent, 2),
         "avg_dose_g": round(beans_g / cups, 1) if cups else None,
         "top_beans": top,
-        "taste": {
-            "acidity": round(taste[0], 1) if taste[0] else None,
-            "sweetness": round(taste[1], 1) if taste[1] else None,
-            "dry": round(taste[2], 1) if taste[2] else None,
-        },
-        "enough_sample": cups >= 3,
+        "taste": taste_out,
+        "enough_sample": enough,
+        "suggest": suggest_mod.for_person(
+            conn,
+            person_id,
+            taste=taste_out,
+            enough_sample=enough,
+            owner_id=owner,
+        ),
     }

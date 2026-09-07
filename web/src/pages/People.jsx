@@ -3,9 +3,10 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { Plus } from "../icons.jsx";
-import { Bar, Btn, Chip, Empty, Field, Input, Modal, Panel, g, money } from "../ui.jsx";
+import { PHASE_LABEL } from "../freshness.js";
+import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Panel, coverSrc, g, money } from "../ui.jsx";
 
-export default function People({ toast, oops, onOpenCalendar }) {
+export default function People({ toast, oops, onOpenCalendar, onOpenBean }) {
   const [people, setPeople] = useState([]);
   const [pickedId, setPicked] = useState(null);
   const [profile, setProfile] = useState(null);
@@ -89,7 +90,7 @@ export default function People({ toast, oops, onOpenCalendar }) {
           {visible.length === 0 && <p className="mt-4 text-muted">没有对得上的人。</p>}
 
           {profile && visible.some((p) => p.id === pickedId) && (
-            <Profile p={profile} onOpenCalendar={onOpenCalendar} />
+            <Profile p={profile} onOpenCalendar={onOpenCalendar} onOpenBean={onOpenBean} />
           )}
         </>
       )}
@@ -106,7 +107,7 @@ export default function People({ toast, oops, onOpenCalendar }) {
   );
 }
 
-function Profile({ p, onOpenCalendar }) {
+function Profile({ p, onOpenCalendar, onOpenBean }) {
   const t = p.taste || {};
   return (
     <>
@@ -122,6 +123,8 @@ function Profile({ p, onOpenCalendar }) {
           </Btn>
         )}
       </div>
+
+      <NextCup suggest={p.suggest} onOpenBean={onOpenBean} />
 
       <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi label="喝掉的豆" value={Math.round(p.beans_g)} unit="g" hint={`${p.cups} 杯`} />
@@ -213,6 +216,54 @@ function Profile({ p, onOpenCalendar }) {
         </div>
       </Panel>
     </>
+  );
+}
+
+function NextCup({ suggest, onOpenBean }) {
+  if (!suggest) return null;
+  const primary = suggest.primary;
+  const alternates = suggest.alternates || [];
+  return (
+    <Panel className="mb-6">
+      <div className="serif text-lg">下一杯</div>
+      <p className="mt-1 mb-3 text-xs text-muted">从在库豆子里估的，点进去只打开豆卡，不会替你记一杯。</p>
+      {!primary && suggest.note && <p className="m-0 text-muted">{suggest.note}</p>}
+      {primary && (
+        <button
+          type="button"
+          onClick={() => onOpenBean?.(primary.bean_id)}
+          className="flex w-full items-stretch gap-3 rounded-2xl border border-line bg-bg p-3 text-left transition hover:border-amber"
+        >
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl bg-panel">
+            {primary.cover ? (
+              <Cover src={coverSrc(primary.cover)} className="h-20 w-20" />
+            ) : (
+              <div className="flex h-full items-center justify-center text-xs text-muted">无封面</div>
+            )}
+          </div>
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-baseline gap-2">
+              <span className="serif text-lg leading-tight">{primary.name}</span>
+              {primary.phase && primary.phase !== "unknown" && (
+                <span className="text-xs text-amber">{PHASE_LABEL[primary.phase] || ""}</span>
+              )}
+            </div>
+            <p className="mt-1 mb-0 text-sm text-muted">{primary.reason}</p>
+          </div>
+        </button>
+      )}
+      {alternates.map((a) => (
+        <button
+          key={a.bean_id}
+          type="button"
+          onClick={() => onOpenBean?.(a.bean_id)}
+          className="mt-2 block w-full border-0 bg-transparent p-0 text-left text-sm text-muted underline-offset-2 hover:text-amber hover:underline"
+        >
+          {a.name}
+          {a.reason ? ` · ${a.reason.replace(/。$/, "")}` : ""}
+        </button>
+      ))}
+    </Panel>
   );
 }
 

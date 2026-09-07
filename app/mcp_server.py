@@ -649,7 +649,7 @@ def delete_person(person_id: int) -> Any:
 
 @mcp.tool()
 def get_profile(person_id: int) -> Any:
-    """看这个人的画像：口味、常喝、花了多少钱。"""
+    """看这个人的画像：口味、常喝、花了多少钱。样本够时带 suggest，下一杯只打开豆卡、不代记消耗。"""
     return _call(client().get_profile, person_id)
 
 

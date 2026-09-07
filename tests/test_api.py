@@ -106,6 +106,20 @@ def test_people_manage(client):
     profile = client.get(f"/api/people/{pid}/profile").json()
     assert profile["cups"] == 1, "停用后画像还在"
     assert profile["enough_sample"] is False
+    assert profile["suggest"] is None
+
+
+def test_profile_suggests_other_stock_bean(client):
+    drunk = new_bean(client, name="常喝浅烘", nominal=500)
+    other = new_bean(client, name="备选浅烘", nominal=200)
+    lot = drunk["lots"][0]["id"]
+    for _ in range(3):
+        assert client.post("/api/brews", json={"lot_id": lot, "amount_g": 15, "person": "戚浩辰"}).status_code == 201
+    pid = client.get("/api/people").json()["people"][0]["id"]
+    profile = client.get(f"/api/people/{pid}/profile").json()
+    assert profile["enough_sample"] is True
+    assert profile["suggest"]["primary"]["bean_id"] == other["id"]
+    assert profile["suggest"]["primary"]["reason"]
 
 
 def test_delete_person_via_api(client):

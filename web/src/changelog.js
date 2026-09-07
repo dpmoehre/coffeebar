@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-07",
+    title: "画像会指出下一杯",
+    notes: [
+      "一个人喝满三杯之后，画像上会出现「下一杯」。",
+      "点推荐只打开那张豆卡，不会替你记一杯，也不会先填好谁喝的。",
+    ],
+  },
+  {
+    date: "2026-09-07",
     title: "小主机会自己检查新版本",
     notes: [
       "不用一直开着 Cursor。这台机器每隔一会儿会看一眼有没有新版本，有就自己拉下来并重新打开网页。",
