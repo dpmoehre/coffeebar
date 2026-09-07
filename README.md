@@ -95,6 +95,7 @@ MCP 只连本机（或公司内网）上的 coffeebar，口令与数据不进 Gi
 2. **日常用**：双击 [`scripts/start.bat`](scripts/start.bat)。自动开浏览器，同时打印内网地址，手机连同一个 Wi-Fi 输那个地址就能用。关掉窗口就停。打开后先注册/登录（密码输错可以试 5 次，满了等一分钟）。空库进门会有一支耶加雪菲。这台机器上还有没主人的豆和酒时，点注册之后才会问你要不要接手，不会悄悄领走。登录页可以忘记密码；本机没配邮箱时，重设/验证链接会直接出现在页面上。上云再配 `COFFEEBAR_SMTP_*`，并在 HTTPS 下打开 `COFFEEBAR_COOKIE_SECURE=1`。侧栏可以改密码（这台继续登着，别的设备会被踢）和注销账号；接手过库存的号注销前必须先下载备份。不要拿真库存号去试注销。
 3. **备份**：小主机双击 [`scripts/backup.bat`](scripts/backup.bat)；Mac / Linux 跑 `bash scripts/backup.sh`。服务开着也能安全导出。默认写用户目录下的 `coffeebar-backup`；设 `COFFEEBAR_BACKUP_DIR` 可指到第二块盘。还原用 [`scripts/restore.bat`](scripts/restore.bat) / [`scripts/restore.sh`](scripts/restore.sh)，演练请加 `--dest` 指到临时目录，不要直接盖真库存。定时示例见 [`scripts/backup-schedule.md`](scripts/backup-schedule.md)。
 4. **上云**：不能用 GitHub Pages。用 Render 跑 Docker，步骤见 [docs/009-🚧-上云Render.md](docs/009-🚧-上云Render.md)。公网请设邀请码；第一个用邀请码注册的人会接手迁上去的豆和酒。切过去之后小主机不要再开 `start.bat`。
+5. **小主机自动更新 / 外出**：登记一次 [`scripts/host-update.ps1`](scripts/host-update.ps1) `-RegisterTasks`。之后每 15 分钟自己看 GitHub，有新版本就拉下来并后台重启网页，不占 Cursor 窗口。外出用 cpolar 时把 `CPOLAR_AUTHTOKEN` 写进 `.env`（不入库），公网地址在 `%USERPROFILE%\coffeebar-cpolar-url.txt`。说明见 [docs/022-🚧](docs/022-🚧-小主机外网与自动更新.md)。
 
 想用 `http://coffee` 这种短地址而不是带端口的，再加 Caddy：`caddy run --config scripts/Caddyfile`。
 

@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-07",
+    title: "小主机会自己检查新版本",
+    notes: [
+      "不用一直开着 Cursor。这台机器每隔一会儿会看一眼有没有新版本，有就自己拉下来并重新打开网页。",
+      "外出要用外网时，把 cpolar 的口令写在本机配置里，地址会记在你的用户目录。",
+    ],
+  },
+  {
+    date: "2026-09-07",
     title: "杯测直接在雷达上打",
     notes: [
       "点「新打一杯」之后，在雷达上点或拖一条轴就是 1 到 10，不用先摊开八排格子。",

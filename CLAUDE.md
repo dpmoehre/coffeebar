@@ -67,7 +67,7 @@ app/
 - **后端**：Python + FastAPI，用 **uv**（`uv sync` / `uv run`），Python 版本锁定于 `.python-version`。
 - **前端**：Vite + React + Tailwind + anime.js，用 **npm**；Node 版本范围在脚手架落地时写明。
 - **数据**：SQLite + 本地 `data/photos/`；小主机运行数据与 cpolar token、现场口令 **不入库**，用环境变量或本地忽略文件注入。
-- **部署**：Windows 11 本机进程 + Caddy，默认不用 Docker Desktop。
+- **部署**：Windows 11 本机进程 + Caddy，默认不用 Docker Desktop。小主机可用计划任务每 15 分钟看 `origin/main`，能快进就拉并后台重启 uvicorn；cpolar 同样后台跑，不挂 Cursor 终端。`CPOLAR_AUTHTOKEN` 只写 `.env`。
 - 密钥、本机 `Temp`、`data/` **不入库**。
 
 ---
