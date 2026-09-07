@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { scoreFreshnessLine } from "../freshness.js";
-import { Btn, Chip, Cover, Empty, Input, Panel, Select, coverSrc, g, money, perG } from "../ui.jsx";
+import { Btn, Chip, Cover, DetailPhotos, Empty, Input, Panel, Select, coverSrc, g, money, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近公开" },
@@ -486,20 +486,7 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel>
           <div className="serif text-lg">照片</div>
-          {bean.photos?.length ? (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {bean.photos.map((p) => (
-                <img
-                  key={p.id}
-                  src={p.thumb || p.url}
-                  alt=""
-                  className="h-40 w-full rounded-xl object-cover"
-                />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 mb-0 text-sm text-muted">还没有包装或豆盘照片。</p>
-          )}
+          <DetailPhotos photos={bean.photos} empty="还没有包装或豆盘照片。" />
           {bean.tags?.length > 0 && (
             <div className="mt-4 flex flex-wrap gap-1.5">
               {bean.tags.map((t) => (
@@ -665,20 +652,7 @@ function PublicGear({ id, onBack, onOpenMineGear, onOpenKingdomGear, toast, oops
       ) : null}
       <Panel className="mt-6">
         <div className="serif text-lg">照片</div>
-        {item.photos?.length ? (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {item.photos.map((p) => (
-              <img
-                key={p.id}
-                src={p.thumb || p.url}
-                alt=""
-                className="h-40 w-full rounded-xl object-cover"
-              />
-            ))}
-          </div>
-        ) : (
-          <p className="mt-3 mb-0 text-sm text-muted">还没有照片。</p>
-        )}
+        <DetailPhotos photos={item.photos} />
       </Panel>
     </>
   );

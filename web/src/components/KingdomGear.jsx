@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
 import { Plus } from "../icons.jsx";
-import { Btn, Chip, Cover, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
+import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
 
 export function KingdomGearList({ onOpen, oops }) {
   const [saved, setSaved] = useState(false);
@@ -175,15 +175,7 @@ export function KingdomGearCard({ id, onBack, onOpenPlaza, onOpenMineGear, toast
 
       <Panel className="mt-6">
         <div className="serif text-lg">照片</div>
-        {item.photos?.length ? (
-          <div className="mt-3 grid grid-cols-2 gap-2">
-            {item.photos.map((p) => (
-              <img key={p.id} src={p.thumb || p.url} alt="" className="h-40 w-full rounded-xl object-cover" />
-            ))}
-          </div>
-        ) : (
-          <p className="mt-3 mb-0 text-sm text-muted">还没有照片。</p>
-        )}
+        <DetailPhotos photos={item.photos} />
         {item.plaza?.length > 0 && onOpenPlaza && (
           <div className="mt-4">
             <div className="text-[13px] text-muted">广场上挂过来的件</div>

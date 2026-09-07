@@ -220,6 +220,25 @@ export function Cover({ src, className = "" }) {
   );
 }
 
+export function DetailPhotos({ photos, empty = "还没有照片。" }) {
+  if (!photos?.length) {
+    return <p className="mt-3 mb-0 text-sm text-muted">{empty}</p>;
+  }
+  const one = photos.length === 1;
+  return (
+    <div className={`mt-3 grid gap-3 ${one ? "grid-cols-1" : "grid-cols-2"}`}>
+      {photos.map((p) => (
+        <img
+          key={p.id}
+          src={p.thumb || p.url}
+          alt=""
+          className={`w-full rounded-xl object-cover ${one ? "aspect-[4/3] min-h-72" : "aspect-[4/3]"}`}
+        />
+      ))}
+    </div>
+  );
+}
+
 export const g = (n) => (n == null ? "—" : `${Math.round(n)} g`);
 export const ml = (n) => (n == null ? "—" : `${Math.round(n)} ml`);
 export const money = (n) => (n == null ? "—" : `¥${Number(n).toFixed(n < 10 ? 1 : 0)}`);

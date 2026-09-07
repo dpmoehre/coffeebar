@@ -6,7 +6,7 @@ import { recall, remember } from "../listCache.js";
 import Radar from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
 import { KingdomGearCard, KingdomGearList } from "../components/KingdomGear.jsx";
-import { Btn, Chip, Cover, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
+import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, coverSrc } from "../ui.jsx";
 
 const DIMS = [
   ["dry", "干香"],
@@ -230,15 +230,7 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
       <div className="mt-6 grid gap-4 lg:grid-cols-2">
         <Panel>
           <div className="serif text-lg">照片</div>
-          {bean.photos?.length ? (
-            <div className="mt-3 grid grid-cols-2 gap-2">
-              {bean.photos.map((p) => (
-                <img key={p.id} src={p.thumb || p.url} alt="" className="h-40 w-full rounded-xl object-cover" />
-              ))}
-            </div>
-          ) : (
-            <p className="mt-3 mb-0 text-sm text-muted">还没有照片。</p>
-          )}
+          <DetailPhotos photos={bean.photos} />
           {bean.cards?.length > 0 && onOpenPlaza && (
             <div className="mt-4">
               <div className="text-[13px] text-muted">
