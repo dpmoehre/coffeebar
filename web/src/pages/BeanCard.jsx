@@ -619,7 +619,7 @@ function ScoreForm({ bean, onDone, toast, oops }) {
           ))}
         </div>
       )}
-      {open ? (
+      {open && (
         <div className="mt-3">
           {lots.length > 0 && (
             <div className="space-y-2">
