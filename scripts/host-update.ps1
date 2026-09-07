@@ -193,6 +193,16 @@ function Write-CpolarUrl {
             }
         } catch { }
     }
+    $log = Join-Path $env:USERPROFILE "coffeebar-cpolar.log"
+    if (Test-Path $log) {
+        $hit = Select-String -Path $log -Pattern "Tunnel established at (https://\S+)" | Select-Object -Last 1
+        if ($hit) {
+            $url = $hit.Matches[0].Groups[1].Value.TrimEnd('"')
+            Set-Content -Path $UrlFile -Value $url -Encoding utf8
+            Write-Log ("cpolar url " + $url)
+            return
+        }
+    }
     Write-Log "cpolar running; public url not read yet"
 }
 
