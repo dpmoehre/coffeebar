@@ -205,6 +205,7 @@ export function Cover({ src, className = "" }) {
       style={{
         background:
           "radial-gradient(circle at 30% 40%, #5a3d28, transparent 42%), linear-gradient(135deg, #3a2618, #1a120e)",
+        overflow: "hidden",
       }}
     >
       {shown ? (
@@ -212,6 +213,7 @@ export function Cover({ src, className = "" }) {
           src={shown}
           alt=""
           className={`h-full w-full object-cover${animate ? " fade-in" : ""}`}
+          style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
       ) : null}
     </div>

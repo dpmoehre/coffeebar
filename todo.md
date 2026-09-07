@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-07
+
+- **搜狗豆库样式**：摊平 Tailwind `@layer`，图标和封面加行内兜底，避免旧内核只剩大加号、封面半边。见 [docs/008-🚧](docs/008-🚧-版本更新.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`node --test web/src/cssLayers.test.js web/src/changelog.test.js`。
+
 ## 2026-09-06
 
 - **地图缩小钉子不跑偏**：缩小时钉子跟着地图收；定点/滚轮用同一套 SVG 坐标；只有叠在一起的钉才散开。见 [docs/007-🚧](docs/007-🚧-豆子地图.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`node --test web/src/geo/spread.test.js web/src/geo/view.test.js`。

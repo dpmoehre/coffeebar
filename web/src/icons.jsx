@@ -1,6 +1,8 @@
 // 细线描边图标，跟静图 _Doc/2026-09-04-ui-样张/画像.png 一套。
 const base = {
   viewBox: "0 0 24 24",
+  width: 24,
+  height: 24,
   fill: "none",
   stroke: "currentColor",
   strokeWidth: 1.7,

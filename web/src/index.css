@@ -17,6 +17,22 @@
   --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
 }
 
+/* 不进 @layer：搜狗等旧内核丢掉 layered 主题时，底色和字色还在。 */
+:root {
+  --color-bg: #12100e;
+  --color-panel: #1c1814;
+  --color-line: #3a3228;
+  --color-chip: #2a231c;
+  --color-cream: #f3e6d0;
+  --color-muted: #9c8b74;
+  --color-amber: #c88d44;
+  --color-amber2: #e0a85a;
+  --color-warn: #c45c3e;
+  --font-serif: "Songti SC", "STSong", "Noto Serif SC", "Source Han Serif SC", serif;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", sans-serif;
+  --spacing: 0.25rem;
+}
+
 html {
   /* rem 跟这一档走。只写在 body 上时，标题仍按浏览器默认 16px 算，手机上会偏大。 */
   font-size: 15px;

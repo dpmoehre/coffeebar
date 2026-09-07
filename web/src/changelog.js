@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-07",
+    title: "搜狗打开豆库不再只剩大加号",
+    notes: [
+      "有人用搜狗打开，豆库会变成白底一个大加号，封面只露出左边一半、字也被切掉。",
+      "现在旧内核也能套上样式：加号回到按钮大小，封面铺满卡片。还是更推荐 Chrome、Edge 或 Safari。",
+    ],
+  },
+  {
     date: "2026-09-06",
     title: "地图缩小后钉子还在产地",
     notes: [
