@@ -21,6 +21,11 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-08",
+    title: "新打一杯挪到右上角",
+    notes: ["豆卡上看杯测时，按钮在标题右边，底下少占一行。"],
+  },
+  {
     date: "2026-09-07",
     title: "杯测雷达能看见均分",
     notes: [

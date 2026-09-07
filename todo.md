@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-08
+
+- **新打一杯在右上**：豆卡杯测标题和按钮同一行。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。
+
 ## 2026-09-07
 
 - **雷达叠均分**：多杯时一张图浅底均分、实线最新；王国叠大家的和我的。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_stats.py::test_average_scores_skips_empty_dims`；`node --test web/src/radarMath.test.js`。

@@ -576,7 +576,14 @@ function ScoreForm({ bean, onDone, toast, oops }) {
 
   return (
     <div>
-      <div className="serif text-lg">{open ? "新打一杯" : "杯测雷达"}</div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="serif text-lg">{open ? "新打一杯" : "杯测雷达"}</div>
+        {!open && (
+          <Btn className="shrink-0" onClick={() => setOpen(true)}>
+            新打一杯
+          </Btn>
+        )}
+      </div>
       {open ? (
         <p className="mt-1 mb-0 text-[13px] text-muted">在图上点或拖一条轴。格子可以收着不用。</p>
       ) : null}
@@ -612,11 +619,7 @@ function ScoreForm({ bean, onDone, toast, oops }) {
           ))}
         </div>
       )}
-      {!open ? (
-        <div className="mt-4">
-          <Btn onClick={() => setOpen(true)}>新打一杯</Btn>
-        </div>
-      ) : (
+      {open ? (
         <div className="mt-3">
           {lots.length > 0 && (
             <div className="space-y-2">
