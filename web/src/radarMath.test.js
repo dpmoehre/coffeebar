@@ -10,8 +10,14 @@ test("正上方是干香 10", () => {
   assert.deepEqual(pickScore(C, C - R, C, R), { i: 0, score: 10 });
 });
 
-test("正右是风味 10", () => {
-  assert.deepEqual(pickScore(C + R, C, C, R), { i: 1, score: 10 });
+test("正右是余韵 10（八维里风味在右上）", () => {
+  assert.deepEqual(pickScore(C + R, C, C, R), { i: 2, score: 10 });
+});
+
+test("右上 45 度是风味 10", () => {
+  const x = C + R * Math.SQRT1_2;
+  const y = C - R * Math.SQRT1_2;
+  assert.deepEqual(pickScore(x, y, C, R), { i: 1, score: 10 });
 });
 
 test("中心是 0", () => {
