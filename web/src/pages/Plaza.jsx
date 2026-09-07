@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
-import Radar from "../components/Radar.jsx";
+import { LayeredRadar } from "../components/Radar.jsx";
 import { scoreFreshnessLine } from "../freshness.js";
 import { Btn, Chip, Cover, DetailPhotos, Empty, Input, Panel, Select, coverSrc, g, money, perG } from "../ui.jsx";
 
@@ -162,7 +162,9 @@ function comparePlaza(a, b, sort) {
     if (!bo) return -1;
     return ao.localeCompare(bo, "zh");
   }
-  if (sort === "score") return cmpNum(a.scores?.overall, b.scores?.overall, true);
+  if (sort === "score") {
+    return cmpNum(a.score_avg?.overall ?? a.scores?.overall, b.score_avg?.overall ?? b.scores?.overall, true);
+  }
   return (b.updated_at || "").localeCompare(a.updated_at || "");
 }
 
@@ -503,7 +505,14 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
         <Panel>
           <div className="serif text-lg">这张卡主人的杯测</div>
           <p className="mt-1 mb-0 text-[13px] text-muted">只代表这袋的主人，不是王国里大家的分。</p>
-          <Radar scores={bean.scores} />
+          <LayeredRadar
+            base={bean.score_avg || bean.scores}
+            overlay={bean.scores}
+            layered={(bean.score_avg?.cups || 0) > 1}
+          />
+          {(bean.score_avg?.cups || 0) > 1 && (
+            <p className="mt-2 mb-0 text-[13px] text-muted">共 {bean.score_avg.cups} 杯的均分，实线是最新一杯。</p>
+          )}
           {scoreFreshnessLine(bean.scores) && (
             <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
           )}

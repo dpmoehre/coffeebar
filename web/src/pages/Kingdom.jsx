@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
-import Radar from "../components/Radar.jsx";
+import Radar, { LayeredRadar } from "../components/Radar.jsx";
 import { Plus } from "../icons.jsx";
 import { KingdomGearCard, KingdomGearList } from "../components/KingdomGear.jsx";
 import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, ScorePick, coverSrc } from "../ui.jsx";
@@ -251,7 +251,14 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
         </Panel>
         <Panel>
           <div className="serif text-lg">大家的平均</div>
-          <Radar scores={bean.avg} />
+          <p className="mt-1 mb-2 text-[13px] text-muted">浅底是大家，实线是你的。点芯片可只看一层。</p>
+          <LayeredRadar
+            base={bean.avg}
+            overlay={bean.mine}
+            baseLabel="大家的"
+            overlayLabel="我的"
+            layered={Boolean(bean.cups > 1 && bean.mine)}
+          />
         </Panel>
       </div>
 

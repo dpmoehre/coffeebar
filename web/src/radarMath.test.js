@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { pickScore } from "./radarMath.js";
+import { fmtScore, hasDims, pickScore } from "./radarMath.js";
 
 const C = 110;
 const R = 76;
@@ -30,4 +30,11 @@ test("干香轴一半是 5", () => {
 
 test("超出外圈仍是 10", () => {
   assert.equal(pickScore(C, C - R * 2, C, R).score, 10);
+});
+
+test("均分有一位小数，整数不带点", () => {
+  assert.equal(fmtScore(7), "7");
+  assert.equal(fmtScore(7.3), "7.3");
+  assert.equal(hasDims({ acidity: 7 }), true);
+  assert.equal(hasDims({ acidity: null }), false);
 });

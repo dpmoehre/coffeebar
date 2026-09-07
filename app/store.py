@@ -452,7 +452,9 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
             b["unit_cost"] = b["last_unit_cost"]
         del b["remaining_value"], b["priced_g"], b["last_unit_cost"]
         b["tags"] = bean_tags(conn, b["id"])
-        b["scores"] = latest_score(conn, b["id"])
+        log = list_scores(conn, b["id"])
+        b["scores"] = log[0] if log else None
+        b["score_avg"] = average_scores(log)
         out.append(_annotate_bean(b))
     _attach_list_freshness(conn, out)
     return out
@@ -543,6 +545,7 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     bean["unit_cost"] = unit_cost_of(bean["lots"])
     bean["score_log"] = list_scores(conn, bean_id, lot_seq={l["id"]: l["seq"] for l in bean["lots"]})
     bean["scores"] = bean["score_log"][0] if bean["score_log"] else None
+    bean["score_avg"] = average_scores(bean["score_log"])
     current = pick_current_lot(bean["lots"])
     bean["freshness"] = (
         current["freshness"] if current else freshness.of(None, bean.get("roast"))
@@ -642,11 +645,7 @@ def sort_public_cards(cards: list[dict], sort: str | None = "recent") -> list[di
                 return 0
             return -1 if ao < bo else 1
         if key == "score":
-            return _cmp_num(
-                (a.get("scores") or {}).get("overall"),
-                (b.get("scores") or {}).get("overall"),
-                True,
-            )
+            return _cmp_num(_overall_for_sort(a), _overall_for_sort(b), True)
         at, bt = a.get("updated_at") or "", b.get("updated_at") or ""
         if at == bt:
             return 0
@@ -667,6 +666,7 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
     if not bean or (bean.get("visibility") or "private") != "public":
         return None
     shots = photos.list_bean_photos(conn, bean_id)
+    log = list_scores(conn, bean_id)
     cloned_id = None
     if viewer_id:
         hit = conn.execute(
@@ -693,7 +693,8 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "places_verified_at": bean.get("places_verified_at"),
         "updated_at": bean.get("updated_at"),
         "tags": bean_tags(conn, bean_id),
-        "scores": _public_score(latest_score(conn, bean_id)),
+        "scores": _public_score(log[0]) if log else None,
+        "score_avg": average_scores(log),
         "places": places.list_places(conn, bean_id),
         "photos": shots,
         "cover": photos.cover(shots),
@@ -852,6 +853,40 @@ def latest_score(conn: sqlite3.Connection, bean_id: int) -> dict | None:
             (bean_id,),
         )
     )
+
+
+def average_scores(rows: list[dict] | None) -> dict | None:
+    """各维只平均有分的杯。没打的维不拿别杯凑。"""
+    if not rows:
+        return None
+    out = {}
+    keys = (
+        "dry",
+        "flavor",
+        "aftertaste",
+        "acidity",
+        "sweetness",
+        "body",
+        "balance",
+        "overall",
+    )
+    for key in keys:
+        vals = []
+        for row in rows:
+            v = row.get(key)
+            if v is None or v == "":
+                continue
+            vals.append(float(v))
+        out[key] = round(sum(vals) / len(vals), 1) if vals else None
+    out["cups"] = len(rows)
+    return out
+
+
+def _overall_for_sort(card: dict):
+    avg = card.get("score_avg") or {}
+    if avg.get("overall") is not None:
+        return avg["overall"]
+    return (card.get("scores") or {}).get("overall")
 
 
 def list_scores(

@@ -293,6 +293,22 @@ def test_suggest_empty_stock_has_note_no_primary(conn):
     assert "分不出先后" in p["suggest"]["note"]
 
 
+def test_average_scores_skips_empty_dims(conn):
+    """多杯均分：有分的维平均，没打的维不拿别杯凑。"""
+    bean_id, _ = make_bean(conn)
+    store.add_score(conn, bean_id, {"acidity": 8, "sweetness": 6, "overall": 7})
+    store.add_score(conn, bean_id, {"acidity": 6, "dry": 8, "overall": 8})
+    bean = store.get_bean(conn, bean_id)
+    avg = bean["score_avg"]
+    assert avg["cups"] == 2
+    assert avg["acidity"] == 7.0
+    assert avg["sweetness"] == 6.0
+    assert avg["dry"] == 8.0
+    assert avg["flavor"] is None
+    assert avg["overall"] == 7.5
+    assert bean["scores"]["overall"] == 8
+
+
 def test_suggest_recent_bean_not_primary(conn):
     """刚喝过的那支不当主推。"""
     _, a_lot = make_bean(conn, name="常喝浅烘", nominal=500, roast="浅烘", origin="埃塞俄比亚")

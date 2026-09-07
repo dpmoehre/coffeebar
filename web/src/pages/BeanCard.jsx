@@ -5,7 +5,7 @@ import { api } from "../api.js";
 import BrewPlan from "../components/BrewPlan.jsx";
 import OpenBag from "../components/OpenBag.jsx";
 import Photos from "../components/Photos.jsx";
-import Radar from "../components/Radar.jsx";
+import Radar, { LayeredRadar } from "../components/Radar.jsx";
 import { SCORE_DIMS, freshnessLine, scoreFreshnessLine } from "../freshness.js";
 import { Plus, Trash, Undo } from "../icons.jsx";
 import { Bar, Btn, Chip, Field, Input, Modal, Panel, ScorePick, Select, g, money } from "../ui.jsx";
@@ -580,11 +580,18 @@ function ScoreForm({ bean, onDone, toast, oops }) {
       {open ? (
         <p className="mt-1 mb-0 text-[13px] text-muted">在图上点或拖一条轴。格子可以收着不用。</p>
       ) : null}
-      <Radar
-        scores={open ? form : bean.scores}
-        editable={open}
-        onChange={setDim}
-      />
+      {open ? (
+        <Radar scores={form} editable onChange={setDim} />
+      ) : (
+        <LayeredRadar
+          base={bean.score_avg || bean.scores}
+          overlay={bean.scores}
+          layered={(bean.score_log || []).length > 1}
+        />
+      )}
+      {!open && (bean.score_avg?.cups || 0) > 1 && (
+        <p className="mt-2 mb-0 text-[13px] text-muted">共 {bean.score_avg.cups} 杯的均分，实线是最新一杯。</p>
+      )}
       {!open && scoreFreshnessLine(bean.scores) && (
         <p className="mt-2 mb-0 text-[13px] text-amber">{scoreFreshnessLine(bean.scores)}</p>
       )}

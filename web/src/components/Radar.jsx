@@ -1,7 +1,8 @@
-// 杯测雷达：八个维度 1–10。可只看，也可在图上点/拖打分。
-import { useRef } from "react";
+// 杯测雷达：八个维度 1–10。可只看，也可在图上点/拖打分。可叠均分 + 最新。
+import { useRef, useState } from "react";
 
-import { axisPoint, pickScore } from "../radarMath.js";
+import { axisPoint, dimNum, fmtScore, hasDims, pickScore } from "../radarMath.js";
+import { Chip } from "../ui.jsx";
 
 const DIMS = [
   ["dry", "干香"],
@@ -14,18 +15,18 @@ const DIMS = [
   ["overall", "总体"],
 ];
 
-function num(scores, k) {
-  const v = scores?.[k];
-  if (v === "" || v == null) return 0;
-  const n = Number(v);
-  return Number.isFinite(n) ? n : 0;
+function polyOf(scores, at, r) {
+  return DIMS.map(([k], i) => at(i, (dimNum(scores, k) / 10) * r).join(",")).join(" ");
 }
 
-function hasScore(scores) {
-  return Boolean(scores && DIMS.some(([k]) => num(scores, k) > 0));
-}
-
-export default function Radar({ scores, editable = false, onChange }) {
+export default function Radar({
+  scores,
+  base,
+  overlay,
+  mode = "both",
+  editable = false,
+  onChange,
+}) {
   const svgRef = useRef(null);
   const drag = useRef(false);
   const size = 240;
@@ -33,6 +34,12 @@ export default function Radar({ scores, editable = false, onChange }) {
   const r = 84;
   const n = DIMS.length;
   const at = (i, radius) => axisPoint(i, radius, c, n);
+
+  const viewBase = editable ? scores : (base ?? scores);
+  const viewOverlay = editable ? null : overlay;
+  const showBase = Boolean(hasDims(viewBase) && (!viewOverlay || mode === "both" || mode === "base"));
+  const showOverlay = Boolean(hasDims(viewOverlay) && (mode === "both" || mode === "overlay"));
+  const numbers = mode === "overlay" && hasDims(viewOverlay) ? viewOverlay : viewBase;
 
   const apply = (e) => {
     if (!editable || !onChange || !svgRef.current) return;
@@ -61,9 +68,6 @@ export default function Radar({ scores, editable = false, onChange }) {
     drag.current = false;
   };
 
-  const pts = DIMS.map(([k], i) => at(i, (num(scores, k) / 10) * r));
-  const poly = pts.map((p) => p.join(",")).join(" ");
-
   return (
     <svg
       ref={svgRef}
@@ -87,19 +91,33 @@ export default function Radar({ scores, editable = false, onChange }) {
         const [x, y] = at(i, r);
         return <line key={i} x1={c} y1={c} x2={x} y2={y} stroke="#3a3228" />;
       })}
-      {hasScore(scores) && (
-        <polygon points={poly} fill="rgba(200,141,68,.28)" stroke="#c88d44" strokeWidth="2" />
+      {showBase && (
+        <polygon
+          points={polyOf(viewBase, at, r)}
+          fill="rgba(200,141,68,.28)"
+          stroke="#c88d44"
+          strokeWidth={showOverlay ? 1.5 : 2}
+          strokeDasharray={showOverlay ? "4 4" : undefined}
+        />
+      )}
+      {showOverlay && (
+        <polygon
+          points={polyOf(viewOverlay, at, r)}
+          fill="none"
+          stroke="#e0a85a"
+          strokeWidth="2"
+        />
       )}
       {editable &&
         DIMS.map(([k], i) => {
-          const v = num(scores, k);
+          const v = dimNum(scores, k);
           if (!v) return null;
           const [x, y] = at(i, (v / 10) * r);
           return <circle key={`h-${k}`} cx={x} cy={y} r="5" fill="#e0a85a" stroke="#1a120a" />;
         })}
       {DIMS.map(([k, label], i) => {
         const [x, y] = at(i, r + 22);
-        const v = num(scores, k);
+        const v = dimNum(numbers, k);
         return (
           <text
             key={k}
@@ -110,15 +128,48 @@ export default function Radar({ scores, editable = false, onChange }) {
             textAnchor="middle"
             dominantBaseline="middle"
           >
-            {v ? `${label} ${v}` : label}
+            {v ? `${label} ${fmtScore(v)}` : label}
           </text>
         );
       })}
-      {!hasScore(scores) && (
+      {!hasDims(viewBase) && !hasDims(viewOverlay) && (
         <text x={c} y={c} fill="#9c8b74" fontSize="12" textAnchor="middle">
           {editable ? "点一条轴打分" : "还没杯测"}
         </text>
       )}
     </svg>
+  );
+}
+
+export function LayeredRadar({
+  base,
+  overlay,
+  baseLabel = "均分",
+  overlayLabel = "最新",
+  layered = true,
+}) {
+  const canLayer = Boolean(layered && hasDims(base) && hasDims(overlay));
+  const [mode, setMode] = useState("both");
+  const view = canLayer ? mode : "base";
+  const toggle = (key) => setMode((cur) => (cur === key ? "both" : key));
+
+  return (
+    <div>
+      {canLayer && (
+        <div className="mb-2 flex flex-wrap gap-2">
+          <Chip type="button" on={view === "both" || view === "base"} onClick={() => toggle("base")}>
+            {baseLabel}
+          </Chip>
+          <Chip
+            type="button"
+            on={view === "both" || view === "overlay"}
+            onClick={() => toggle("overlay")}
+          >
+            {overlayLabel}
+          </Chip>
+        </div>
+      )}
+      <Radar base={base} overlay={canLayer ? overlay : null} mode={view} />
+    </div>
   );
 }

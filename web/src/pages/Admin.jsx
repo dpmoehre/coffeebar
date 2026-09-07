@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
-import Radar from "../components/Radar.jsx";
+import { LayeredRadar } from "../components/Radar.jsx";
 import { Btn, Chip, Empty, Field, Input, Panel, Select, g, ml, money } from "../ui.jsx";
 
 function clock(at) {
@@ -968,7 +968,11 @@ function ReviewDossier({ picked, note, setNote, guess, certify, uncertify }) {
         </Panel>
         <Panel>
           <div className="serif text-lg">杯测</div>
-          <Radar scores={picked.scores} />
+          <LayeredRadar
+            base={picked.score_avg || picked.scores}
+            overlay={picked.scores}
+            layered={(picked.score_avg?.cups || 0) > 1}
+          />
           {picked.scores?.comment ? (
             <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
               {picked.scores.comment}

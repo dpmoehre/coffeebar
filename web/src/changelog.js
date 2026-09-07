@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-07",
+    title: "杯测雷达能看见均分",
+    notes: [
+      "打过好几杯时，一张图上浅底是你的平均，实线是最新一杯。",
+      "点「均分」或「最新」可以只看一层。王国里则是大家的平均叠你自己的。",
+    ],
+  },
+  {
+    date: "2026-09-07",
     title: "画像会指出下一杯",
     notes: [
       "一个人喝满三杯之后，画像上会出现「下一杯」。",

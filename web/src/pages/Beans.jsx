@@ -99,7 +99,8 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
       left_desc: (a, b) => b.balance_g - a.balance_g,
       roast: (a, b) => (a.roast || "").localeCompare(b.roast || ""),
       origin: (a, b) => (a.origin || "").localeCompare(b.origin || ""),
-      score: (a, b) => (b.scores?.overall || 0) - (a.scores?.overall || 0),
+      score: (a, b) =>
+        (b.score_avg?.overall || b.scores?.overall || 0) - (a.score_avg?.overall || a.scores?.overall || 0),
       opened: (a, b) => (b.updated_at || "").localeCompare(a.updated_at || ""),
       cost: (a, b) => byCost(a, b, false),
       cost_desc: (a, b) => byCost(a, b, true),

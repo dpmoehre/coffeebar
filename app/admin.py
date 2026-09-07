@@ -232,7 +232,8 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
         "SELECT id, email FROM account WHERE id = ?", (bean.get("owner_id"),)
     ).fetchone()
     shots = photos.list_bean_photos(conn, bean_id)
-    scores = store.latest_score(conn, bean_id)
+    log = store.list_scores(conn, bean_id)
+    scores = log[0] if log else None
     price = review_price(conn, bean_id)
     pins = places.review_places(conn, bean_id, bean.get("origin"), bean.get("producer"))
     return {
@@ -256,6 +257,7 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
         "owner": {"id": owner["id"], "email": owner["email"]} if owner else None,
         "tags": store.bean_tags(conn, bean_id),
         "scores": scores,
+        "score_avg": store.average_scores(log),
         "photos": shots,
         "cover": photos.cover(shots),
         "photo_count": len(shots),
