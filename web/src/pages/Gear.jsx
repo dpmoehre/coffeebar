@@ -434,7 +434,7 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
           >
             {item.visibility === "public" ? "改回只自己看" : "公开这件"}
           </Btn>
-          {(item.kind === "filter" || item.kind === "other") && (
+          {item.kind === "filter" && (
             <Btn variant="ghost" onClick={() => setPacking(true)}>
               开一包
             </Btn>
@@ -466,10 +466,6 @@ function GearDetail({ item, meta, onClose, onChange, onGone, toast, oops }) {
                 item.open_pack?.unit_cost != null ? `，大约 ${money(item.open_pack.unit_cost)} / 张` : ""
               }。`
             : "还没开始计张。现在这包剩多少不要估，等新开一包再记枚数和价钱。"}
-        </p>
-      ) : item.kind === "other" ? (
-        <p className="mt-0 mb-4 text-[13px] text-muted">
-          如果这是滤纸，点「开一包」会改成滤纸耗材，才开始计张。旧包剩多少不要估。
         </p>
       ) : null}
       <div className="flex flex-wrap gap-2">

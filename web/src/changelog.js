@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-10",
+    title: "其他器具不再写滤纸开包",
+    notes: [
+      "登记成「其他」的东西（比如咖啡机）介绍里不再出现「如果这是滤纸」那句，也不会出现「开一包」。",
+      "滤纸还是开一包才开始计张，旧包剩多少不要估。",
+    ],
+  },
+  {
+    date: "2026-09-10",
     title: "注册要起用户名",
     notes: [
       "新号注册时必须填用户名，不能和别人重复。",
