@@ -113,26 +113,33 @@ def owner_public(conn: sqlite3.Connection, account_id: int | None) -> dict:
     return {"name": public_name(row)}
 
 
-def clean_nickname(value) -> str | None:
-    text = (value or "").strip()
+def clean_nickname(value, *, required: bool = False) -> str | None:
+    text = "" if value is None else str(value).strip()
     if not text:
+        if required:
+            raise HTTPException(400, "先写用户名")
         return None
     if len(text) > 20:
-        raise HTTPException(400, "昵称最多 20 个字")
+        raise HTTPException(400, "用户名最多 20 个字")
     if "@" in text:
-        raise HTTPException(400, "昵称里不要写邮箱")
+        raise HTTPException(400, "用户名里不要写邮箱")
     return text
 
 
+def claim_nickname(conn: sqlite3.Connection, nick: str, account_id: int | None = None) -> str:
+    args: list = [nick]
+    sql = "SELECT id FROM account WHERE lower(nickname) = lower(?)"
+    if account_id is not None:
+        sql += " AND id != ?"
+        args.append(account_id)
+    if conn.execute(sql, args).fetchone():
+        raise HTTPException(409, "这个用户名有人用了")
+    return nick
+
+
 def set_nickname(conn: sqlite3.Connection, account_id: int, value) -> dict:
-    nick = clean_nickname(value)
-    if nick:
-        hit = conn.execute(
-            "SELECT id FROM account WHERE lower(nickname) = lower(?) AND id != ?",
-            (nick, account_id),
-        ).fetchone()
-        if hit:
-            raise HTTPException(409, "这个昵称有人用了")
+    nick = clean_nickname(value, required=True)
+    claim_nickname(conn, nick, account_id)
     conn.execute("UPDATE account SET nickname = ? WHERE id = ?", (nick, account_id))
     row = get_account(conn, account_id)
     if not row:
@@ -271,6 +278,7 @@ def register(
     password: str,
     invite: str | None = None,
     claim: str | None = None,
+    nickname: str | None = None,
 ) -> dict:
     require_invite(invite)
     email = normalize_email(email)
@@ -280,6 +288,8 @@ def register(
         raise HTTPException(400, "密码至少 8 个字符")
     if conn.execute("SELECT id FROM account WHERE email = ?", (email,)).fetchone():
         raise HTTPException(409, "这个邮箱已经注册过了")
+    nick = clean_nickname(nickname if nickname is not None else email.split("@")[0], required=True)
+    claim_nickname(conn, nick)
     orphans = orphan_counts(conn)
     pending = any(orphans.values())
     choice = (claim or "").strip().lower() or None
@@ -290,9 +300,9 @@ def register(
     verified = 0 if mail.configured() else 1
     with db.transaction(conn):
         cur = conn.execute(
-            """INSERT INTO account (email, password_hash, email_verified, created_at)
-               VALUES (?, ?, ?, ?)""",
-            (email, hash_password(password), verified, db.now()),
+            """INSERT INTO account (email, password_hash, email_verified, nickname, created_at)
+               VALUES (?, ?, ?, ?, ?)""",
+            (email, hash_password(password), verified, nick, db.now()),
         )
         account_id = int(cur.lastrowid)
         claimed = False
@@ -311,6 +321,8 @@ def register(
     return {
         "id": account_id,
         "email": email,
+        "nickname": nick,
+        "name": nick,
         "claimed": claimed,
         "email_verified": bool(verified),
         "verify_token": verify_token,

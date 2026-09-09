@@ -84,7 +84,7 @@ def test_one_person_one_review_and_favorite(client, monkeypatch):
     _login(client, "other@coffeebar.local")
     seen = client.get(f"/api/kingdom/gear/{cid}").json()
     assert seen["mine"] is None
-    assert seen["scores"][0]["author"] == "吧友"
+    assert seen["scores"][0]["author"] == "test"
     assert seen["favorited"] is False
     client.put(f"/api/kingdom/gear/{cid}/score", json={"overall": 9})
     both = client.get(f"/api/kingdom/gear/{cid}").json()

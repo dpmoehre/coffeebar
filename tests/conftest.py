@@ -35,6 +35,19 @@ def client(monkeypatch):
     import importlib
     from fastapi.testclient import TestClient
 
+    class RegisterClient(TestClient):
+        """没写用户名的旧用例，用邮箱 @ 前一段顶上，避免处处改。"""
+
+        def request(self, method, url, **kwargs):
+            if str(method).upper() == "POST" and str(url).split("?")[0].rstrip("/").endswith(
+                "/api/auth/register"
+            ):
+                body = kwargs.get("json")
+                if isinstance(body, dict) and "nickname" not in body and "username" not in body:
+                    local = str(body.get("email") or "").split("@")[0][:20] or "user"
+                    kwargs["json"] = {**body, "nickname": local}
+            return super().request(method, url, **kwargs)
+
     from app import db as db_mod
 
     importlib.reload(db_mod)
@@ -81,10 +94,14 @@ def client(monkeypatch):
         importlib.reload(_rt)
     importlib.reload(main_mod)
 
-    with TestClient(main_mod.app) as c:
+    with RegisterClient(main_mod.app) as c:
         r = c.post(
             "/api/auth/register",
-            json={"email": "test@coffeebar.local", "password": "testpass1"},
+            json={
+                "email": "test@coffeebar.local",
+                "password": "testpass1",
+                "nickname": "test",
+            },
         )
         assert r.status_code == 201, r.text
         yield c

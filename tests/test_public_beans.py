@@ -25,7 +25,7 @@ def test_public_card_hides_money_and_stock(client):
     assert card["origin"] == "埃塞俄比亚"
     assert card["certified"] is False
     assert card["mine"] is True
-    assert card["owner"] == {"name": "吧友"}
+    assert card["owner"] == {"name": "test"}
     assert "email" not in card["owner"]
     assert card.get("kingdom") in (None, {})
     assert card["offer"]["price"] == 88

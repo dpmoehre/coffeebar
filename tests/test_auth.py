@@ -11,8 +11,33 @@ def test_register_and_me(client):
     me = client.get("/api/me").json()
     assert me["email"] == "test@coffeebar.local"
     assert me["email_verified"] is True
-    assert me["nickname"] is None
-    assert me["name"] == "吧友"
+    assert me["nickname"] == "test"
+    assert me["name"] == "test"
+
+
+def test_register_requires_unique_username(client):
+    missing = client.post(
+        "/api/auth/register",
+        json={"email": "needname@coffeebar.local", "password": "testpass1", "nickname": None},
+    )
+    assert missing.status_code == 400
+    blank = client.post(
+        "/api/auth/register",
+        json={"email": "needname@coffeebar.local", "password": "testpass1", "nickname": "  "},
+    )
+    assert blank.status_code == 400
+    taken = client.post(
+        "/api/auth/register",
+        json={"email": "needname@coffeebar.local", "password": "testpass1", "nickname": "test"},
+    )
+    assert taken.status_code == 409
+    ok = client.post(
+        "/api/auth/register",
+        json={"email": "needname@coffeebar.local", "password": "testpass1", "nickname": "新吧友"},
+    )
+    assert ok.status_code == 201
+    assert ok.json()["nickname"] == "新吧友"
+    assert ok.json()["name"] == "新吧友"
 
 
 def test_set_nickname_for_plaza_and_kingdom(client):
@@ -22,6 +47,8 @@ def test_set_nickname_for_plaza_and_kingdom(client):
     assert bad.status_code == 400
     long = client.patch("/api/me", json={"nickname": "这" * 21})
     assert long.status_code == 400
+    cleared = client.patch("/api/me", json={"nickname": ""})
+    assert cleared.status_code == 400
 
     me = client.patch("/api/me", json={"nickname": "谙客"}).json()
     assert me["nickname"] == "谙客"
@@ -34,12 +61,10 @@ def test_set_nickname_for_plaza_and_kingdom(client):
 
     client.post(
         "/api/auth/register",
-        json={"email": "other@coffeebar.local", "password": "testpass1"},
+        json={"email": "other@coffeebar.local", "password": "testpass1", "nickname": "别人"},
     )
     taken = client.patch("/api/me", json={"nickname": "谙客"})
     assert taken.status_code == 409
-    client.patch("/api/me", json={"nickname": ""})
-    assert client.get("/api/me").json()["name"] == "吧友"
 
 
 def test_empty_register_gets_yirgacheffe(conn, monkeypatch):
@@ -252,7 +277,7 @@ def test_login_rate_limit(monkeypatch):
         assert (
             c.post(
                 "/api/auth/register",
-                json={"email": "rl@coffeebar.local", "password": "testpass1"},
+                json={"email": "rl@coffeebar.local", "password": "testpass1", "nickname": "rl"},
             ).status_code
             == 201
         )
@@ -507,7 +532,7 @@ def test_upload_rate_limit(monkeypatch):
         assert (
             c.post(
                 "/api/auth/register",
-                json={"email": "up@coffeebar.local", "password": "testpass1"},
+                json={"email": "up@coffeebar.local", "password": "testpass1", "nickname": "up"},
             ).status_code
             == 201
         )

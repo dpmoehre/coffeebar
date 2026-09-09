@@ -55,7 +55,7 @@ def test_collect_seeds_score_and_one_person_one_cup(client, monkeypatch):
     seed = collected.json()["scores"][0]
     assert seed["overall"] == 8
     assert seed["comment"] == "黑莓可可"
-    assert seed["author"] == "吧友"
+    assert seed["author"] == "test"
 
     empty = client.get("/api/admin/kingdom/queue").json()["queue"]
     assert all(b["id"] != bean["id"] for b in empty)
@@ -73,7 +73,7 @@ def test_collect_seeds_score_and_one_person_one_cup(client, monkeypatch):
     mine = client.get(f"/api/kingdom/{kid}").json()
     assert mine["plaza_cards"] == 1
     assert mine["mine"]["overall"] == 8
-    assert mine["mine"]["author"] == "吧友（我）"
+    assert mine["mine"]["author"] == "test（我）"
     client.patch("/api/me", json={"nickname": "测试吧友"})
     assert client.get(f"/api/kingdom/{kid}").json()["mine"]["author"] == "测试吧友（我）"
     for key in ("unit_cost", "balance_g", "lots", "log", "owner_id"):

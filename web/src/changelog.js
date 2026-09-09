@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-10",
+    title: "注册要起用户名",
+    notes: [
+      "新号注册时必须填用户名，不能和别人重复。",
+      "以前没起名的号，登录或刷新后会弹出窗口，先起好才能继续用。",
+    ],
+  },
+  {
+    date: "2026-09-10",
     title: "广场和王国改叫昵称",
     notes: [
       "别人看见的是你起的昵称，看不见邮箱。没起名字就写「吧友」。",

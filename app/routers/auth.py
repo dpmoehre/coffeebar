@@ -38,18 +38,26 @@ def api_register(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     ratelimit.check(request, "register", 5)
+    raw_name = payload.get("nickname")
+    if raw_name is None:
+        raw_name = payload.get("username")
+    if raw_name is None or str(raw_name).strip() == "":
+        raise HTTPException(400, "先写用户名")
     account = auth.register(
         conn,
         payload.get("email") or "",
         payload.get("password") or "",
         payload.get("invite"),
         payload.get("claim"),
+        nickname=raw_name,
     )
     token = auth.issue_session(conn, account["id"])
     auth.set_cookie(response, token, request)
     out = {
         "id": account["id"],
         "email": account["email"],
+        "nickname": account.get("nickname"),
+        "name": account.get("name"),
         "claimed": account["claimed"],
         "email_verified": account["email_verified"],
     }
@@ -166,9 +174,10 @@ def api_update_me(
     conn: sqlite3.Connection = Depends(get_conn),
 ):
     account = auth.require_account(request, conn)
-    if "nickname" not in payload:
-        raise HTTPException(400, "先写昵称")
-    updated = auth.set_nickname(conn, account["id"], payload.get("nickname"))
+    if "nickname" not in payload and "username" not in payload:
+        raise HTTPException(400, "先写用户名")
+    raw_name = payload["nickname"] if "nickname" in payload else payload.get("username")
+    updated = auth.set_nickname(conn, account["id"], raw_name)
     return {**auth.public_account(updated), **auth.stock_flags(conn, account["id"])}
 
 

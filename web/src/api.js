@@ -103,8 +103,8 @@ export const api = {
   updateMe: (data) => req("PATCH", "/api/me", data),
   health: () => req("GET", "/api/health"),
   authConfig: () => req("GET", "/api/auth/config"),
-  register: (email, password, invite, claim) =>
-    req("POST", "/api/auth/register", { email, password, invite, claim }),
+  register: (email, password, invite, claim, nickname) =>
+    req("POST", "/api/auth/register", { email, password, invite, claim, nickname }),
   claimOrphans: () => req("POST", "/api/auth/claim-orphans", {}),
   login: (email, password) => req("POST", "/api/auth/login", { email, password }),
   logout: () => req("POST", "/api/auth/logout", {}),

@@ -76,7 +76,7 @@ def main() -> int:
 
     step(0, "注册一个演示账号")
     code, acc = call("POST", "/api/auth/register", {
-        "email": "smoke@coffeebar.local", "password": "smokepass",
+        "email": "smoke@coffeebar.local", "password": "smokepass", "nickname": "smoke",
     })
     if code == 409:
         code, acc = call("POST", "/api/auth/login", {

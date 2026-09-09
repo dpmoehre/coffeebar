@@ -263,18 +263,31 @@ export default function App() {
     }
   };
 
+  const needNick = Boolean(me && !me.nickname);
+
+  useEffect(() => {
+    if (!needNick) return;
+    setNickDraft("");
+    setNickOpen(true);
+  }, [needNick]);
+
   const openNick = () => {
     setNickDraft(me?.nickname || "");
     setNickOpen(true);
   };
 
   const saveNick = async () => {
+    const name = nickDraft.trim();
+    if (!name) {
+      oops("先写用户名");
+      return;
+    }
     setNickBusy(true);
     try {
-      const user = await api.updateMe({ nickname: nickDraft });
+      const user = await api.updateMe({ nickname: name });
       setMe(user);
       setNickOpen(false);
-      toast(user.nickname ? `广场和王国会写「${user.nickname}」` : "已去掉昵称，别人会看见「吧友」");
+      toast(`广场和王国会写「${user.nickname}」`);
     } catch (e) {
       oops(e.message);
     } finally {
@@ -437,7 +450,7 @@ export default function App() {
         {me && (
           <div className="mt-3 flex gap-4 text-xs text-muted md:hidden">
             <button className="underline hover:text-amber" onClick={openNick}>
-              改昵称
+              改用户名
             </button>
             <button className="underline hover:text-amber" onClick={() => setPwd(true)}>
               改密码
@@ -476,7 +489,7 @@ export default function App() {
                 className="text-left text-sm text-muted underline hover:text-amber"
                 onClick={openNick}
               >
-                改昵称
+                改用户名
               </button>
               <button
                 className="text-left text-sm text-muted underline hover:text-amber"
@@ -625,25 +638,34 @@ export default function App() {
       {node}
       <Modal
         open={nickOpen}
-        onClose={() => !nickBusy && setNickOpen(false)}
-        title="广场和王国怎么称呼你"
-        sub="别人看见这个名字，看不见邮箱。空着就显示「吧友」。最多 20 个字，不要写邮箱。"
+        onClose={() => {
+          if (needNick || nickBusy) return;
+          setNickOpen(false);
+        }}
+        title={needNick ? "先起一个用户名" : "广场和王国怎么称呼你"}
+        sub={
+          needNick
+            ? "别人看见这个名字，看不见邮箱。每个用户名只能有一个人用。最多 20 个字，不要写邮箱。"
+            : "别人看见这个名字，看不见邮箱。每个用户名只能有一个人用。最多 20 个字。"
+        }
         footer={
           <>
-            <Btn variant="ghost" onClick={() => setNickOpen(false)} disabled={nickBusy}>
-              取消
-            </Btn>
-            <Btn onClick={saveNick} disabled={nickBusy}>
-              改好
+            {!needNick && (
+              <Btn variant="ghost" onClick={() => setNickOpen(false)} disabled={nickBusy}>
+                取消
+              </Btn>
+            )}
+            <Btn onClick={saveNick} disabled={nickBusy || !nickDraft.trim()}>
+              {needNick ? "用这个名字" : "改好"}
             </Btn>
           </>
         }
       >
-        <Field label="昵称">
+        <Field label="用户名">
           <Input
             value={nickDraft}
             maxLength={20}
-            placeholder="吧友"
+            placeholder="例如 dp"
             onChange={(e) => setNickDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && saveNick()}
           />
@@ -758,6 +780,7 @@ function Gate({ onIn, oops, toast }) {
   const [invite, setInvite] = useState("");
   const [inviteRequired, setInviteRequired] = useState(false);
   const [orphans, setOrphans] = useState(null);
+  const [nickname, setNickname] = useState("");
 
   useEffect(() => {
     api.authConfig().then((c) => setInviteRequired(Boolean(c.invite_required))).catch(() => {});
@@ -808,7 +831,7 @@ function Gate({ onIn, oops, toast }) {
       }
       const user =
         mode === "register"
-          ? await api.register(email, password, invite)
+          ? await api.register(email, password, invite, undefined, nickname.trim())
           : await api.login(email, password);
       if (user.verify_url) {
         toast?.("本机没配邮箱，打开验证链接即可");
@@ -849,7 +872,10 @@ function Gate({ onIn, oops, toast }) {
       ? Boolean(email)
       : mode === "reset"
         ? password.length >= 8 && password === password2
-        : Boolean(email) && password.length >= 8 && (mode !== "register" || !inviteRequired || invite.trim());
+        : Boolean(email) &&
+          password.length >= 8 &&
+          (mode !== "register" || Boolean(nickname.trim())) &&
+          (mode !== "register" || !inviteRequired || invite.trim());
 
   return (
     <div className="grid min-h-screen place-items-center p-8">
@@ -867,6 +893,18 @@ function Gate({ onIn, oops, toast }) {
               autoFocus
             />
           </Field>
+        )}
+        {mode === "register" && (
+          <div className="mt-3">
+            <Field label="用户名" hint="广场和王国给人看。不能和别人重复，最多 20 个字">
+              <Input
+                value={nickname}
+                maxLength={20}
+                placeholder="例如 dp"
+                onChange={(e) => setNickname(e.target.value)}
+              />
+            </Field>
+          </div>
         )}
         {mode === "register" && inviteRequired && (
           <div className="mt-3">
@@ -919,7 +957,7 @@ function Gate({ onIn, oops, toast }) {
               onClick={async () => {
                 setBusy(true);
                 try {
-                  const user = await api.register(email, password, invite, "take");
+                  const user = await api.register(email, password, invite, "take", nickname.trim());
                   setOrphans(null);
                   onIn(user);
                 } catch (e) {
@@ -938,7 +976,7 @@ function Gate({ onIn, oops, toast }) {
               onClick={async () => {
                 setBusy(true);
                 try {
-                  const user = await api.register(email, password, invite, "leave");
+                  const user = await api.register(email, password, invite, "leave", nickname.trim());
                   setOrphans(null);
                   onIn(user);
                 } catch (e) {

@@ -179,7 +179,7 @@ def ensure_login():
     if code == 200:
         return
     call("POST", "/api/auth/register", {
-        "email": "local@coffeebar.local", "password": "coffeebar-local",
+        "email": "local@coffeebar.local", "password": "coffeebar-local", "nickname": "local",
     })
 
 
