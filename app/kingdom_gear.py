@@ -43,10 +43,12 @@ def get_kingdom_gear(conn: sqlite3.Connection, catalog_id: int, viewer_id: int |
     out.update(stats)
     method = out.get("brew_method")
     out["method_label"] = brew.METHODS.get(method) if method else None
-    emails = {
-        r["id"]: r["email"]
+    from . import auth
+
+    names = {
+        r["id"]: auth.public_name(r)
         for r in conn.execute(
-            """SELECT a.id, a.email FROM account a
+            """SELECT a.id, a.nickname FROM account a
                JOIN kingdom_gear_score s ON s.author_id = a.id WHERE s.catalog_id = ?""",
             (catalog_id,),
         )
@@ -56,7 +58,7 @@ def get_kingdom_gear(conn: sqlite3.Connection, catalog_id: int, viewer_id: int |
         (catalog_id,),
     ).fetchall()
     out["scores"] = [
-        _score_public(conn, s, email=emails.get(s["author_id"], ""), mine=s["author_id"] == viewer_id)
+        _score_public(conn, s, name=names.get(s["author_id"], ""), mine=s["author_id"] == viewer_id)
         for s in scores
     ]
     out["mine"] = next((s for s in out["scores"] if s["mine"]), None)
@@ -218,13 +220,13 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
     return out
 
 
-def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, email: str, mine: bool) -> dict:
+def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, name: str, mine: bool) -> dict:
     return {
         "id": row["id"],
         "overall": row["overall"],
         "comment": row["comment"],
         "at": row["updated_at"] or row["created_at"],
-        "author": _author_label(email, mine),
+        "author": _author_label(name, mine),
         "mine": mine,
         "photos": photos.list_kingdom_gear_score_photos(conn, row["id"]),
     }

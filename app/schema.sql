@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS account (
   email          TEXT    NOT NULL UNIQUE,
   password_hash  TEXT    NOT NULL,
   email_verified INTEGER NOT NULL DEFAULT 0,
+  nickname       TEXT,                       -- 广场/王国对外名；空着显示「吧友」
   created_at     TEXT    NOT NULL,
   claimed_at     TEXT,
   status         TEXT    NOT NULL DEFAULT 'active'

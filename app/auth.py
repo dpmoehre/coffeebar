@@ -83,15 +83,75 @@ def require_admin(account: dict) -> dict:
     return account
 
 
+FALLBACK_NAME = "吧友"
+
+
+def _row_get(row, key, default=None):
+    if row is None:
+        return default
+    try:
+        return row[key]
+    except (KeyError, IndexError, TypeError):
+        return default
+
+
+def nickname_of(row) -> str | None:
+    text = _row_get(row, "nickname")
+    cleaned = (str(text).strip() if text is not None else "")
+    return cleaned or None
+
+
+def public_name(row) -> str:
+    """广场、王国给人看的名字。没设昵称就写吧友，不露邮箱。"""
+    return nickname_of(row) or FALLBACK_NAME
+
+
+def owner_public(conn: sqlite3.Connection, account_id: int | None) -> dict:
+    if not account_id:
+        return {"name": FALLBACK_NAME}
+    row = conn.execute("SELECT nickname FROM account WHERE id = ?", (account_id,)).fetchone()
+    return {"name": public_name(row)}
+
+
+def clean_nickname(value) -> str | None:
+    text = (value or "").strip()
+    if not text:
+        return None
+    if len(text) > 20:
+        raise HTTPException(400, "昵称最多 20 个字")
+    if "@" in text:
+        raise HTTPException(400, "昵称里不要写邮箱")
+    return text
+
+
+def set_nickname(conn: sqlite3.Connection, account_id: int, value) -> dict:
+    nick = clean_nickname(value)
+    if nick:
+        hit = conn.execute(
+            "SELECT id FROM account WHERE lower(nickname) = lower(?) AND id != ?",
+            (nick, account_id),
+        ).fetchone()
+        if hit:
+            raise HTTPException(409, "这个昵称有人用了")
+    conn.execute("UPDATE account SET nickname = ? WHERE id = ?", (nick, account_id))
+    row = get_account(conn, account_id)
+    if not row:
+        raise HTTPException(404, "没有这个账号")
+    return row
+
+
 def public_account(row: sqlite3.Row | dict) -> dict:
     try:
         verified = row["email_verified"]
     except (KeyError, IndexError):
         verified = 1
     email = row["email"]
+    nick = nickname_of(row)
     return {
         "id": row["id"],
         "email": email,
+        "nickname": nick,
+        "name": nick or FALLBACK_NAME,
         "email_verified": bool(verified),
         "admin": is_admin_email(email),
     }

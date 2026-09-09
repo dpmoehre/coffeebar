@@ -18,6 +18,12 @@ const SORTS = [
   { key: "score", label: "评分" },
 ];
 
+function fromWhom(card) {
+  const name = card?.owner?.name;
+  if (!name) return "";
+  return card.mine ? "你公开的" : `来自 ${name}`;
+}
+
 function offerLine(offer) {
   if (!offer) return "";
   return [
@@ -293,6 +299,9 @@ function PlazaList({ onOpen, oops }) {
                   <div className="mt-1 truncate text-[13px] text-muted">
                     {[b.origin, b.varietal, b.roast].filter(Boolean).join(" · ") || "还没填产地"}
                   </div>
+                  {fromWhom(b) ? (
+                    <div className="mt-1 truncate text-[13px] text-muted">{fromWhom(b)}</div>
+                  ) : null}
                   {offerLine(b.offer) ? (
                     <div className="mt-2 text-sm text-amber">{offerLine(b.offer)}</div>
                   ) : null}
@@ -409,6 +418,9 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
           {[bean.origin, bean.varietal, bean.process, bean.roast, bean.altitude].filter(Boolean).join(" · ") ||
             "还没填产地"}
         </p>
+        {fromWhom(bean) ? (
+          <p className="mt-1 mb-0 text-sm text-cream">{fromWhom(bean)}</p>
+        ) : null}
         {offerLine(bean.offer) ? (
           <p className="mt-1 mb-0 text-sm text-amber">
             最近一袋 {offerLine(bean.offer)}
@@ -564,14 +576,15 @@ function PlazaGearList({ onOpen, oops }) {
                 <div className="mt-1 truncate text-[13px] text-muted">
                   {[g.kind_label, g.family_label, g.brand, g.model].filter(Boolean).join(" · ")}
                 </div>
+                {fromWhom(g) ? (
+                  <div className="mt-1 truncate text-[13px] text-muted">{fromWhom(g)}</div>
+                ) : null}
                 {g.kingdom ? (
                   <div className="mt-2 text-xs text-amber">
                     王国
                     {g.kingdom.avg?.overall != null ? ` · 总体 ${g.kingdom.avg.overall}` : ""}
                   </div>
-                ) : g.mine ? (
-                  <div className="mt-2 text-xs text-muted">你公开的</div>
-                ) : g.taken ? (
+                ) : g.taken && !g.mine ? (
                   <div className="mt-2 text-xs text-amber">已在你的台面</div>
                 ) : null}
               </div>
@@ -621,6 +634,9 @@ function PublicGear({ id, onBack, onOpenMineGear, onOpenKingdomGear, toast, oops
           {[item.kind_label, item.family_label, item.brand, item.model].filter(Boolean).join(" · ") ||
             "还没填型号"}
         </p>
+        {fromWhom(item) ? (
+          <p className="mt-1 mb-0 text-sm text-cream">{fromWhom(item)}</p>
+        ) : null}
         {item.note ? <p className="mt-1 mb-0 text-[13px] text-muted">{item.note}</p> : null}
         {item.mine ? (
           <p className="mt-2 mb-0 text-sm text-muted">这是你公开的，不用领。</p>

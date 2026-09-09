@@ -437,6 +437,9 @@ def plaza_card(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None
     out.pop("sheets_left", None)
     out.pop("counting", None)
     out["mine"] = viewer_id is not None and row["owner_id"] == viewer_id
+    from . import auth
+
+    out["owner"] = auth.owner_public(conn, row["owner_id"])
     cloned = _cloned_gear_id(conn, row["id"], viewer_id)
     out["taken"] = bool(cloned)
     out["cloned_id"] = cloned

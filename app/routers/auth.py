@@ -159,6 +159,19 @@ def api_me(request: Request, conn: sqlite3.Connection = Depends(get_conn)):
     return {**auth.public_account(account), **auth.stock_flags(conn, account["id"])}
 
 
+@router.patch("/api/me")
+def api_update_me(
+    payload: dict,
+    request: Request,
+    conn: sqlite3.Connection = Depends(get_conn),
+):
+    account = auth.require_account(request, conn)
+    if "nickname" not in payload:
+        raise HTTPException(400, "先写昵称")
+    updated = auth.set_nickname(conn, account["id"], payload.get("nickname"))
+    return {**auth.public_account(updated), **auth.stock_flags(conn, account["id"])}
+
+
 @router.post("/api/auth/claim-orphans")
 def api_claim_orphans(
     request: Request,

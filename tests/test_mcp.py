@@ -297,6 +297,8 @@ def test_mcp_plaza_is_sanitized(client):
     assert hit["offer"]["price"] == 88
     assert hit["offer"]["nominal_g"] == 200
     assert hit["offer"]["per_g"] == pytest.approx(88 / 200)
+    assert hit["owner"] == {"name": "吧友"}
+    assert "email" not in hit["owner"]
     for key in ("unit_cost", "balance_g", "lots", "log", "owner_id", "price", "remaining_value"):
         assert key not in hit
     card = c.get_plaza_bean(public["id"])

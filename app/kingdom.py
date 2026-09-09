@@ -10,7 +10,7 @@ import sqlite3
 
 from fastapi import HTTPException
 
-from . import db, photos, store
+from . import auth, db, photos, store
 
 DIMS = ("dry", "flavor", "aftertaste", "acidity", "sweetness", "body", "balance", "overall")
 
@@ -22,9 +22,9 @@ def _clean(value) -> str | None:
     return text or None
 
 
-def _author_label(email: str, mine: bool = False) -> str:
-    local = (email or "").split("@")[0] or "匿名"
-    return f"{local}（我）" if mine else local
+def _author_label(name: str, mine: bool = False) -> str:
+    label = (name or "").strip() or auth.FALLBACK_NAME
+    return f"{label}（我）" if mine else label
 
 
 def _score_num(value):
@@ -59,12 +59,12 @@ def _avg(rows: list[sqlite3.Row]) -> dict | None:
     return out
 
 
-def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, email: str, mine: bool) -> dict:
+def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, name: str, mine: bool) -> dict:
     d = {k: row[k] for k in DIMS}
     d["id"] = row["id"]
     d["comment"] = row["comment"]
     d["at"] = row["updated_at"] or row["created_at"]
-    d["author"] = _author_label(email, mine)
+    d["author"] = _author_label(name, mine)
     d["mine"] = mine
     d["photos"] = photos.list_kingdom_score_photos(conn, row["id"])
     return d
@@ -151,9 +151,9 @@ def get_kingdom(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
     out = _brief(conn, row, viewer_id)
     out["photos"] = _photos(conn, kingdom_id)
     authors = {
-        r["id"]: r["email"]
+        r["id"]: auth.public_name(r)
         for r in conn.execute(
-            """SELECT a.id, a.email FROM account a
+            """SELECT a.id, a.nickname FROM account a
                JOIN kingdom_score s ON s.author_id = a.id WHERE s.kingdom_id = ?""",
             (kingdom_id,),
         )
@@ -164,7 +164,7 @@ def get_kingdom(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
     ).fetchall()
     out["scores"] = [
         _score_public(
-            conn, s, email=authors.get(s["author_id"], ""), mine=viewer_id == s["author_id"]
+            conn, s, name=authors.get(s["author_id"], ""), mine=viewer_id == s["author_id"]
         )
         for s in scores
     ]

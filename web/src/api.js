@@ -100,6 +100,7 @@ async function download(path, filename) {
 
 export const api = {
   me: () => req("GET", "/api/me"),
+  updateMe: (data) => req("PATCH", "/api/me", data),
   health: () => req("GET", "/api/health"),
   authConfig: () => req("GET", "/api/auth/config"),
   register: (email, password, invite, claim) =>

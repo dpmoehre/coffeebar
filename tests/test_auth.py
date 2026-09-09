@@ -11,6 +11,35 @@ def test_register_and_me(client):
     me = client.get("/api/me").json()
     assert me["email"] == "test@coffeebar.local"
     assert me["email_verified"] is True
+    assert me["nickname"] is None
+    assert me["name"] == "吧友"
+
+
+def test_set_nickname_for_plaza_and_kingdom(client):
+    empty = client.patch("/api/me", json={})
+    assert empty.status_code == 400
+    bad = client.patch("/api/me", json={"nickname": "a@b.com"})
+    assert bad.status_code == 400
+    long = client.patch("/api/me", json={"nickname": "这" * 21})
+    assert long.status_code == 400
+
+    me = client.patch("/api/me", json={"nickname": "谙客"}).json()
+    assert me["nickname"] == "谙客"
+    assert me["name"] == "谙客"
+    bean = client.post("/api/beans", json={"name": "昵称豆"}).json()
+    client.patch(f"/api/beans/{bean['id']}", json={"visibility": "public"})
+    plaza = client.get(f"/api/public/beans/{bean['id']}").json()
+    assert plaza["owner"] == {"name": "谙客"}
+    assert "email" not in plaza["owner"]
+
+    client.post(
+        "/api/auth/register",
+        json={"email": "other@coffeebar.local", "password": "testpass1"},
+    )
+    taken = client.patch("/api/me", json={"nickname": "谙客"})
+    assert taken.status_code == 409
+    client.patch("/api/me", json={"nickname": ""})
+    assert client.get("/api/me").json()["name"] == "吧友"
 
 
 def test_empty_register_gets_yirgacheffe(conn, monkeypatch):

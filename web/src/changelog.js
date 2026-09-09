@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-10",
+    title: "广场和王国改叫昵称",
+    notes: [
+      "别人看见的是你起的昵称，看不见邮箱。没起名字就写「吧友」。",
+      "侧栏可以改昵称。广场卡上会写「来自某某」。",
+    ],
+  },
+  {
     date: "2026-09-08",
     title: "新打一杯挪到右上角",
     notes: ["豆卡上看杯测时，按钮在标题右边，底下少占一行。"],

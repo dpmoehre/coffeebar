@@ -183,6 +183,8 @@ def test_take_public_gear_copies_photo_and_is_idempotent(client):
     hit = next(g for g in mine if g["id"] == item["id"])
     assert hit["mine"] is True
     assert "owner_id" not in hit
+    assert hit["owner"] == {"name": "吧友"}
+    assert "email" not in hit["owner"]
     own = client.post(f"/api/public/gear/{item['id']}/take", json={})
     assert own.status_code == 400
 

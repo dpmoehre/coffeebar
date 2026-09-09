@@ -95,6 +95,7 @@ ADDED_COLUMNS = [
     ("bean", "review_note", "TEXT"),
     ("bean", "places_verified_at", "TEXT"),
     ("account", "claimed_at", "TEXT"),
+    ("account", "nickname", "TEXT"),
     ("bean", "kingdom_id", "INTEGER"),
     ("bean", "source_bean_id", "INTEGER"),
     ("user_gear", "visibility", "TEXT NOT NULL DEFAULT 'private'"),

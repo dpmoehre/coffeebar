@@ -81,6 +81,9 @@ export default function App() {
   const [pwdNew, setPwdNew] = useState("");
   const [pwdNew2, setPwdNew2] = useState("");
   const [pwdBusy, setPwdBusy] = useState(false);
+  const [nickOpen, setNickOpen] = useState(false);
+  const [nickDraft, setNickDraft] = useState("");
+  const [nickBusy, setNickBusy] = useState(false);
 
   useEffect(() => {
     api
@@ -260,6 +263,25 @@ export default function App() {
     }
   };
 
+  const openNick = () => {
+    setNickDraft(me?.nickname || "");
+    setNickOpen(true);
+  };
+
+  const saveNick = async () => {
+    setNickBusy(true);
+    try {
+      const user = await api.updateMe({ nickname: nickDraft });
+      setMe(user);
+      setNickOpen(false);
+      toast(user.nickname ? `广场和王国会写「${user.nickname}」` : "已去掉昵称，别人会看见「吧友」");
+    } catch (e) {
+      oops(e.message);
+    } finally {
+      setNickBusy(false);
+    }
+  };
+
   const takeOrphans = async () => {
     setClaimBusy(true);
     try {
@@ -367,7 +389,8 @@ export default function App() {
             </em>
             {me?.email && (
               <div className="mt-2 hidden text-[11px] text-muted md:block">
-                {me.email}
+                <div className="text-[13px] text-cream">{me.name || "吧友"}</div>
+                <div className="mt-0.5">{me.email}</div>
                 {me.email_verified === false && (
                   <button
                     className="mt-1 block text-amber underline"
@@ -413,6 +436,9 @@ export default function App() {
         </div>
         {me && (
           <div className="mt-3 flex gap-4 text-xs text-muted md:hidden">
+            <button className="underline hover:text-amber" onClick={openNick}>
+              改昵称
+            </button>
             <button className="underline hover:text-amber" onClick={() => setPwd(true)}>
               改密码
             </button>
@@ -446,6 +472,12 @@ export default function App() {
           })}
           {me && (
             <div className="mt-4 flex flex-col items-start gap-2">
+              <button
+                className="text-left text-sm text-muted underline hover:text-amber"
+                onClick={openNick}
+              >
+                改昵称
+              </button>
               <button
                 className="text-left text-sm text-muted underline hover:text-amber"
                 onClick={() => setPwd(true)}
@@ -591,6 +623,32 @@ export default function App() {
       </main>
 
       {node}
+      <Modal
+        open={nickOpen}
+        onClose={() => !nickBusy && setNickOpen(false)}
+        title="广场和王国怎么称呼你"
+        sub="别人看见这个名字，看不见邮箱。空着就显示「吧友」。最多 20 个字，不要写邮箱。"
+        footer={
+          <>
+            <Btn variant="ghost" onClick={() => setNickOpen(false)} disabled={nickBusy}>
+              取消
+            </Btn>
+            <Btn onClick={saveNick} disabled={nickBusy}>
+              改好
+            </Btn>
+          </>
+        }
+      >
+        <Field label="昵称">
+          <Input
+            value={nickDraft}
+            maxLength={20}
+            placeholder="吧友"
+            onChange={(e) => setNickDraft(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && saveNick()}
+          />
+        </Field>
+      </Modal>
       <Modal
         open={pwd}
         onClose={() => !pwdBusy && setPwd(false)}

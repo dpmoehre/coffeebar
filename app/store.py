@@ -699,12 +699,19 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "photos": shots,
         "cover": photos.cover(shots),
         "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
+        "owner": _owner_public(conn, bean.get("owner_id")),
         "kingdom_id": bean.get("kingdom_id"),
         "kingdom": _kingdom_teaser(conn, bean.get("kingdom_id")),
         "offer": plaza_offer(conn, bean_id),
         "taken": cloned_id is not None,
         "cloned_id": cloned_id,
     }
+
+
+def _owner_public(conn: sqlite3.Connection, owner_id) -> dict:
+    from . import auth
+
+    return auth.owner_public(conn, owner_id)
 
 
 def _kingdom_teaser(conn: sqlite3.Connection, kingdom_id) -> dict | None:
