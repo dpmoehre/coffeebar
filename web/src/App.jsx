@@ -665,7 +665,7 @@ export default function App() {
           <Input
             value={nickDraft}
             maxLength={20}
-            placeholder="例如 dp"
+            placeholder="例如 浅烘"
             onChange={(e) => setNickDraft(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && saveNick()}
           />
@@ -896,11 +896,11 @@ function Gate({ onIn, oops, toast }) {
         )}
         {mode === "register" && (
           <div className="mt-3">
-            <Field label="用户名" hint="广场和王国给人看。不能和别人重复，最多 20 个字">
+            <Field label="用户名" hint="广场和王国给人看。不能和别人重复。浅烘、手冲、吧台这类都可以">
               <Input
                 value={nickname}
                 maxLength={20}
-                placeholder="例如 dp"
+                placeholder="例如 浅烘"
                 onChange={(e) => setNickname(e.target.value)}
               />
             </Field>
