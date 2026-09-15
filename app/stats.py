@@ -37,9 +37,12 @@ def average_dose(
         if got:
             return {**got, "source": "bean"}
 
-    extra, extra_args = "1 = 1", ()
+    extra, extra_args = "COALESCE((SELECT form FROM bean WHERE id = l.bean_id), 'beans') = 'beans'", ()
     if owner_id is not None:
-        extra = "EXISTS (SELECT 1 FROM bean b WHERE b.id = l.bean_id AND b.owner_id = ?)"
+        extra = (
+            "EXISTS (SELECT 1 FROM bean b WHERE b.id = l.bean_id AND b.owner_id = ?"
+            " AND COALESCE(b.form, 'beans') = 'beans')"
+        )
         extra_args = (owner_id,)
     got = _avg_from(conn, extra, extra_args, GLOBAL_WINDOW)
     if got:
@@ -291,9 +294,11 @@ def daily_series(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict
 def restock_list(conn: sqlite3.Connection, owner_id: int | None = None) -> list[dict]:
     """低于安全库存，或按消耗速度估「还能撑的天数」过短的豆。"""
     beans = conn.execute(
-        f"""SELECT b.id, b.name, b.roast,
+        f"""SELECT b.id, b.name, b.roast, COALESCE(b.form, 'beans') AS form,
                    COALESCE((SELECT SUM({BALANCE_EXPR}) FROM bean_lot l
                               WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS balance_g,
+                   COALESCE((SELECT SUM({store.REMAINING_PACKS}) FROM bean_lot l
+                              WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS remaining_packs,
                    (SELECT COUNT(*) FROM bean_lot l
                      WHERE l.bean_id = b.id AND l.closed_at IS NULL) AS open_lots,
                    (SELECT COUNT(*) FROM bean_lot l WHERE l.bean_id = b.id) AS all_lots,
@@ -316,6 +321,29 @@ def restock_list(conn: sqlite3.Connection, owner_id: int | None = None) -> list[
         reasons = []
         if d["all_lots"] == 0:
             # 只建了豆卡还没入袋：豆子在手上，缺的是称重录入，不是缺货
+            continue
+        if d.get("form") == "dripbag":
+            left = int(d.get("remaining_packs") or 0)
+            if d["open_lots"] == 0 or left < 1:
+                reasons.append("挂耳没有了")
+            if not reasons:
+                continue
+            d["balance_g"] = 0
+            d["cups_left"] = left
+            d["days_left"] = None
+            d["reasons"] = reasons
+            d["photos"] = [
+                {
+                    **dict(r),
+                    "url": f"/{r['path']}",
+                    "thumb": photos.thumb_url(r["path"]),
+                }
+                for r in conn.execute(
+                    "SELECT id, path, note FROM restock_photo WHERE bean_id = ? ORDER BY created_at DESC",
+                    (d["id"],),
+                ).fetchall()
+            ]
+            out.append(d)
             continue
         if d["open_lots"] == 0:
             reasons.append("在库没有了")

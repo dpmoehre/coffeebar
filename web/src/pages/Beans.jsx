@@ -6,7 +6,7 @@ import { recall, remember } from "../listCache.js";
 import { freshnessLine } from "../freshness.js";
 import { Plus } from "../icons.jsx";
 import TodayBar from "../components/TodayBar.jsx";
-import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, g, perG } from "../ui.jsx";
+import { Bar, Btn, Chip, Cover, Empty, Field, Input, Modal, Select, coverSrc, g, money, perG } from "../ui.jsx";
 
 const SORTS = [
   { key: "recent", label: "最近动过" },
@@ -51,9 +51,11 @@ function byCost(a, b, desc) {
   return desc ? b.unit_cost - a.unit_cost : a.unit_cost - b.unit_cost;
 }
 
-export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops }) {
+export default function Beans({ form = "beans", onOpen, onOpenRestock, onOpenPerson, toast, oops }) {
+  const drip = form === "dripbag";
   const [scope, setScope] = useState("stock");
-  const [data, setData] = useState(() => recall(`beans:${scope}`) ?? null);
+  const cacheKey = drip ? `dripbags:${scope}` : `beans:${scope}`;
+  const [data, setData] = useState(() => recall(cacheKey) ?? null);
   const [sort, setSort] = useState("recent");
   const [picked, setPicked] = useState([]);
   const [phase, setPhase] = useState("");
@@ -62,17 +64,17 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
 
   const load = () =>
     api
-      .beans(scope)
+      .beans(scope, form)
       .then((d) => {
-        remember(`beans:${scope}`, d);
+        remember(cacheKey, d);
         setData(d);
       })
       .catch((e) => oops(e.message));
   useEffect(() => {
-    const hit = recall(`beans:${scope}`);
+    const hit = recall(cacheKey);
     setData(hit === undefined ? null : hit);
     load();
-  }, [scope]);
+  }, [scope, form]);
 
   const allTags = useMemo(() => {
     const set = new Set();
@@ -95,8 +97,14 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
     }
     const by = {
       recent: (a, b) => b.updated_at.localeCompare(a.updated_at),
-      left: (a, b) => a.balance_g - b.balance_g,
-      left_desc: (a, b) => b.balance_g - a.balance_g,
+      left: (a, b) =>
+        drip
+          ? (a.remaining_packs || 0) - (b.remaining_packs || 0)
+          : a.balance_g - b.balance_g,
+      left_desc: (a, b) =>
+        drip
+          ? (b.remaining_packs || 0) - (a.remaining_packs || 0)
+          : b.balance_g - a.balance_g,
       roast: (a, b) => (a.roast || "").localeCompare(b.roast || ""),
       origin: (a, b) => (a.origin || "").localeCompare(b.origin || ""),
       score: (a, b) =>
@@ -107,26 +115,30 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
       fresh: byFresh,
     };
     return list.sort(by[sort]);
-  }, [data, picked, phase, sort, q]);
+  }, [data, picked, phase, sort, q, drip]);
 
   return (
     <>
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">豆子</h1>
+          <h1 className="serif m-0 text-2xl font-semibold md:text-3xl">{drip ? "挂耳咖啡" : "豆子"}</h1>
           <p className="mt-2 mb-0 text-muted">
             {data
-              ? `在库 ${data.beans.filter((b) => b.in_stock).length} 支 · 平均一杯 ${
-                  data.avg_dose.avg_g
-                } g${
-                  data.avg_dose.source === "fallback" ? "（还没数据）" : ""
-                }`
+              ? drip
+                ? `在库 ${data.beans.filter((b) => b.in_stock).length} 款 · 还剩 ${
+                    data.beans.reduce((n, b) => n + (b.remaining_packs || 0), 0)
+                  } 包`
+                : `在库 ${data.beans.filter((b) => b.in_stock).length} 支 · 平均一杯 ${
+                    data.avg_dose.avg_g
+                  } g${
+                    data.avg_dose.source === "fallback" ? "（还没数据）" : ""
+                  }`
               : "读取中…"}
           </p>
         </div>
         <Btn onClick={() => setAdding(true)}>
           <Plus className="h-4 w-4" />
-          新建豆子
+          {drip ? "新建挂耳" : "新建豆子"}
         </Btn>
       </header>
 
@@ -155,7 +167,16 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
           className="w-44 py-1.5 text-sm"
         />
         <Select value={sort} onChange={(e) => setSort(e.target.value)} className="py-1.5 text-sm">
-          {SORTS.map((s) => (
+          {(drip
+            ? SORTS.map((s) =>
+                s.key === "cost"
+                  ? { ...s, label: "包价低" }
+                  : s.key === "cost_desc"
+                    ? { ...s, label: "包价高" }
+                    : s,
+              )
+            : SORTS
+          ).map((s) => (
             <option key={s.key} value={s.key}>
               {s.label}
             </option>
@@ -202,26 +223,33 @@ export default function Beans({ onOpen, onOpenRestock, onOpenPerson, toast, oops
         {!data
           ? [0, 1, 2, 3].map((i) => <CardSkeleton key={i} delay={i} />)
           : beans.map((b, i) => (
-              <Card key={b.id} bean={b} delay={i} onClick={() => onOpen(b.id)} />
+              <Card key={b.id} bean={b} drip={drip} delay={i} onClick={() => onOpen(b.id)} />
             ))}
       </div>
 
       {data && beans.length === 0 && (
         <Empty>
           {scope === "history"
-            ? "还没有喝完的豆子。用完的豆会留在这里，风味和冲煮记录都不会丢。"
+            ? drip
+              ? "还没有喝完的挂耳。用完的会留在这里。"
+              : "还没有喝完的豆子。用完的豆会留在这里，风味和冲煮记录都不会丢。"
             : picked.length || q.trim()
-              ? "没有对得上的豆子。"
-              : "豆库是空的。右上角新建一支，填个名字和袋子上印的克重就行。"}
+              ? drip
+                ? "没有对得上的挂耳。"
+                : "没有对得上的豆子。"
+              : drip
+                ? "还没有挂耳。右上角新建一款，写这一批多少包。"
+                : "豆库是空的。右上角新建一支，填个名字和袋子上印的克重就行。"}
         </Empty>
       )}
 
       <NewBean
         open={adding}
+        form={form}
         onClose={() => setAdding(false)}
         onDone={(bean) => {
           setAdding(false);
-          toast(`已加入豆库：${bean.name}`);
+          toast(drip ? `已加入挂耳：${bean.name}` : `已加入豆库：${bean.name}`);
           load();
         }}
         oops={oops}
@@ -245,8 +273,15 @@ function CardSkeleton({ delay = 0 }) {
   );
 }
 
-function Card({ bean, delay = 0, onClick }) {
-  const pct = bean.usable_g ? (bean.balance_g / bean.usable_g) * 100 : 0;
+function Card({ bean, drip = false, delay = 0, onClick }) {
+  const packs = bean.remaining_packs ?? 0;
+  const pct = drip
+    ? bean.in_stock
+      ? Math.min(100, packs > 0 ? 100 : 0)
+      : 0
+    : bean.usable_g
+      ? (bean.balance_g / bean.usable_g) * 100
+      : 0;
   return (
     <article
       onClick={onClick}
@@ -279,7 +314,21 @@ function Card({ bean, delay = 0, onClick }) {
 
         {/* 还没入袋就没有克重可言，别拿 0 g 的空进度条糊弄 */}
         {bean.pending ? (
-          <div className="mt-3 text-[13px] text-muted">称一下净含量就能开始扣豆</div>
+          <div className="mt-3 text-[13px] text-muted">
+            {drip ? "写上这一批多少包就能开始扣" : "称一下净含量就能开始扣豆"}
+          </div>
+        ) : drip ? (
+          <>
+            <div className="mt-3 flex justify-between text-[13px] text-muted">
+              <span className={bean.near_empty ? "text-warn" : "text-amber"}>
+                还剩 {packs} 包
+              </span>
+              <span>{bean.near_empty ? "没有了" : `还能冲 ${packs} 包`}</span>
+            </div>
+            {bean.pack_cost != null && (
+              <div className="mt-1 text-[13px] text-amber">一包约 {money(bean.pack_cost)}</div>
+            )}
+          </>
         ) : (
           <>
             <div className="mt-3">
@@ -288,7 +337,6 @@ function Card({ bean, delay = 0, onClick }) {
             <div className="mt-2 flex justify-between text-[13px] text-muted">
               <span className={bean.near_empty ? "text-warn" : ""}>
                 {g(bean.balance_g)}
-                {/* 一支豆多袋只出一张卡，袋数在这儿点一下，明细在豆卡页 */}
                 {bean.open_lots > 1 && <span className="ml-1.5">共 {bean.open_lots} 袋</span>}
               </span>
               <span>{bean.cups_left < 1 ? "不够一杯了" : `约 ${bean.cups_left} 杯`}</span>
@@ -316,19 +364,28 @@ function Card({ bean, delay = 0, onClick }) {
   );
 }
 
-function NewBean({ open, onClose, onDone, oops }) {
+function NewBean({ open, form = "beans", onClose, onDone, oops }) {
+  const drip = form === "dripbag";
   const [f, setF] = useState({});
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
-    if (open) setF({ roast: "浅烘", nominal_g: 200, visibility: "private" });
-  }, [open]);
+    if (open) {
+      setF(
+        drip
+          ? { roast: "中烘", nominal_g: 8, packs: 1, visibility: "private", process: "挂耳" }
+          : { roast: "浅烘", nominal_g: 200, visibility: "private" },
+      );
+    }
+  }, [open, drip]);
 
   const submit = async () => {
     try {
       const bean = await api.createBean({
         ...f,
+        form,
         nominal_g: Number(f.nominal_g) || undefined,
+        packs: drip ? Number(f.packs) || undefined : undefined,
         price: f.price ? Number(f.price) : undefined,
         water_temp: f.water_temp ? Number(f.water_temp) : undefined,
         bought_on: f.bought_on || undefined,
@@ -345,21 +402,30 @@ function NewBean({ open, onClose, onDone, oops }) {
     <Modal
       open={open}
       onClose={onClose}
-      title="新建豆子"
-      sub="卡是品种。同样的豆再买一袋，进豆卡点「再入一袋」，不用在这儿重建。"
+      title={drip ? "新建挂耳" : "新建豆子"}
+      sub={
+        drip
+          ? "一包就是一包，不记克重剩余。同样的再买一批，进卡里点「再入一批」。"
+          : "卡是品种。同样的豆再买一袋，进豆卡点「再入一袋」，不用在这儿重建。"
+      }
       footer={
         <>
           <Btn variant="ghost" onClick={onClose}>
             取消
           </Btn>
-          <Btn onClick={submit} disabled={!f.name?.trim()}>
-            加入豆库
+          <Btn onClick={submit} disabled={!f.name?.trim() || (drip && !(Number(f.packs) > 0))}>
+            {drip ? "加入挂耳" : "加入豆库"}
           </Btn>
         </>
       }
     >
       <Field label="名字">
-        <Input value={f.name || ""} onChange={set("name")} placeholder="肯尼亚 AA" autoFocus />
+        <Input
+          value={f.name || ""}
+          onChange={set("name")}
+          placeholder={drip ? "桔林烛光·低因" : "肯尼亚 AA"}
+          autoFocus
+        />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="产地">
@@ -393,13 +459,18 @@ function NewBean({ open, onClose, onDone, oops }) {
             ))}
           </Select>
         </Field>
-        <Field label="袋上印的克重" hint="刚拆袋不用称，先按这个扣">
+        <Field label={drip ? "每包克重" : "袋上印的克重"} hint={drip ? "袋上净含量，只作标注" : "刚拆袋不用称，先按这个扣"}>
           <Input type="number" value={f.nominal_g ?? ""} onChange={set("nominal_g")} />
         </Field>
       </div>
+      {drip && (
+        <Field label="这一批多少包">
+          <Input type="number" value={f.packs ?? ""} onChange={set("packs")} />
+        </Field>
+      )}
       <div className="grid grid-cols-2 gap-3">
-        <Field label="这袋多少钱">
-          <Input type="number" value={f.price || ""} onChange={set("price")} placeholder="128" />
+        <Field label={drip ? "这一批多少钱" : "这袋多少钱"}>
+          <Input type="number" value={f.price || ""} onChange={set("price")} placeholder={drip ? "可空" : "128"} />
         </Field>
         <Field label="购入日" hint="不填按今天">
           <Input type="date" value={f.bought_on || ""} onChange={set("bought_on")} />

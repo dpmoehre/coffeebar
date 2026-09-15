@@ -64,7 +64,7 @@ export default function Restock({ onOpen, onOpenSpirit, onOpenGear, toast, oops 
                   >
                     <button
                       type="button"
-                      onClick={() => onOpen(it.id)}
+                      onClick={() => onOpen(it.id, it.form)}
                       className="flex min-w-0 flex-1 cursor-pointer items-center gap-4 text-left hover:opacity-80"
                     >
                       {it.photos?.[0] ? (
@@ -84,7 +84,11 @@ export default function Restock({ onOpen, onOpenSpirit, onOpenGear, toast, oops 
                       <div className="min-w-0 flex-1">
                         <div className="truncate">
                           {it.name}
-                          <span className="ml-2 text-[13px] text-muted">还剩 {g(it.balance_g)}</span>
+                          <span className="ml-2 text-[13px] text-muted">
+                            {it.form === "dripbag"
+                              ? `还剩 ${it.cups_left ?? 0} 包`
+                              : `还剩 ${g(it.balance_g)}`}
+                          </span>
                         </div>
                         <div className="mt-0.5 text-xs text-muted">
                           {it.reasons.join(" · ")}
@@ -92,7 +96,13 @@ export default function Restock({ onOpen, onOpenSpirit, onOpenGear, toast, oops 
                         </div>
                       </div>
                       <div className="whitespace-nowrap text-sm text-amber">
-                        {it.cups_left < 1 ? "不够一杯" : `约 ${it.cups_left} 杯`}
+                        {it.form === "dripbag"
+                          ? it.cups_left < 1
+                            ? "挂耳没有了"
+                            : `还能冲 ${it.cups_left} 包`
+                          : it.cups_left < 1
+                            ? "不够一杯"
+                            : `约 ${it.cups_left} 杯`}
                         {it.days_left != null ? ` · ${it.days_left} 天` : ""}
                       </div>
                     </button>

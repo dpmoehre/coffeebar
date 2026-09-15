@@ -137,7 +137,8 @@ export const api = {
   verify: (token) => req("POST", "/api/auth/verify", { token }),
   resendVerify: () => req("POST", "/api/auth/resend-verify", {}),
 
-  beans: (scope = "stock") => req("GET", `/api/beans?scope=${scope}`),
+  beans: (scope = "stock", form = "beans") =>
+    req("GET", `/api/beans?scope=${scope}&form=${form}`),
   bean: (id) => req("GET", `/api/beans/${id}`),
   createBean: (data) => req("POST", "/api/beans", data),
   updateBean: (id, data) => req("PATCH", `/api/beans/${id}`, data),

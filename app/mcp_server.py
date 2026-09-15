@@ -70,9 +70,9 @@ def _drop_none(data: dict) -> dict:
 
 
 @mcp.tool()
-def list_beans(scope: str = "stock") -> Any:
-    """查豆库。scope: stock 在库 / history 历史 / all 全部。"""
-    return _call(client().list_beans, scope)
+def list_beans(scope: str = "stock", form: str = "beans") -> Any:
+    """查豆库。scope: stock 在库 / history 历史 / all 全部。form: beans 手冲豆 / dripbag 挂耳。"""
+    return _call(client().list_beans, scope, form)
 
 
 @mcp.tool()
@@ -102,10 +102,12 @@ def create_bean(
     brew_ratio: float | None = None,
     brew_note: str | None = None,
     visibility: str | None = None,
+    form: str | None = None,
+    packs: int | None = None,
     photo_path: str | None = None,
     photo_kind: str = "card",
 ) -> Any:
-    """建一张豆卡。带 nominal_g 会同时入第一袋。roasted_on 是袋上烘焙日，可空。visibility=public 建完就公开，默认只自己看。
+    """建一张豆卡。form=dripbag 是挂耳，按包扣、不走克重剩余，要带 packs。手冲豆带 nominal_g 会同时入第一袋。roasted_on 是袋上烘焙日，可空。visibility=public 建完就公开，默认只自己看。
     可选 photo_path 为本机图路径，成功后立刻挂图；photo_kind 默认 card。图失败时卡仍在，返回 photo_error。
     拍豆卡/包装图建档（五步，没点头不要写）：
     1. 看图抽出：名字、产地、豆种、处理厂/庄园、海拔、处理法、烘焙；建议水温、粉量、粉水比、店家冲法备注；袋上克重、价钱、购入日、烘焙日 roasted_on；风味标签。读不清写空，不要猜克重价钱。
@@ -137,6 +139,8 @@ def create_bean(
                 "brew_ratio": brew_ratio,
                 "brew_note": brew_note,
                 "visibility": visibility,
+                "form": form,
+                "packs": packs,
                 "photo_path": photo_path,
                 "photo_kind": photo_kind,
             }
@@ -272,8 +276,9 @@ def create_bean_lot(
     bought_on: str | None = None,
     roasted_on: str | None = None,
     note: str | None = None,
+    packs: int | None = None,
 ) -> Any:
-    """同豆再入一袋，不新建卡。roasted_on 是袋上烘焙日，可空。"""
+    """同豆再入一袋，不新建卡。挂耳要带 packs（这一批多少包），不走克重。roasted_on 是袋上烘焙日，可空。"""
     return _call(
         client().create_bean_lot,
         bean_id,
@@ -285,6 +290,7 @@ def create_bean_lot(
                 "bought_on": bought_on,
                 "roasted_on": roasted_on,
                 "note": note,
+                "packs": packs,
             }
         ),
     )

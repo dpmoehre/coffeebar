@@ -158,8 +158,8 @@ class Client:
 
     # ── 豆子 ──────────────────────────────────────────────
 
-    def list_beans(self, scope: str = "stock"):
-        return self.request("GET", f"/api/beans?scope={scope}")
+    def list_beans(self, scope: str = "stock", form: str = "beans"):
+        return self.request("GET", f"/api/beans?scope={scope}&form={form}")
 
     def get_bean(self, bean_id: int):
         return self.request("GET", f"/api/beans/{bean_id}")

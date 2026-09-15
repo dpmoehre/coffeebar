@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-15",
+    title: "侧栏有挂耳咖啡了",
+    notes: [
+      "挂耳单独一栏，不跟手冲豆混在一起。消耗一包就是一包，不按克重算还能冲几杯。",
+      "冲一包不用填粉量、不扣滤纸。盒装一共几包、多少钱，再买的时候补进「再入一批」。",
+    ],
+  },
+  {
     date: "2026-09-10",
     title: "其他器具不再写滤纸开包",
     notes: [

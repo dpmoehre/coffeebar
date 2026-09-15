@@ -82,6 +82,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
 
   if (!bean) return <p className="text-muted">读取中…</p>;
 
+  const drip = bean.form === "dripbag";
   const openLots = bean.lots.filter((l) => !l.closed_at);
   const current = openLots[0];
   const dose = bean.avg_dose;
@@ -102,7 +103,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
       <header className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0">
           <button onClick={onBack} className="mb-1.5 text-sm text-muted hover:text-amber">
-            ‹ 回豆库
+            {drip ? "‹ 回挂耳" : "‹ 回豆库"}
           </button>
           <div className="flex flex-wrap items-baseline gap-3">
             <h1 className="serif m-0 truncate text-2xl font-semibold md:text-3xl">{bean.name}</h1>
@@ -123,8 +124,10 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
               bean.altitude,
               bean.water_temp && `${bean.water_temp} °C`,
               current?.opened_on ? `开封 ${current.opened_on}` : "未开封",
-              freshnessLine(bean.freshness),
-              current?.unit_cost && `这杯约 ${money(dose.avg_g * current.unit_cost)}`,
+              drip ? null : freshnessLine(bean.freshness),
+              drip
+                ? current?.pack_cost && `一包约 ${money(current.pack_cost)}`
+                : current?.unit_cost && dose?.avg_g && `这杯约 ${money(dose.avg_g * current.unit_cost)}`,
             ]
               .filter(Boolean)
               .join(" · ")}
@@ -180,11 +183,11 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
             }
             disabled={openLots.length === 0}
           >
-            冲一次
+            {drip ? "冲一包" : "冲一次"}
           </Btn>
           <Btn variant="ghost" onClick={() => setLotOpen(true)}>
             <Plus className="h-4 w-4" />
-            再入一袋
+            {drip ? "再入一批" : "再入一袋"}
           </Btn>
           <Btn variant="danger" onClick={() => setKillCard(true)}>
             <Trash className="h-4 w-4" />
@@ -198,19 +201,28 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
           <div className="flex items-baseline justify-between">
             <div className="serif text-lg">库存</div>
             <div className="text-[13px] text-muted">
-              {openLots.length ? `${openLots.length} 袋在库` : "在库没有了"}
+              {openLots.length
+                ? drip
+                  ? `${openLots.length} 批在库`
+                  : `${openLots.length} 袋在库`
+                : "在库没有了"}
             </div>
           </div>
 
           <div className="serif mt-3 text-4xl">
-            {Math.round(bean.balance_g)}
-            <span className="ml-1 text-lg text-amber">g</span>
+            {drip ? bean.remaining_packs ?? 0 : Math.round(bean.balance_g)}
+            <span className="ml-1 text-lg text-amber">{drip ? "包" : "g"}</span>
           </div>
           <p className="mt-1 text-[13px] text-muted">
-            {bean.cups_left < 1 ? "不够一杯了" : `还能冲约 ${bean.cups_left} 杯`}（按你平均一杯{" "}
-            {dose.avg_g} g
-            {dose.lo_g != null && dose.lo_g !== dose.hi_g ? `，${dose.lo_g}–${dose.hi_g}` : ""}
-            {dose.source === "fallback" ? "，还没数据" : ""}）
+            {drip
+              ? bean.cups_left < 1
+                ? "没有剩的挂耳了"
+                : `还能冲 ${bean.cups_left} 包，一包就是一包`
+              : `${
+                  bean.cups_left < 1 ? "不够一杯了" : `还能冲约 ${bean.cups_left} 杯`
+                }（按你平均一杯 ${dose.avg_g} g${
+                  dose.lo_g != null && dose.lo_g !== dose.hi_g ? `，${dose.lo_g}–${dose.hi_g}` : ""
+                }${dose.source === "fallback" ? "，还没数据" : ""}）`}
           </p>
 
           <div className="mt-4 space-y-3">
@@ -218,6 +230,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
               <LotRow
                 key={lot.id}
                 lot={lot}
+                drip={drip}
                 onDone={load}
                 onOpenBag={() => setOpening(lot)}
                 guarded={guarded}
@@ -246,15 +259,17 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         </Panel>
       </div>
 
-      <BrewPlan
-        bean={bean}
-        toast={toast}
-        oops={oops}
-        onRecord={(info) => {
-          setPrefill(info);
-          setBrewOpen(true);
-        }}
-      />
+      {!drip && (
+        <BrewPlan
+          bean={bean}
+          toast={toast}
+          oops={oops}
+          onRecord={(info) => {
+            setPrefill(info);
+            setBrewOpen(true);
+          }}
+        />
+      )}
 
       <Photos
         beanId={bean.id}
@@ -299,7 +314,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
                       ) : null}
                     </div>
                     <div className="mt-1 text-[13px] text-muted">
-                      {r.at.slice(5, 16)} · 第 {r.lot_seq} 袋
+                      {r.at.slice(5, 16)} · 第 {r.lot_seq} {drip ? "批" : "袋"}
                       {r.lot_closed_at ? "（已关）" : ""}
                       {brewHeadline(r) ? ` · ${brewHeadline(r)}` : ""}
                     </div>
@@ -317,9 +332,11 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
                           } else {
                             const out = await api.voidBrew(r.id, "记错了");
                             toast(
-                              out.closed_lot_adjusted
-                                ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
-                                : `已撤回，${r.amount_g} g 加回库存`
+                              drip
+                                ? "已撤回，加回 1 包"
+                                : out.closed_lot_adjusted
+                                  ? `已撤回，${r.amount_g} g 记成今天的调整（那袋已关）`
+                                  : `已撤回，${r.amount_g} g 加回库存`
                             );
                           }
                           load();
@@ -457,6 +474,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
 
       <BrewOnce
         open={brewOpen}
+        drip={drip}
         onClose={() => setBrewOpen(false)}
         lots={openLots}
         people={people}
@@ -471,25 +489,28 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         oops={oops}
       />
 
-      <OpenBag
-        open={!!opening}
-        lot={opening}
-        onClose={() => setOpening(null)}
-        onDone={(msg) => {
-          setOpening(null);
-          toast(msg);
-          load();
-        }}
-        oops={oops}
-      />
+      {!drip && (
+        <OpenBag
+          open={!!opening}
+          lot={opening}
+          onClose={() => setOpening(null)}
+          onDone={(msg) => {
+            setOpening(null);
+            toast(msg);
+            load();
+          }}
+          oops={oops}
+        />
+      )}
 
       <AddLot
         open={lotOpen}
+        drip={drip}
         onClose={() => setLotOpen(false)}
         beanId={bean.id}
         onDone={() => {
           setLotOpen(false);
-          toast("又入一袋，没有新建豆卡");
+          toast(drip ? "又入一批，没有新建卡" : "又入一袋，没有新建豆卡");
           load();
         }}
         oops={oops}
@@ -680,7 +701,7 @@ function blankScore() {
   return out;
 }
 
-function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
+function LotRow({ lot, drip = false, onDone, onOpenBag, guarded, toast, oops }) {
   const [busy, setBusy] = useState(null);
   const [roastOn, setRoastOn] = useState(lot.roasted_on || "");
   const pct = lot.usable_g ? (lot.balance_g / lot.usable_g) * 100 : 0;
@@ -713,20 +734,23 @@ function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
     <div className={`rounded-xl border border-line p-3 ${lot.closed_at ? "opacity-50" : ""}`}>
       <div className="flex items-baseline justify-between gap-2 text-sm">
         <div>
-          <span className="text-muted">第 {lot.seq} 袋</span>
+          <span className="text-muted">第 {lot.seq} {drip ? "批" : "袋"}</span>
           <span className="ml-2">
-            {lot.closed_at ? "已关袋" : lot.opened_on ? "在喝这袋" : "未开封"}
+            {lot.closed_at ? (drip ? "已关上" : "已关袋") : lot.opened_on ? (drip ? "在喝这批" : "在喝这袋") : "未开封"}
           </span>
           <span className="ml-2 text-[13px] text-muted">
-            标称 {lot.nominal_g}
-            {lot.measured_g ? ` · 实称 ${lot.measured_g}` : "（没称）"}
+            {drip
+              ? `${lot.packs || 0} 包 × ${lot.nominal_g} g`
+              : `标称 ${lot.nominal_g}${lot.measured_g ? ` · 实称 ${lot.measured_g}` : "（没称）"}`}
             {lot.price ? ` · ${money(lot.price)}` : ""}
           </span>
-          {freshnessLine(lot.freshness) && (
+          {!drip && freshnessLine(lot.freshness) && (
             <span className="ml-2 text-[13px] text-amber">{freshnessLine(lot.freshness)}</span>
           )}
         </div>
-        <div className="whitespace-nowrap text-amber">{g(lot.balance_g)}</div>
+        <div className="whitespace-nowrap text-amber">
+          {drip ? `剩 ${lot.remaining_packs ?? 0} 包` : g(lot.balance_g)}
+        </div>
       </div>
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
         <span className="text-muted">烘焙日</span>
@@ -755,7 +779,7 @@ function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
           记下
         </button>
       </div>
-      {!lot.closed_at && (
+      {!lot.closed_at && !drip && (
         <>
           <div className="mt-2">
             <Bar pct={pct} warn={pct < 8} />
@@ -790,16 +814,35 @@ function LotRow({ lot, onDone, onOpenBag, guarded, toast, oops }) {
           </div>
         </>
       )}
+      {!lot.closed_at && drip && (
+        <div className="mt-2 flex flex-wrap gap-2 text-xs">
+          <button
+            className="text-muted underline hover:text-warn"
+            onClick={() =>
+              guarded(async () => {
+                if (!window.confirm("这批挂耳不用了？剩下的包不再出现在在库。")) return;
+                await api.closeLot(lot.id);
+                toast("这批已关上");
+                onDone();
+              })
+            }
+          >
+            这批用完
+          </button>
+        </div>
+      )}
       {lot.closed_at && (
         <div className="mt-1 text-xs text-muted">
-          用掉 {Math.round(lot.used_g ?? 0)} g · 关于 {lot.closed_at.slice(5, 10)}
+          {drip
+            ? `用掉 ${lot.used_packs ?? 0} 包 · 关于 ${lot.closed_at.slice(5, 10)}`
+            : `用掉 ${Math.round(lot.used_g ?? 0)} g · 关于 ${lot.closed_at.slice(5, 10)}`}
         </div>
       )}
     </div>
   );
 }
 
-function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) {
+function BrewOnce({ open, drip = false, onClose, lots, people, dose, prefill, onDone, oops }) {
   const [lotId, setLotId] = useState(null);
   const [amount, setAmount] = useState("");
   const [who, setWho] = useState("");
@@ -811,7 +854,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
     if (!open) return;
     // 默认选上次冲用的那袋（后端按开封与创建排序，第一条就是在喝的）
     setLotId(lots[0]?.id ?? null);
-    setAmount(String(prefill?.dose ?? dose.avg_g ?? 15));
+    setAmount(String(drip ? lots[0]?.nominal_g ?? 8 : prefill?.dose ?? dose.avg_g ?? 15));
     setWho(localStorage.getItem("coffeebar-last-person") || "");
     setTotalS(prefill?.total_s != null ? String(prefill.total_s) : "");
     setPaper(undefined);
@@ -821,11 +864,11 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
       setPaper(f);
       if (f?.pack_id) setPackId(f.pack_id);
     });
-  }, [open, lots, prefill, dose]);
+  }, [open, lots, prefill, dose, drip]);
 
   const lot = lots.find((l) => l.id === lotId);
   const amt = Number(amount);
-  const short = lot && amt > lot.balance_g;
+  const short = drip ? lot && (lot.remaining_packs || 0) < 1 : lot && amt > lot.balance_g;
   const pickedPack = paper?.need_pick
     ? (paper.packs || []).find((p) => p.pack_id === packId)
     : paper;
@@ -840,21 +883,25 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
     try {
       const res = await api.recordBrew({
         lot_id: lotId,
-        amount_g: amt,
+        amount_g: drip ? undefined : amt,
         person: who.trim() || undefined,
-        brew_method: prefill?.method,
-        brew_ratio: prefill?.ratio,
-        brew_total_s: totalS ? Number(totalS) : undefined,
-        brew_stages: prefill?.stages,
-        filter_pack_id: packId || undefined,
+        brew_method: drip ? "dripbag" : prefill?.method,
+        brew_ratio: drip ? undefined : prefill?.ratio,
+        brew_total_s: drip || !totalS ? undefined : Number(totalS),
+        brew_stages: drip ? undefined : prefill?.stages,
+        filter_pack_id: drip ? undefined : packId || undefined,
       });
       if (who.trim()) localStorage.setItem("coffeebar-last-person", who.trim());
       const paperBit =
         res.filter_cost != null ? ` · 滤纸 ${money(res.filter_cost)}` : "";
       onDone(
-        `${who.trim() || "没记谁"} · 扣 ${amt} g${
-          res.cost ? ` · ${money(res.cost)}` : ""
-        }${paperBit}${res.near_empty ? " · 这袋快见底了" : ""}`
+        drip
+          ? `${who.trim() || "没记谁"} · 1 包${res.cost ? ` · ${money(res.cost)}` : ""}${
+              res.near_empty ? " · 这批没有了" : ""
+            }`
+          : `${who.trim() || "没记谁"} · 扣 ${amt} g${
+              res.cost ? ` · ${money(res.cost)}` : ""
+            }${paperBit}${res.near_empty ? " · 这袋快见底了" : ""}`
       );
     } catch (e) {
       oops(e.message);
@@ -866,8 +913,8 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
       open={open}
       onClose={onClose}
       wide
-      title="冲一次"
-      sub="袋子由你选，粉量填这次实际用了多少。"
+      title={drip ? "冲一包" : "冲一次"}
+      sub={drip ? "选一批，扣一包。不用填克重。" : "袋子由你选，粉量填这次实际用了多少。"}
       footer={
         <>
           <Btn variant="ghost" onClick={onClose}>
@@ -881,7 +928,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
     >
       <div>
         <span className="mb-2 block text-[13px] text-muted">
-          用哪一袋（默认上次那袋，可改；不自动挑）
+          {drip ? "用哪一批（不自动挑）" : "用哪一袋（默认上次那袋，可改；不自动挑）"}
         </span>
         <div className="space-y-2">
           {lots.map((l) => (
@@ -899,15 +946,16 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
                 }`}
               />
               <span className="min-w-0 flex-1">
-                第 {l.seq} 袋 · {l.opened_on ? "在喝这袋" : "未开封"}
+                第 {l.seq} {drip ? "批" : "袋"} · {l.opened_on ? "在喝这批" : "未开封"}
                 <span className="text-muted">
                   {" · "}
-                  {l.bought_on ? `${l.bought_on} 入 · ` : ""}标称 {l.nominal_g}
-                  {l.measured_g ? ` / 实称 ${l.measured_g}` : ""}
+                  {l.bought_on ? `${l.bought_on} 入 · ` : ""}
+                  {drip ? `${l.packs || 0} 包` : `标称 ${l.nominal_g}`}
+                  {!drip && l.measured_g ? ` / 实称 ${l.measured_g}` : ""}
                 </span>
               </span>
               <span className="whitespace-nowrap text-amber">
-                {g(l.balance_g)}
+                {drip ? `剩 ${l.remaining_packs ?? 0} 包` : g(l.balance_g)}
                 {l.price ? ` · ${money(l.price)}` : ""}
               </span>
             </button>
@@ -915,33 +963,45 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
         </div>
       </div>
 
-      <Field label="这次实际用了多少粉（克）">
-        <Input
-          type="number"
-          step="0.1"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          autoFocus
-        />
-      </Field>
-      <Field label="实际总秒" hint="可空。播完会带上；手填也能对照方案给研磨建议">
-        <Input
-          type="number"
-          value={totalS}
-          onChange={(e) => setTotalS(e.target.value)}
-          placeholder="例如 168"
-        />
-      </Field>
+      {!drip && (
+        <Field label="这次实际用了多少粉（克）">
+          <Input
+            type="number"
+            step="0.1"
+            value={amount}
+            onChange={(e) => setAmount(e.target.value)}
+            autoFocus
+          />
+        </Field>
+      )}
+      {!drip && (
+        <Field label="实际总秒" hint="可空。播完会带上；手填也能对照方案给研磨建议">
+          <Input
+            type="number"
+            value={totalS}
+            onChange={(e) => setTotalS(e.target.value)}
+            placeholder="例如 168"
+          />
+        </Field>
+      )}
       <p className={`text-[13px] ${short ? "text-warn" : "text-muted"}`}>
         {!lot
-          ? "先选一袋"
-          : short
-            ? `这袋只剩 ${Math.round(lot.balance_g)} g，不够 ${amt} g。换一袋、改粉量，或先盘点补重。`
-            : `这袋账面 ${Math.round(lot.balance_g)} g，按你平均 ${dose.avg_g} g 还能冲约 ${Math.floor(
-                lot.balance_g / dose.avg_g
-              )} 杯${cupCost != null ? ` · 这杯约 ${money(cupCost)}` : ""}`}
+          ? drip
+            ? "先选一批"
+            : "先选一袋"
+          : drip
+            ? short
+              ? "这批没有剩的挂耳了"
+              : `这批还剩 ${lot.remaining_packs ?? 0} 包${
+                  lot.pack_cost != null ? ` · 一包约 ${money(lot.pack_cost)}` : ""
+                }`
+            : short
+              ? `这袋只剩 ${Math.round(lot.balance_g)} g，不够 ${amt} g。换一袋、改粉量，或先盘点补重。`
+              : `这袋账面 ${Math.round(lot.balance_g)} g，按你平均 ${dose.avg_g} g 还能冲约 ${Math.floor(
+                  lot.balance_g / dose.avg_g
+                )} 杯${cupCost != null ? ` · 这杯约 ${money(cupCost)}` : ""}`}
       </p>
-      {paper === undefined ? null : paper?.need_pick ? (
+      {!drip && (paper === undefined ? null : paper?.need_pick ? (
         <div>
           <span className="mb-2 block text-[13px] text-muted">
             开着好几包滤纸，选一包才扣纸；不选这杯不加纸钱
@@ -962,7 +1022,7 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
         </p>
       ) : (
         <p className="text-[13px] text-muted">还没开包计张，这杯不加纸钱。</p>
-      )}
+      ))}
 
       <Field label="谁喝的" hint="打个新名字就有这个人；留空表示没记">
         <Input value={who} onChange={(e) => setWho(e.target.value)} placeholder="丁瀚舟" />
@@ -987,18 +1047,18 @@ function BrewOnce({ open, onClose, lots, people, dose, prefill, onDone, oops }) 
   );
 }
 
-function AddLot({ open, onClose, beanId, onDone, oops }) {
+function AddLot({ open, drip = false, onClose, beanId, onDone, oops }) {
   const [f, setF] = useState({});
   useEffect(() => {
-    if (open) setF({ nominal_g: 200 });
-  }, [open]);
+    if (open) setF(drip ? { nominal_g: 8, packs: 1 } : { nominal_g: 200 });
+  }, [open, drip]);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="再入一袋"
-      sub="同样的豆只加批次，产地、风味、冲煮方案都不用重填。"
+      title={drip ? "再入一批" : "再入一袋"}
+      sub={drip ? "同样的挂耳只加一批，档案不用重填。" : "同样的豆只加批次，产地、风味、冲煮方案都不用重填。"}
       footer={
         <>
           <Btn variant="ghost" onClick={onClose}>
@@ -1009,6 +1069,7 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
               try {
                 await api.addLot(beanId, {
                   nominal_g: Number(f.nominal_g),
+                  packs: drip ? Number(f.packs) : undefined,
                   price: f.price ? Number(f.price) : undefined,
                   bought_on: f.bought_on || undefined,
                   roasted_on: f.roasted_on || undefined,
@@ -1018,7 +1079,7 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
                 oops(e.message);
               }
             }}
-            disabled={!(Number(f.nominal_g) > 0)}
+            disabled={!(Number(f.nominal_g) > 0) || (drip && !(Number(f.packs) > 0))}
           >
             入库
           </Btn>
@@ -1026,15 +1087,15 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
       }
     >
       <div className="grid grid-cols-2 gap-3">
-        <Field label="袋上印的克重">
+        <Field label={drip ? "每包克重" : "袋上印的克重"}>
           <Input
             type="number"
             value={f.nominal_g ?? ""}
             onChange={(e) => setF({ ...f, nominal_g: e.target.value })}
-            autoFocus
+            autoFocus={!drip}
           />
         </Field>
-        <Field label="这袋多少钱">
+        <Field label={drip ? "这一批多少钱" : "这袋多少钱"}>
           <Input
             type="number"
             value={f.price ?? ""}
@@ -1043,6 +1104,16 @@ function AddLot({ open, onClose, beanId, onDone, oops }) {
           />
         </Field>
       </div>
+      {drip && (
+        <Field label="这一批多少包">
+          <Input
+            type="number"
+            value={f.packs ?? ""}
+            onChange={(e) => setF({ ...f, packs: e.target.value })}
+            autoFocus
+          />
+        </Field>
+      )}
       <Field label="购入日" hint="不填就按今天记">
         <Input type="date" value={f.bought_on ?? ""} onChange={(e) => setF({ ...f, bought_on: e.target.value })} />
       </Field>

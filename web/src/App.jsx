@@ -5,6 +5,7 @@ import { api } from "./api.js";
 import { forgetLists } from "./listCache.js";
 import {
   Bean,
+  DripBag,
   Calendar as CalIcon,
   Cart,
   Chart,
@@ -39,6 +40,7 @@ import Kingdom from "./pages/Kingdom.jsx";
 
 const NAV = [
   { key: "beans", label: "豆子", Icon: Bean },
+  { key: "dripbags", label: "挂耳咖啡", Icon: DripBag },
   { key: "gear", label: "器具", Icon: Dripper },
   { key: "plaza", label: "广场", Icon: PlazaIcon },
   { key: "kingdom", label: "王国", Icon: Crown },
@@ -114,6 +116,18 @@ export default function App() {
     setKingdomGearId(null);
     setMapFocus(null);
     setPage("bean");
+  }, []);
+
+  const openDripBag = useCallback((id) => {
+    setBeanId(id);
+    setSpiritId(null);
+    setPlazaId(null);
+    setPlazaGearId(null);
+    setGearFocusId(null);
+    setKingdomId(null);
+    setKingdomGearId(null);
+    setMapFocus(null);
+    setPage("dripbag");
   }, []);
 
   const openPlaza = useCallback((id) => {
@@ -343,6 +357,7 @@ export default function App() {
   const navOn = (key) =>
     page === key ||
     (key === "beans" && page === "bean") ||
+    (key === "dripbags" && page === "dripbag") ||
     (key === "plaza" && (page === "plaza-bean" || page === "plaza-gear")) ||
     (key === "kingdom" && (page === "kingdom-bean" || page === "kingdom-gear")) ||
     (key === "spirits" && page === "spirit");
@@ -530,6 +545,16 @@ export default function App() {
             oops={oops}
           />
         )}
+        {page === "dripbags" && (
+          <Beans
+            form="dripbag"
+            onOpen={openDripBag}
+            onOpenRestock={() => go("restock")}
+            onOpenPerson={openCalendar}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "gear" && <Gear toast={toast} oops={oops} focusId={gearFocusId} />}
         {page === "plaza" && (
           <Plaza
@@ -602,6 +627,14 @@ export default function App() {
             oops={oops}
           />
         )}
+        {page === "dripbag" && (
+          <BeanCard
+            id={beanId}
+            onBack={() => go("dripbags")}
+            toast={toast}
+            oops={oops}
+          />
+        )}
         {page === "spirits" && <Spirits onOpen={openSpirit} toast={toast} oops={oops} />}
         {page === "spirit" && (
           <SpiritCard id={spiritId} onBack={() => go("spirits")} toast={toast} oops={oops} />
@@ -609,7 +642,7 @@ export default function App() {
         {page === "menu" && <Menu onOpenSpirit={openSpirit} toast={toast} oops={oops} />}
         {page === "restock" && (
           <Restock
-            onOpen={openBean}
+            onOpen={(id, form) => (form === "dripbag" ? openDripBag(id) : openBean(id))}
             onOpenSpirit={openSpirit}
             onOpenGear={openGear}
             toast={toast}

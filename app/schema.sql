@@ -58,6 +58,7 @@ CREATE TABLE IF NOT EXISTS bean (
   kingdom_id  INTEGER,                   -- 收入咖啡王国后挂到公共豆种
   source_bean_id INTEGER,                -- 从广场领回时记下原卡，不带袋子
   seed        INTEGER NOT NULL DEFAULT 0, -- 进门练习豆，不算真库存号
+  form        TEXT    NOT NULL DEFAULT 'beans',  -- beans 手冲豆 / dripbag 挂耳，按包扣
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS bean_lot (
   opened_on   TEXT,                       -- 开封日
   closed_at   TEXT,                       -- 非空 = 已关袋（这袋用完了）
   note        TEXT,
+  packs       INTEGER,                   -- 挂耳：这一批多少包；手冲豆为空
   created_at  TEXT    NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_lot_bean ON bean_lot(bean_id);

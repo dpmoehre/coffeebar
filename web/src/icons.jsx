@@ -34,6 +34,14 @@ export const Bean = ({ className = "" }) => (
   </svg>
 );
 
+export const DripBag = ({ className = "" }) => (
+  <svg {...base} className={className}>
+    <path d="M8 7.2h8l-.8 11.2H8.8z" />
+    <path d="M9.2 7.2V5.4c0-.8 2.8-1.6 2.8-1.6s2.8.8 2.8 1.6v1.8" />
+    <path d="M10.4 11.2h3.2M10.4 14h3.2" />
+  </svg>
+);
+
 export const Chart = ({ className = "" }) => (
   <svg {...base} className={className}>
     <path d="M4 20V6M4 20h16" />

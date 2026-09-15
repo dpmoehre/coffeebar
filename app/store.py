@@ -104,6 +104,29 @@ def parse_visibility(value) -> str:
     return vis
 
 
+def parse_form(value) -> str:
+    form = (value or "beans").strip()
+    if form not in ("beans", "dripbag"):
+        raise Conflict("形态只能是豆子或挂耳")
+    return form
+
+
+def bean_form(conn: sqlite3.Connection, bean_id: int) -> str:
+    row = conn.execute("SELECT form FROM bean WHERE id = ?", (bean_id,)).fetchone()
+    return (row["form"] if row and row["form"] else "beans")
+
+
+def remaining_packs_of(lot: dict) -> int:
+    return max(0, int(lot.get("packs") or 0) - int(lot.get("used_packs") or 0))
+
+
+USED_PACKS = """
+    COALESCE((SELECT COUNT(*) FROM consumption_event
+              WHERE lot_id = l.id AND voided_at IS NULL), 0)
+"""
+REMAINING_PACKS = f"COALESCE(l.packs, 0) - ({USED_PACKS})"
+
+
 def clear_certification(conn: sqlite3.Connection, bean_id: int) -> None:
     """改了认证相关字段或收回公开后，认证作废，要重新审。"""
     conn.execute(
@@ -120,6 +143,7 @@ def clear_certification(conn: sqlite3.Connection, bean_id: int) -> None:
 def _annotate_bean(bean: dict) -> dict:
     bean["visibility"] = bean.get("visibility") or "private"
     bean["certified"] = bool(bean.get("certified_at"))
+    bean["form"] = bean.get("form") or "beans"
     return bean
 
 
@@ -203,6 +227,23 @@ def _decorate_lot(lot: dict | None, roast: str | None, today: str | None = None)
     return lot
 
 
+def _finish_lot(lot: dict, roast: str | None, today: str | None, form: str) -> dict:
+    lot["unit_cost"] = (lot["price"] / lot["usable_g"]) if lot.get("price") and lot.get("usable_g") else None
+    if form == "dripbag":
+        if lot.get("used_packs") is None:
+            lot["used_packs"] = 0
+        lot["remaining_packs"] = remaining_packs_of(lot)
+        packs = int(lot.get("packs") or 0)
+        grams = float(lot.get("nominal_g") or 0)
+        if lot.get("price") and packs > 0 and grams > 0:
+            lot["unit_cost"] = lot["price"] / (packs * grams)
+            lot["pack_cost"] = lot["price"] / packs
+        else:
+            lot["pack_cost"] = None
+    _decorate_lot(lot, roast, today)
+    return lot
+
+
 def _bean_roast(conn: sqlite3.Connection, bean_id: int) -> str | None:
     row = conn.execute("SELECT roast FROM bean WHERE id = ?", (bean_id,)).fetchone()
     return row["roast"] if row else None
@@ -248,11 +289,12 @@ def give_starter_bean(conn: sqlite3.Connection, owner_id: int) -> int:
 
 def create_bean(conn: sqlite3.Connection, data: dict) -> int:
     vis = parse_visibility(data["visibility"]) if "visibility" in data else "private"
+    form = parse_form(data.get("form"))
     ts = db.now()
     cur = conn.execute(
         """INSERT INTO bean (owner_id, name, origin, varietal, producer, altitude, process, roast,
-                             water_temp, note, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                             water_temp, note, form, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             data.get("owner_id"),
             data["name"].strip(),
@@ -264,20 +306,22 @@ def create_bean(conn: sqlite3.Connection, data: dict) -> int:
             data.get("roast"),
             data.get("water_temp"),
             data.get("note"),
+            form,
             ts,
             ts,
         ),
     )
     bean_id = int(cur.lastrowid)
     # 店家豆卡上有推荐参数就直接存成这支豆的默认，省得每次重填
+    drip = form == "dripbag"
     conn.execute(
         "INSERT INTO brew_guide (bean_id, method, dose_g, ratio, note) VALUES (?, ?, ?, ?, ?)",
         (
             bean_id,
-            data.get("brew_method") or "v60",
-            float(data.get("brew_dose_g") or 15),
-            float(data.get("brew_ratio") or 16),
-            data.get("brew_note"),
+            data.get("brew_method") or ("dripbag" if drip else "v60"),
+            float(data.get("brew_dose_g") or (8 if drip else 15)),
+            float(data.get("brew_ratio") or (1 if drip else 16)),
+            data.get("brew_note") or ("撕开挂耳，注热水。" if drip else None),
         ),
     )
     set_tags(conn, bean_id, data.get("tags") or [])
@@ -411,7 +455,12 @@ def bean_tags(conn: sqlite3.Connection, bean_id: int) -> list[str]:
     return [r[0] for r in cur.fetchall()]
 
 
-def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | None = None) -> list[dict]:
+def list_beans(
+    conn: sqlite3.Connection,
+    scope: str = "stock",
+    owner_id: int | None = None,
+    form: str = "beans",
+) -> list[dict]:
     """scope: stock 在库（含只建了豆卡还没入袋的）/ history 历史（曾有袋且全关）/ all 全部。
 
     只建豆卡没入袋的豆子一袋都没有，既不算在库也不算喝完了。它跟着「在库」出，
@@ -429,13 +478,16 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
                           WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS usable_g,
                {REMAINING_VALUE} AS remaining_value,
                {PRICED_G} AS priced_g,
-               {LAST_UNIT_COST} AS last_unit_cost
+               {LAST_UNIT_COST} AS last_unit_cost,
+               COALESCE((SELECT SUM({REMAINING_PACKS}) FROM bean_lot l
+                          WHERE l.bean_id = b.id AND l.closed_at IS NULL), 0) AS remaining_packs
         FROM bean b
         WHERE (? IS NULL OR b.owner_id = ?)
           AND b.deleted_at IS NULL
+          AND COALESCE(b.form, 'beans') = ?
         ORDER BY b.updated_at DESC
         """,
-        (owner_id, owner_id),
+        (owner_id, owner_id, parse_form(form)),
     )
     beans = _rows(cur)
     out = []
@@ -446,7 +498,22 @@ def list_beans(conn: sqlite3.Connection, scope: str = "stock", owner_id: int | N
             continue
         if scope == "history" and (b["in_stock"] or b["pending"]):
             continue
-        if b["priced_g"]:
+        if (b.get("form") or "beans") == "dripbag":
+            priced = conn.execute(
+                """SELECT price, packs, nominal_g FROM bean_lot
+                    WHERE bean_id = ? AND closed_at IS NULL
+                      AND price IS NOT NULL AND COALESCE(packs, 0) > 0
+                      AND COALESCE(nominal_g, 0) > 0
+                    ORDER BY created_at DESC, id DESC LIMIT 1""",
+                (b["id"],),
+            ).fetchone()
+            if priced:
+                b["pack_cost"] = priced["price"] / priced["packs"]
+                b["unit_cost"] = priced["price"] / (priced["packs"] * priced["nominal_g"])
+            else:
+                b["pack_cost"] = None
+                b["unit_cost"] = None
+        elif b["priced_g"]:
             b["unit_cost"] = b["remaining_value"] / b["priced_g"]
         else:
             b["unit_cost"] = b["last_unit_cost"]
@@ -540,9 +607,19 @@ def get_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int | None = None
     bean["tags"] = bean_tags(conn, bean_id)
     bean["lots"] = list_lots(conn, bean_id, roast=bean.get("roast"))
     bean["balance_g"] = sum(l["balance_g"] for l in bean["lots"] if not l["closed_at"])
+    bean["remaining_packs"] = sum(
+        int(l.get("remaining_packs") or 0) for l in bean["lots"] if not l["closed_at"]
+    )
     bean["in_stock"] = any(not l["closed_at"] for l in bean["lots"])
     bean["pending"] = not bean["lots"]
     bean["unit_cost"] = unit_cost_of(bean["lots"])
+    if (bean.get("form") or "beans") == "dripbag":
+        priced = next(
+            (l for l in bean["lots"] if l.get("pack_cost") is not None),
+            None,
+        )
+        bean["unit_cost"] = priced.get("unit_cost") if priced else None
+        bean["pack_cost"] = priced.get("pack_cost") if priced else None
     bean["score_log"] = list_scores(conn, bean_id, lot_seq={l["id"]: l["seq"] for l in bean["lots"]})
     bean["scores"] = bean["score_log"][0] if bean["score_log"] else None
     bean["score_avg"] = average_scores(bean["score_log"])
@@ -700,6 +777,7 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "cover": photos.cover(shots),
         "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
         "owner": _owner_public(conn, bean.get("owner_id")),
+        "form": bean.get("form") or "beans",
         "kingdom_id": bean.get("kingdom_id"),
         "kingdom": _kingdom_teaser(conn, bean.get("kingdom_id")),
         "offer": plaza_offer(conn, bean_id),
@@ -834,6 +912,7 @@ def take_public_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int) -> d
             "roast": src.get("roast"),
             "water_temp": src.get("water_temp"),
             "note": src.get("note"),
+            "form": src.get("form") or "beans",
             "tags": bean_tags(conn, bean_id),
         },
     )
@@ -996,7 +1075,8 @@ def list_lots(conn: sqlite3.Connection, bean_id: int, roast: str | None = None) 
         f"""SELECT l.*, {USABLE} AS usable_g, {BALANCE} AS balance_g,
                    ROW_NUMBER() OVER (ORDER BY l.created_at, l.id) AS seq,
                    (SELECT COALESCE(SUM(amount_g), 0) FROM consumption_event
-                     WHERE lot_id = l.id AND voided_at IS NULL) AS used_g
+                     WHERE lot_id = l.id AND voided_at IS NULL) AS used_g,
+                   {USED_PACKS} AS used_packs
             FROM bean_lot l WHERE l.bean_id = ?
             ORDER BY l.closed_at IS NOT NULL, l.opened_on IS NULL, l.created_at""",
         (bean_id,),
@@ -1004,23 +1084,23 @@ def list_lots(conn: sqlite3.Connection, bean_id: int, roast: str | None = None) 
     lots = _rows(cur)
     roast = roast if roast is not None else _bean_roast(conn, bean_id)
     today = freshness.calendar_today()
+    form = bean_form(conn, bean_id)
     for l in lots:
-        l["unit_cost"] = (l["price"] / l["usable_g"]) if l["price"] and l["usable_g"] else None
-        _decorate_lot(l, roast, today)
+        _finish_lot(l, roast, today, form)
     return lots
 
 
 def get_lot(conn: sqlite3.Connection, lot_id: int) -> dict | None:
     lot = _row(
         conn.execute(
-            f"""SELECT l.*, {USABLE} AS usable_g, {BALANCE} AS balance_g
+            f"""SELECT l.*, {USABLE} AS usable_g, {BALANCE} AS balance_g,
+                       {USED_PACKS} AS used_packs
                 FROM bean_lot l WHERE l.id = ?""",
             (lot_id,),
         )
     )
     if lot:
-        lot["unit_cost"] = (lot["price"] / lot["usable_g"]) if lot["price"] and lot["usable_g"] else None
-        _decorate_lot(lot, _bean_roast(conn, lot["bean_id"]))
+        _finish_lot(lot, _bean_roast(conn, lot["bean_id"]), None, bean_form(conn, lot["bean_id"]))
     return lot
 
 
@@ -1037,36 +1117,53 @@ def set_lot_roasted_on(conn: sqlite3.Connection, lot_id: int, roasted_on) -> dic
 
 def add_lot(conn: sqlite3.Connection, bean_id: int, data: dict) -> int:
     """再入一袋：只加批次，不新建豆卡。标称必填，实称通常为空。"""
-    bean = _row(conn.execute("SELECT deleted_at FROM bean WHERE id = ?", (bean_id,)))
+    bean = _row(conn.execute("SELECT deleted_at, form FROM bean WHERE id = ?", (bean_id,)))
     if not bean:
         raise Conflict("没有这支豆")
     if bean.get("deleted_at"):
         raise Conflict("这张卡已经不在豆库里了")
-    nominal = float(data["nominal_g"])
+    form = bean.get("form") or "beans"
+    packs = None
+    if form == "dripbag":
+        try:
+            packs = int(data.get("packs"))
+        except (TypeError, ValueError):
+            packs = 0
+        if packs <= 0:
+            raise Conflict("挂耳要写这一批多少包")
+        nominal = float(data["nominal_g"] if data.get("nominal_g") not in (None, "") else 8)
+    else:
+        nominal = float(data["nominal_g"])
     if nominal <= 0:
         raise Conflict("包装标称克重要大于 0")
     roasted_on = roasted_on_of(data.get("roasted_on"))
     ts = db.now()
     cur = conn.execute(
         """INSERT INTO bean_lot (bean_id, nominal_g, measured_g, price, bought_on,
-                                 roasted_on, opened_on, note, created_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                                 roasted_on, opened_on, note, packs, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             bean_id,
             nominal,
-            data.get("measured_g"),
+            data.get("measured_g") if form != "dripbag" else None,
             data.get("price"),
             data.get("bought_on"),
             roasted_on,
             data.get("opened_on"),
             data.get("note"),
+            packs,
             ts,
         ),
     )
     lot_id = int(cur.lastrowid)
+    intake_note = (
+        f"入库 挂耳 {packs} 包 × {nominal:g} g"
+        if form == "dripbag"
+        else f"入库 标称 {nominal:g} g"
+    )
     conn.execute(
         "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'intake', 0, ?, ?)",
-        (lot_id, f"入库 标称 {nominal:g} g", ts),
+        (lot_id, intake_note, ts),
     )
     conn.execute("UPDATE bean SET updated_at = ? WHERE id = ?", (ts, bean_id))
     return lot_id
@@ -1097,6 +1194,8 @@ def set_measured(conn: sqlite3.Connection, lot_id: int, measured_g: float) -> No
         raise Conflict("没有这一袋")
     if lot["closed_at"]:
         raise Conflict("这袋已经关了，不能再改实称")
+    if bean_form(conn, lot["bean_id"]) == "dripbag":
+        raise Conflict("挂耳按包计，不用称克重")
     before = lot["usable_g"]
     conn.execute("UPDATE bean_lot SET measured_g = ? WHERE id = ?", (measured_g, lot_id))
     conn.execute(
@@ -1112,6 +1211,8 @@ def adjust_lot(conn: sqlite3.Connection, lot_id: int, actual_g: float, note: str
         raise Conflict("没有这一袋")
     if lot["closed_at"]:
         raise Conflict("这袋已经关了")
+    if bean_form(conn, lot["bean_id"]) == "dripbag":
+        raise Conflict("挂耳按包计，不用盘点克重")
     delta = float(actual_g) - lot["balance_g"]
     conn.execute(
         "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'adjust', ?, ?, ?)",
@@ -1128,8 +1229,12 @@ def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) ->
         raise Conflict("没有这一袋")
     if lot["closed_at"]:
         raise Conflict("这袋已经关过了")
-    balance = lot["balance_g"]
     ts = db.now()
+    if bean_form(conn, lot["bean_id"]) == "dripbag":
+        left = remaining_packs_of(lot)
+        conn.execute("UPDATE bean_lot SET closed_at = ? WHERE id = ?", (ts, lot_id))
+        return left
+    balance = lot["balance_g"]
     conn.execute(
         "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'close_lot', ?, ?, ?)",
         (lot_id, -balance, note or f"关袋结清偏差 {balance:+.1f} g", ts),
@@ -1150,14 +1255,20 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
     if lot["closed_at"]:
         raise Conflict("这袋已经关了，换一袋")
 
-    amount = float(data["amount_g"])
-    if amount <= 0:
-        raise Conflict("粉量要大于 0")
-    if amount > lot["balance_g"]:
-        raise Conflict(
-            f"这袋只剩 {lot['balance_g']:.0f} g，不够 {amount:g} g。"
-            "换一袋、改粉量，或先盘点补重"
-        )
+    drip = bean_form(conn, lot["bean_id"]) == "dripbag"
+    if drip:
+        if remaining_packs_of(lot) < 1:
+            raise Conflict("这批没有剩的挂耳了")
+        amount = float(lot.get("nominal_g") or 8)
+    else:
+        amount = float(data["amount_g"])
+        if amount <= 0:
+            raise Conflict("粉量要大于 0")
+        if amount > lot["balance_g"]:
+            raise Conflict(
+                f"这袋只剩 {lot['balance_g']:.0f} g，不够 {amount:g} g。"
+                "换一袋、改粉量，或先盘点补重"
+            )
 
     person_id = data.get("person_id") or ensure_person(conn, data.get("person"), data.get("owner_id"))
     ts = data.get("at") or db.now()
@@ -1165,7 +1276,7 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
     as_cup = 0 if data.get("as_cup") in (0, False, "0") else 1
 
     paper = None
-    if as_cup and data.get("owner_id"):
+    if as_cup and data.get("owner_id") and not drip:
         from . import gear as gear_mod
 
         pack = gear_mod.pick_pack(
@@ -1226,9 +1337,14 @@ def record_brew(conn: sqlite3.Connection, data: dict) -> dict:
         "filter_sheets": (paper or {}).get("filter_sheets"),
         "as_cup": as_cup,
         "balance_g": after["balance_g"],
-        "near_empty": after["balance_g"] < amount,
+        "remaining_packs": after.get("remaining_packs"),
+        "near_empty": (
+            remaining_packs_of(after) < 1
+            if drip
+            else after["balance_g"] < amount
+        ),
     }
-    compared = brew.compare(
+    compared = None if drip else brew.compare(
         data.get("brew_method"), amount, data.get("brew_ratio"), data.get("brew_total_s")
     )
     if compared:
@@ -1242,6 +1358,8 @@ def record_writeoff(conn: sqlite3.Connection, lot_id: int, note: str | None = No
     lot = get_lot(conn, lot_id)
     if not lot:
         raise Conflict("没有这一袋")
+    if bean_form(conn, lot["bean_id"]) == "dripbag":
+        raise Conflict("挂耳按包计，没有整袋补录")
     amount = lot["balance_g"]
     if amount <= 0:
         raise Conflict("这袋账面已经是 0，没有可补录的克重")

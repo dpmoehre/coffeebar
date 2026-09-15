@@ -18,15 +18,23 @@ router = APIRouter()
 @router.get("/api/beans")
 def api_beans(
     scope: str = "stock",
+    form: str = "beans",
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
-    beans = store.list_beans(conn, scope, owner_id=account["id"])
+    form = store.parse_form(form)
+    beans = store.list_beans(conn, scope, owner_id=account["id"], form=form)
     for b in beans:
-        dose = stats.average_dose(conn, b["id"])
-        b["avg_dose"] = dose
-        b["cups_left"] = stats.cups_left(b["balance_g"], dose["avg_g"])
-        b["near_empty"] = b["in_stock"] and b["balance_g"] < dose["avg_g"]
+        if form == "dripbag":
+            left = int(b.get("remaining_packs") or 0)
+            b["cups_left"] = left
+            b["near_empty"] = b["in_stock"] and left < 1
+            b["avg_dose"] = {"avg_g": None, "lo_g": None, "hi_g": None, "cups": 0, "source": "pack"}
+        else:
+            dose = stats.average_dose(conn, b["id"])
+            b["avg_dose"] = dose
+            b["cups_left"] = stats.cups_left(b["balance_g"], dose["avg_g"])
+            b["near_empty"] = b["in_stock"] and b["balance_g"] < dose["avg_g"]
         b["cover"] = photos.cover(photos.list_bean_photos(conn, b["id"]))
     return {"beans": beans, "avg_dose": stats.average_dose(conn, owner_id=account["id"])}
 
@@ -63,7 +71,8 @@ def api_create_bean(
         raise store.Conflict("豆子得有个名字")
     payload = {**payload, "owner_id": account["id"]}
     bean_id = store.create_bean(conn, payload)
-    if payload.get("nominal_g"):
+    form = store.parse_form(payload.get("form"))
+    if payload.get("nominal_g") or (form == "dripbag" and payload.get("packs")):
         store.add_lot(conn, bean_id, payload)
     return store.get_bean(conn, bean_id, owner_id=account["id"])
 
@@ -78,11 +87,18 @@ def api_bean(
     if not bean:
         raise HTTPException(404, "没有这支豆")
     bean["photos"] = photos.list_bean_photos(conn, bean_id)
-    dose = stats.average_dose(conn, bean_id)
-    bean["avg_dose"] = dose
-    bean["cups_left"] = stats.cups_left(bean["balance_g"], dose["avg_g"])
-    for lot in bean["lots"]:
-        lot["cups_left"] = stats.cups_left(lot["balance_g"], dose["avg_g"])
+    if (bean.get("form") or "beans") == "dripbag":
+        left = int(bean.get("remaining_packs") or 0)
+        bean["avg_dose"] = {"avg_g": None, "lo_g": None, "hi_g": None, "cups": 0, "source": "pack"}
+        bean["cups_left"] = left
+        for lot in bean["lots"]:
+            lot["cups_left"] = int(lot.get("remaining_packs") or 0)
+    else:
+        dose = stats.average_dose(conn, bean_id)
+        bean["avg_dose"] = dose
+        bean["cups_left"] = stats.cups_left(bean["balance_g"], dose["avg_g"])
+        for lot in bean["lots"]:
+            lot["cups_left"] = stats.cups_left(lot["balance_g"], dose["avg_g"])
     bean["log"] = store.list_consumption(conn, bean_id=bean_id, owner_id=account["id"], limit=30)
     bean["lock"] = locks.status(conn, f"bean:{bean_id}")
     bean["grind_hint"] = store.grind_hint_for_bean(conn, bean_id)
