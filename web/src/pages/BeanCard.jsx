@@ -277,6 +277,7 @@ export default function BeanCard({ id, onBack, onOpenMap, toast, oops }) {
         onDone={load}
         toast={toast}
         oops={oops}
+        canSetCover
       />
 
       <Panel className="mt-5">

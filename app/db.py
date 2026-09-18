@@ -111,6 +111,7 @@ ADDED_COLUMNS = [
     ("consumption_event", "filter_unit_cost", "REAL"),
     ("bean", "form", "TEXT NOT NULL DEFAULT 'beans'"),
     ("bean_lot", "packs", "INTEGER"),
+    ("bean", "cover_photo_id", "INTEGER"),
 ]
 
 

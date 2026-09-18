@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS bean (
   source_bean_id INTEGER,                -- 从广场领回时记下原卡，不带袋子
   seed        INTEGER NOT NULL DEFAULT 0, -- 进门练习豆，不算真库存号
   form        TEXT    NOT NULL DEFAULT 'beans',  -- beans 手冲豆 / dripbag 挂耳，按包扣
+  cover_photo_id INTEGER,                -- 手选封面；空着按豆盘/包装自动挑
   created_at  TEXT    NOT NULL,
   updated_at  TEXT    NOT NULL
 );

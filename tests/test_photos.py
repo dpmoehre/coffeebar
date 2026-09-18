@@ -238,6 +238,49 @@ def test_cover_skips_card_even_if_newest(client):
     assert client.get("/api/beans").json()["beans"][0]["cover"]["kind"] == "tray"
 
 
+def test_can_pick_pack_as_cover_over_tray(client):
+    """人指定封面后，豆库不再自动改选豆盘。"""
+    bean = make_bean(client)
+    pack = add_photo(client, bean["id"], "pack").json()
+    tray = add_photo(client, bean["id"], "tray").json()
+    assert client.get("/api/beans").json()["beans"][0]["cover"]["id"] == tray["id"]
+
+    r = client.post(f"/api/beans/{bean['id']}/cover", json={"photo_id": pack["id"]})
+    assert r.status_code == 200, r.text
+    assert r.json()["cover"]["id"] == pack["id"]
+    detail = client.get(f"/api/beans/{bean['id']}").json()
+    assert detail["cover"]["id"] == pack["id"]
+    assert [p["id"] for p in detail["photos"] if p["is_cover"]] == [pack["id"]]
+    assert client.get("/api/beans").json()["beans"][0]["cover"]["id"] == pack["id"]
+
+
+def test_can_pick_card_as_cover(client):
+    bean = make_bean(client)
+    pack = add_photo(client, bean["id"], "pack").json()
+    card = add_photo(client, bean["id"], "card").json()
+    client.post(f"/api/beans/{bean['id']}/cover", json={"photo_id": card["id"]})
+    assert client.get("/api/beans").json()["beans"][0]["cover"]["id"] == card["id"]
+    client.post(f"/api/beans/{bean['id']}/cover", json={"photo_id": None})
+    assert client.get("/api/beans").json()["beans"][0]["cover"]["id"] == pack["id"]
+
+
+def test_delete_cover_photo_falls_back(client):
+    bean = make_bean(client)
+    pack = add_photo(client, bean["id"], "pack").json()
+    tray = add_photo(client, bean["id"], "tray").json()
+    client.post(f"/api/beans/{bean['id']}/cover", json={"photo_id": pack["id"]})
+    assert client.delete(f"/api/photos/{pack['id']}").status_code == 200
+    assert client.get("/api/beans").json()["beans"][0]["cover"]["id"] == tray["id"]
+
+
+def test_set_cover_rejects_foreign_photo(client):
+    a = make_bean(client, name="甲")
+    b = make_bean(client, name="乙")
+    pic = add_photo(client, a["id"], "pack").json()
+    r = client.post(f"/api/beans/{b['id']}/cover", json={"photo_id": pic["id"]})
+    assert r.status_code == 400
+
+
 def test_full_bean_card_round_trip(client):
     """店家豆卡上有的，系统都得能存下：处理厂、海拔、推荐冲法。"""
     bean = client.post("/api/beans", json={

@@ -153,6 +153,8 @@ export const api = {
     return upload(`/api/beans/${beanId}/photos`, fd);
   },
   delPhoto: (id) => req("DELETE", `/api/photos/${id}`),
+  setBeanCover: (beanId, photoId) =>
+    req("POST", `/api/beans/${beanId}/cover`, { photo_id: photoId }),
   addRestockPhoto: (beanId, file, note = "") => {
     const fd = new FormData();
     fd.append("file", file);

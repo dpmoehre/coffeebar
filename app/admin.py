@@ -209,7 +209,7 @@ def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict
         price = review_price(conn, d["id"])
         d["certified"] = bool(d.get("certified_at"))
         d["places"] = places.review_places(conn, d["id"], d.get("origin"), d.get("producer"))
-        d["cover"] = photos.cover(shots)
+        d["cover"] = photos.cover_of_bean(conn, d["id"], shots)
         d["photo_count"] = len(shots)
         d["price"] = price
         d["checklist"] = review_checklist(
@@ -259,7 +259,7 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
         "scores": scores,
         "score_avg": store.average_scores(log),
         "photos": shots,
-        "cover": photos.cover(shots),
+        "cover": photos.cover_of_bean(conn, bean_id, shots),
         "photo_count": len(shots),
         "price": price,
         "places": pins,

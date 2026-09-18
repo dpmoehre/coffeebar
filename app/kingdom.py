@@ -233,7 +233,7 @@ def collect(conn: sqlite3.Connection, admin: dict, bean_id: int, data: dict | No
         )
         kingdom_id = int(cur.lastrowid)
         shots = photos.list_bean_photos(conn, bean_id)
-        cover = photos.cover(shots)
+        cover = photos.cover_of_bean(conn, bean_id, shots)
         if cover:
             photos.copy_to_kingdom(conn, kingdom_id, cover["path"])
 

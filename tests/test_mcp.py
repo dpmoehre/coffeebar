@@ -56,6 +56,7 @@ def test_tool_catalog_covers_bar():
         "update_bean",
         "delete_bean",
         "add_bean_photo",
+        "set_bean_cover",
         "delete_photo",
         "add_score",
         "create_bean_lot",

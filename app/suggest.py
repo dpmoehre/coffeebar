@@ -152,7 +152,7 @@ def _score_bean(
         "name": bean["name"],
         "reason": reason,
         "phase": phase,
-        "cover": photos.cover(photos.list_bean_photos(conn, bean["id"])),
+        "cover": photos.cover_of_bean(conn, bean["id"]),
         "score": score,
         "balance_g": float(bean.get("balance_g") or 0),
         "recent_repeat": recent_repeat,

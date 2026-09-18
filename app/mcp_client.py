@@ -201,6 +201,9 @@ class Client:
     def add_bean_photo(self, bean_id: int, file_path: str, kind: str = "pack"):
         return self.upload(f"/api/beans/{bean_id}/photos", file_path, {"kind": kind})
 
+    def set_bean_cover(self, bean_id: int, photo_id: int | None):
+        return self.request("POST", f"/api/beans/{bean_id}/cover", json={"photo_id": photo_id})
+
     def delete_photo(self, photo_id: int):
         return self.request("DELETE", f"/api/photos/{photo_id}")
 

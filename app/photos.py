@@ -2,7 +2,7 @@
 
 豆卡三种都可以缺（见 docs/002）：`pack` 包装袋、`tray` 豆盘、`card` 店家豆卡。
 没开封往往只有包装，开封后再补豆盘。豆卡是店家印的参数说明，拍下来留档，
-但它不适合当封面（缩略图里一片字），所以 `cover()` 不选它。
+但它不适合当封面（缩略图里一片字），所以自动 `cover()` 不选它。人在豆卡页点过「封面」的除外。
 
 冲煮记录另有过程照：`beans` 称豆、`bed` 粉床、`finish` 冲完、`gear` 器具（称盘、壶、滤杯），也都可缺。
 
@@ -140,15 +140,31 @@ def list_bean_photos(conn: sqlite3.Connection, bean_id: int) -> list[dict]:
         "SELECT id, kind, path, created_at FROM bean_photo WHERE bean_id = ? ORDER BY created_at",
         (bean_id,),
     ).fetchall()
-    return [
+    shots = [
         {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])} for r in rows
     ]
+    picked = cover_of_bean(conn, bean_id, shots)
+    pid = picked["id"] if picked else None
+    for shot in shots:
+        shot["is_cover"] = shot.get("id") == pid
+    return shots
 
 
-def cover(photos: list[dict]) -> dict | None:
-    """豆库缩略图优先豆盘，再包装；豆卡缩下去只剩一片字，只在都没有时才用。"""
+def cover_photo_id_of(conn: sqlite3.Connection, bean_id: int) -> int | None:
+    row = conn.execute("SELECT cover_photo_id FROM bean WHERE id = ?", (bean_id,)).fetchone()
+    if not row or row["cover_photo_id"] is None:
+        return None
+    return int(row["cover_photo_id"])
+
+
+def cover(photos: list[dict], cover_photo_id: int | None = None) -> dict | None:
+    """手选优先；否则豆盘，再包装；豆卡缩下去只剩一片字，只在都没有时才用。"""
     if not photos:
         return None
+    if cover_photo_id is not None:
+        for shot in photos:
+            if shot.get("id") == int(cover_photo_id):
+                return with_list(shot)
     picked = None
     for kind in ("tray", "pack"):
         hit = [p for p in photos if p["kind"] == kind]
@@ -160,12 +176,51 @@ def cover(photos: list[dict]) -> dict | None:
     return with_list(picked)
 
 
+def cover_of_bean(
+    conn: sqlite3.Connection, bean_id: int, shots: list[dict] | None = None
+) -> dict | None:
+    if shots is None:
+        shots = [
+            {**dict(r), "url": f"/{r['path']}", "thumb": thumb_url(r["path"])}
+            for r in conn.execute(
+                "SELECT id, kind, path, created_at FROM bean_photo WHERE bean_id = ? ORDER BY created_at",
+                (bean_id,),
+            )
+        ]
+    return cover(shots, cover_photo_id_of(conn, bean_id))
+
+
+def set_bean_cover(conn: sqlite3.Connection, bean_id: int, photo_id: int | None) -> dict | None:
+    """指定封面。photo_id 为空则回到自动挑（豆盘 / 包装）。"""
+    if photo_id is None:
+        conn.execute(
+            "UPDATE bean SET cover_photo_id = NULL, updated_at = ? WHERE id = ?",
+            (db.now(), bean_id),
+        )
+        return cover_of_bean(conn, bean_id)
+    row = conn.execute(
+        "SELECT id FROM bean_photo WHERE id = ? AND bean_id = ?",
+        (int(photo_id), bean_id),
+    ).fetchone()
+    if not row:
+        raise BadPhoto("没有这张图")
+    conn.execute(
+        "UPDATE bean SET cover_photo_id = ?, updated_at = ? WHERE id = ?",
+        (int(photo_id), db.now(), bean_id),
+    )
+    return cover_of_bean(conn, bean_id)
+
+
 def delete_bean_photo(conn: sqlite3.Connection, photo_id: int) -> None:
-    row = conn.execute("SELECT path FROM bean_photo WHERE id = ?", (photo_id,)).fetchone()
+    row = conn.execute("SELECT path, bean_id FROM bean_photo WHERE id = ?", (photo_id,)).fetchone()
     if not row:
         raise BadPhoto("没有这张图")
     remove(row["path"])
     conn.execute("DELETE FROM bean_photo WHERE id = ?", (photo_id,))
+    conn.execute(
+        "UPDATE bean SET cover_photo_id = NULL WHERE id = ? AND cover_photo_id = ?",
+        (row["bean_id"], photo_id),
+    )
 
 
 def attach_bottle_photo(conn: sqlite3.Connection, bottle_id: int, kind: str, raw: bytes, filename: str) -> dict:

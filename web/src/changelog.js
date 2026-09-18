@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-18",
+    title: "豆卡能自己选封面了",
+    notes: [
+      "打开豆卡，悬停照片点「设为封面」，豆库列表就用那张。没选过还是自动挑豆盘，没有再用包装袋。",
+      "白鲸三支（信岗亚内、肯尼亚 Ngaratua、雪峰）封面改成包装袋正面，不再用袋背或袋底。",
+    ],
+  },
+  {
     date: "2026-09-15",
     title: "侧栏有挂耳咖啡了",
     notes: [

@@ -20,6 +20,7 @@ export default function Photos({
   oops,
   kinds = KINDS,
   upload,
+  canSetCover = false,
 }) {
   const LABEL = Object.fromEntries(kinds);
   const add = upload || ((file, kind) => api.addPhoto(beanId, file, kind));
@@ -67,6 +68,11 @@ export default function Photos({
           ))}
         </div>
       </div>
+      {canSetCover ? (
+        <p className="mt-2 mb-0 text-[13px] text-muted">
+          悬停照片点「设为封面」，豆库列表就用那张。没点过则自动挑豆盘，没有再用包装袋。
+        </p>
+      ) : null}
 
       {photos.length === 0 ? (
         <p className="mt-3 text-[13px] text-muted">
@@ -80,15 +86,36 @@ export default function Photos({
                 src={p.thumb}
                 alt={LABEL[p.kind] || p.kind}
                 onClick={() => setZoom(p)}
-                className="aspect-square w-full cursor-zoom-in rounded-xl border border-line
-                  object-cover transition hover:border-amber"
+                className={`aspect-square w-full cursor-zoom-in rounded-xl border object-cover
+                  transition hover:border-amber ${p.is_cover ? "border-amber" : "border-line"}`}
               />
               <figcaption
                 className="absolute bottom-2 left-2 rounded-full bg-black/65 px-2.5 py-1
                   text-xs text-cream"
               >
                 {LABEL[p.kind] || p.kind}
+                {p.is_cover ? " · 封面" : ""}
               </figcaption>
+              {canSetCover && !p.is_cover && (
+                <button
+                  type="button"
+                  title="用作豆库封面"
+                  className="absolute left-2 top-2 hidden rounded-full bg-black/70 px-2.5 py-1
+                    text-xs text-cream hover:bg-amber hover:text-[#1a120a] group-hover:block"
+                  onClick={async (e) => {
+                    e.stopPropagation();
+                    try {
+                      await api.setBeanCover(beanId, p.id);
+                      toast("封面换好了");
+                      onDone();
+                    } catch (err) {
+                      oops(err.message);
+                    }
+                  }}
+                >
+                  设为封面
+                </button>
+              )}
               <button
                 title="删掉这张"
                 className="absolute right-2 top-2 hidden h-7 w-7 rounded-full bg-black/70

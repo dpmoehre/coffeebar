@@ -774,7 +774,7 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "score_avg": average_scores(log),
         "places": places.list_places(conn, bean_id),
         "photos": shots,
-        "cover": photos.cover(shots),
+        "cover": photos.cover_of_bean(conn, bean_id, shots),
         "mine": viewer_id is not None and bean.get("owner_id") == viewer_id,
         "owner": _owner_public(conn, bean.get("owner_id")),
         "form": bean.get("form") or "beans",
@@ -927,8 +927,14 @@ def take_public_bean(conn: sqlite3.Connection, bean_id: int, owner_id: int) -> d
             (guide.get("method") or "v60", guide.get("dose_g") or 15, guide.get("ratio") or 16, guide.get("note"), new_id),
         )
     places.copy_to(conn, bean_id, new_id)
+    chosen = photos.cover_photo_id_of(conn, bean_id)
+    new_cover = None
     for shot in photos.list_bean_photos(conn, bean_id):
-        photos.copy_to_bean(conn, new_id, shot.get("kind") or "pack", shot["path"])
+        copied = photos.copy_to_bean(conn, new_id, shot.get("kind") or "pack", shot["path"])
+        if copied and chosen and shot.get("id") == chosen:
+            new_cover = copied["id"]
+    if new_cover:
+        photos.set_bean_cover(conn, new_id, new_cover)
     return get_bean(conn, new_id, owner_id=owner_id)
 
 

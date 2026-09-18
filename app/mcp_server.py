@@ -225,6 +225,12 @@ def add_bean_photo(bean_id: int, path: str, kind: str = "pack") -> Any:
 
 
 @mcp.tool()
+def set_bean_cover(bean_id: int, photo_id: int | None) -> Any:
+    """指定豆库封面。给这张卡上已有照片的 id；不传则回到自动挑（豆盘优先，再包装）。"""
+    return _call(client().set_bean_cover, bean_id, photo_id)
+
+
+@mcp.tool()
 def delete_photo(photo_id: int) -> Any:
     """删一张豆或酒的照片。"""
     return _call(client().delete_photo, photo_id)

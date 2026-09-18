@@ -35,7 +35,7 @@ def api_beans(
             b["avg_dose"] = dose
             b["cups_left"] = stats.cups_left(b["balance_g"], dose["avg_g"])
             b["near_empty"] = b["in_stock"] and b["balance_g"] < dose["avg_g"]
-        b["cover"] = photos.cover(photos.list_bean_photos(conn, b["id"]))
+        b["cover"] = photos.cover_of_bean(conn, b["id"])
     return {"beans": beans, "avg_dose": stats.average_dose(conn, owner_id=account["id"])}
 
 
@@ -87,6 +87,8 @@ def api_bean(
     if not bean:
         raise HTTPException(404, "没有这支豆")
     bean["photos"] = photos.list_bean_photos(conn, bean_id)
+    bean["cover"] = photos.cover_of_bean(conn, bean_id, bean["photos"])
+    bean["cover_photo_id"] = photos.cover_photo_id_of(conn, bean_id)
     if (bean.get("form") or "beans") == "dripbag":
         left = int(bean.get("remaining_packs") or 0)
         bean["avg_dose"] = {"avg_g": None, "lo_g": None, "hi_g": None, "cups": 0, "source": "pack"}
@@ -130,7 +132,7 @@ def api_map(
     account: dict = Depends(current_account),
 ):
     def cover_of(bean_id: int):
-        return photos.cover(photos.list_bean_photos(conn, bean_id))
+        return photos.cover_of_bean(conn, bean_id)
 
     return places.map_data(conn, account["id"], cover_of)
 
@@ -200,6 +202,29 @@ async def api_add_photo(
     ratelimit.check(request, "upload", 20, who=f"acct:{account['id']}")
     auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
     return photos.attach_bean_photo(conn, bean_id, kind, await file.read(), file.filename or "")
+
+
+@router.post("/api/beans/{bean_id}/cover")
+def api_set_cover(
+    bean_id: int,
+    payload: dict,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_account),
+    x_session: str = Header(default="anon"),
+    x_source: str = Header(default="web"),
+):
+    """指定豆库封面。给 photo_id；空则回到自动挑（豆盘 / 包装）。"""
+    auth.assert_owner(auth.bean_owner(conn, bean_id), account["id"], "没有这支豆")
+    locks.check(conn, f"bean:{bean_id}", x_session, x_source)
+    raw = payload.get("photo_id")
+    photo_id = None if raw in (None, "", 0, "0") else int(raw)
+    cover = photos.set_bean_cover(conn, bean_id, photo_id)
+    return {
+        "ok": True,
+        "cover": cover,
+        "cover_photo_id": photos.cover_photo_id_of(conn, bean_id),
+        "photos": photos.list_bean_photos(conn, bean_id),
+    }
 
 
 @router.delete("/api/photos/{photo_id}")
