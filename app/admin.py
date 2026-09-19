@@ -17,9 +17,7 @@ def _public(row: sqlite3.Row | dict) -> dict:
 
 
 def list_accounts(conn: sqlite3.Connection) -> list[dict]:
-    rows = conn.execute(
-        "SELECT id, email, email_verified, nickname, created_at, status FROM account ORDER BY id"
-    ).fetchall()
+    rows = conn.execute("SELECT * FROM account ORDER BY id").fetchall()
     out = []
     for row in rows:
         d = _public(row)

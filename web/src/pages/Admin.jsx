@@ -10,11 +10,15 @@ function clock(at) {
 }
 
 function who(a) {
-  return a?.nickname || a?.name || "吧友";
+  const nick = String(a?.nickname || "").trim();
+  if (nick) return nick;
+  return "未设用户名";
 }
 
 function ownerWho(item) {
-  return item?.owner_nickname || item?.owner_name || item?.owner_email || "吧友";
+  const nick = String(item?.owner_nickname || "").trim();
+  if (nick) return nick;
+  return item?.owner_email || "未设用户名";
 }
 
 export default function Admin({ toast, oops }) {
@@ -43,7 +47,24 @@ export default function Admin({ toast, oops }) {
     setTab("beans");
     api
       .adminAccount(id)
-      .then(setDossier)
+      .then((d) => {
+        setDossier(d);
+        const acc = d?.account;
+        if (!acc) return;
+        setAccounts((prev) =>
+          (prev || []).map((x) =>
+            x.id === acc.id
+              ? {
+                  ...x,
+                  nickname: acc.nickname,
+                  name: acc.name,
+                  email: acc.email,
+                  gear: x.gear ?? (d.gear || []).length,
+                }
+              : x,
+          ),
+        );
+      })
       .catch((e) => oops(e.message));
   };
 

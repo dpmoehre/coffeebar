@@ -53,6 +53,8 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     accounts = client.get("/api/admin/accounts").json()["accounts"]
     other = next(a for a in accounts if a["email"] == "test@coffeebar.local")
     assert other["nickname"]
+    assert other["nickname"] != "吧友"
+    assert other["name"] == other["nickname"]
     assert other["beans"] == 1
     assert other["spirits"] == 1
     assert other["gear"] == 1
