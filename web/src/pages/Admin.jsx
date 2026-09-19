@@ -3,10 +3,18 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { LayeredRadar } from "../components/Radar.jsx";
-import { Btn, Chip, Empty, Field, Input, Panel, Select, g, ml, money } from "../ui.jsx";
+import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, Select, coverSrc, g, ml, money } from "../ui.jsx";
 
 function clock(at) {
   return at ? at.slice(0, 16).replace("T", " ") : "";
+}
+
+function who(a) {
+  return a?.nickname || a?.name || "吧友";
+}
+
+function ownerWho(item) {
+  return item?.owner_nickname || item?.owner_name || item?.owner_email || "吧友";
 }
 
 export default function Admin({ toast, oops }) {
@@ -78,7 +86,7 @@ export default function Admin({ toast, oops }) {
   const shown = (accounts || []).filter((a) => {
     const needle = q.trim().toLowerCase();
     if (!needle) return true;
-    return String(a.email || "").toLowerCase().includes(needle);
+    return `${a.email || ""} ${a.nickname || ""} ${a.name || ""}`.toLowerCase().includes(needle);
   });
 
   return (
@@ -118,7 +126,7 @@ export default function Admin({ toast, oops }) {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="搜邮箱…"
+              placeholder="搜用户名、邮箱…"
               className="w-full rounded-lg border border-line bg-bg px-3 py-2 text-sm text-cream
                 outline-none focus:border-amber"
             />
@@ -133,14 +141,16 @@ export default function Admin({ toast, oops }) {
                   }`}
                 >
                   <span className="truncate text-cream">
-                    {a.email}
+                    {who(a)}
                     {a.admin ? <span className="ml-2 text-xs text-amber">管理员</span> : null}
                     {a.status !== "active" ? (
                       <span className="ml-2 text-xs text-warn">已停用</span>
                     ) : null}
                   </span>
+                  <span className="mt-0.5 truncate text-xs">{a.email}</span>
                   <span className="mt-0.5 text-xs">
-                    豆 {a.beans} · 酒 {a.spirits} · 花掉 {money(a.spent)}
+                    豆 {a.beans} · {(a.gear ?? 0) > 0 ? `器具 ${a.gear}` : "无器具"} · 酒 {a.spirits} · 花掉{" "}
+                    {money(a.spent)}
                   </span>
                 </button>
               ))}
@@ -150,7 +160,7 @@ export default function Admin({ toast, oops }) {
 
           <div>
             {!dossier ? (
-              <Empty>左边点一个账号，看他的豆、酒和流水。</Empty>
+              <Empty>左边点一个账号，看他的用户名、豆、器具、酒和流水。</Empty>
             ) : (
               <AccountView
                 dossier={dossier}
@@ -188,10 +198,11 @@ function AccountView({
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="serif m-0 text-2xl">{a.email}</h2>
+          <h2 className="serif m-0 text-2xl">{who(a)}</h2>
           <p className="mt-1 mb-0 text-sm text-muted">
-            {a.admin ? "管理员 · " : ""}
-            {a.status === "active" ? "使用中" : "已停用"}
+            {a.email}
+            {a.admin ? " · 管理员" : ""}
+            {a.status === "active" ? " · 使用中" : " · 已停用"}
             {a.created_at ? ` · 注册 ${clock(a.created_at)}` : ""}
           </p>
         </div>
@@ -252,11 +263,23 @@ function AccountView({
                 className="flex w-full items-center justify-between gap-3 border-b border-line py-3
                   text-left last:border-0 hover:opacity-80"
               >
-                <span>
-                  {b.name}
-                  <span className="ml-2 text-xs text-muted">{b.origin || ""}</span>
+                <span className="flex min-w-0 items-center gap-3">
+                  {b.cover ? (
+                    <Cover src={coverSrc(b.cover)} className="h-12 w-12 shrink-0 rounded-lg" />
+                  ) : (
+                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-chip text-xs text-muted">
+                      无图
+                    </span>
+                  )}
+                  <span className="min-w-0">
+                    {b.name}
+                    <span className="ml-2 text-xs text-muted">{b.origin || ""}</span>
+                    {b.photo_count ? (
+                      <span className="ml-2 text-xs text-amber">{b.photo_count} 张图</span>
+                    ) : null}
+                  </span>
                 </span>
-                <span className="text-sm text-amber">{g(b.balance_g)}</span>
+                <span className="shrink-0 text-sm text-amber">{g(b.balance_g)}</span>
               </button>
             ))
           )}
@@ -325,13 +348,23 @@ function AccountView({
           {(dossier.gear || []).length === 0 ? (
             <p className="m-0 text-muted">还没有登记器具。</p>
           ) : (
-            dossier.gear.map((g) => (
-              <div key={g.id} className="border-b border-line py-2 last:border-0">
-                {g.name}
-                <span className="ml-2 text-xs text-muted">
-                  {[g.kind_label, g.family_label].filter(Boolean).join(" · ")}
-                  {g.collected ? " · 已收录" : " · 未收录"}
-                </span>
+            dossier.gear.map((item) => (
+              <div key={item.id} className="flex items-center gap-3 border-b border-line py-2 last:border-0">
+                {item.cover ? (
+                  <Cover src={coverSrc(item.cover)} className="h-12 w-12 shrink-0 rounded-lg" />
+                ) : (
+                  <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-chip text-xs text-muted">
+                    无图
+                  </span>
+                )}
+                <div>
+                  {item.name}
+                  <span className="ml-2 text-xs text-muted">
+                    {[item.kind_label, item.family_label].filter(Boolean).join(" · ")}
+                    {item.collected ? " · 已收录" : " · 未收录"}
+                    {item.photos?.length ? ` · ${item.photos.length} 张图` : ""}
+                  </span>
+                </div>
               </div>
             ))
           )}
@@ -379,6 +412,9 @@ function AccountView({
               ))}
             </ul>
           )}
+          {detail.photos ? (
+            <DetailPhotos photos={detail.photos} empty="这张卡没有照片。" />
+          ) : null}
           {detail.log?.length > 0 && (
             <div className="mt-3 text-sm">
               {detail.log.slice(0, 12).map((c) => (
@@ -452,7 +488,7 @@ function KingdomPane({ toast, oops }) {
             >
               <span className="truncate text-cream">{b.name}</span>
               <span className="mt-0.5 text-xs">
-                {b.owner_email} · {b.origin || "没填产地"}
+                {ownerWho(b)} · {b.origin || "没填产地"}
                 {b.certified ? " · 已认证" : ""}
               </span>
             </button>
@@ -468,7 +504,7 @@ function KingdomPane({ toast, oops }) {
           <Panel>
             <h2 className="serif m-0 text-2xl">{picked.name}</h2>
             <p className="mt-1 mb-0 text-sm text-muted">
-              {picked.owner_email} · {picked.origin || "没填产地"}
+              {ownerWho(picked)} · {picked.origin || "没填产地"}
             </p>
             <div className="mt-4 grid gap-3 sm:grid-cols-2">
               <Field label="王国里的名字">
@@ -601,7 +637,7 @@ function GearPane({ toast, oops }) {
             >
               <span className="truncate text-cream">{g.name}</span>
               <span className="mt-0.5 text-xs">
-                {g.owner_email} · {[g.kind_label, g.family_label].filter(Boolean).join(" · ")}
+                {ownerWho(g)} · {[g.kind_label, g.family_label].filter(Boolean).join(" · ")}
               </span>
             </button>
           ))}
@@ -617,7 +653,7 @@ function GearPane({ toast, oops }) {
           <Panel>
             <h2 className="serif m-0 text-2xl">{picked.name}</h2>
             <p className="mt-1 mb-0 text-sm text-muted">
-              {picked.owner_email} · {[picked.kind_label, picked.family_label, picked.brand].filter(Boolean).join(" · ")}
+              {ownerWho(picked)} · {[picked.kind_label, picked.family_label, picked.brand].filter(Boolean).join(" · ")}
             </p>
             {picked.cover ? (
               <img src={picked.cover.thumb} alt="" className="mt-3 h-40 rounded-xl object-cover" />
@@ -833,7 +869,7 @@ function ReviewPane({ toast, oops }) {
                 {b.certified ? <span className="ml-2 text-xs text-amber">已认证</span> : null}
               </span>
               <span className="mt-0.5 text-xs">
-                {b.origin || "没填产地"} · {b.owner_email || "无名氏"}
+                {b.origin || "没填产地"} · {ownerWho(b)}
               </span>
               {gaps(b.checklist).length > 0 && (
                 <span className="mt-0.5 text-xs text-warn">{gaps(b.checklist).join(" · ")}</span>

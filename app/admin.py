@@ -18,7 +18,7 @@ def _public(row: sqlite3.Row | dict) -> dict:
 
 def list_accounts(conn: sqlite3.Connection) -> list[dict]:
     rows = conn.execute(
-        "SELECT id, email, email_verified, created_at, status FROM account ORDER BY id"
+        "SELECT id, email, email_verified, nickname, created_at, status FROM account ORDER BY id"
     ).fetchall()
     out = []
     for row in rows:
@@ -55,6 +55,10 @@ def get_account(conn: sqlite3.Connection, account_id: int) -> dict:
 def dossier(conn: sqlite3.Connection, account_id: int) -> dict:
     account = get_account(conn, account_id)
     beans = store.list_beans(conn, "all", owner_id=account_id)
+    for b in beans:
+        shots = photos.list_bean_photos(conn, b["id"])
+        b["photo_count"] = len(shots)
+        b["cover"] = photos.cover_of_bean(conn, b["id"], shots)
     bottles = spirits.list_spirits(conn, "all", owner_id=account_id)
     people = store.list_people(conn, include_inactive=True, owner_id=account_id)
     log = store.list_consumption(conn, owner_id=account_id, limit=80)
@@ -195,7 +199,7 @@ def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict
         f"""SELECT b.id, b.name, b.origin, b.varietal, b.producer, b.process, b.roast,
                    b.note, b.visibility, b.certified_at, b.certified_by, b.review_note,
                    b.places_verified_at, b.updated_at, b.owner_id,
-                   a.email AS owner_email
+                   a.email AS owner_email, a.nickname AS owner_nickname
               FROM bean b
               LEFT JOIN account a ON a.id = b.owner_id
              WHERE {where}

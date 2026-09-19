@@ -274,7 +274,7 @@ def get_catalog(conn: sqlite3.Connection, catalog_id: int, *, owners: bool = Fal
 def queue(conn: sqlite3.Connection) -> list[dict]:
     """还没被收录的私人器具，管理员收集用。"""
     rows = conn.execute(
-        """SELECT g.*, a.email AS owner_email
+        """SELECT g.*, a.email AS owner_email, a.nickname AS owner_nickname
              FROM user_gear g
              JOIN account a ON a.id = g.owner_id
             WHERE g.catalog_id IS NULL
@@ -284,6 +284,7 @@ def queue(conn: sqlite3.Connection) -> list[dict]:
     for r in rows:
         item = _public_gear(conn, r)
         item["owner_email"] = r["owner_email"]
+        item["owner_nickname"] = r["owner_nickname"]
         item["owner_id"] = r["owner_id"]
         out.append(item)
     return out

@@ -1,5 +1,5 @@
 // 豆库独立页：打开就一眼看完所有在库豆子还剩多少。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
@@ -251,6 +251,7 @@ export default function Beans({ form = "beans", onOpen, onOpenRestock, onOpenPer
           setAdding(false);
           toast(drip ? `已加入挂耳：${bean.name}` : `已加入豆库：${bean.name}`);
           load();
+          onOpen(bean.id);
         }}
         oops={oops}
       />
@@ -367,10 +368,18 @@ function Card({ bean, drip = false, delay = 0, onClick }) {
 function NewBean({ open, form = "beans", onClose, onDone, oops }) {
   const drip = form === "dripbag";
   const [f, setF] = useState({});
+  const [saving, setSaving] = useState(false);
+  const [created, setCreated] = useState(null);
+  const inflight = useRef(false);
+  const handed = useRef(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
     if (open) {
+      inflight.current = false;
+      handed.current = false;
+      setSaving(false);
+      setCreated(null);
       setF(
         drip
           ? { roast: "中烘", nominal_g: 8, packs: 1, visibility: "private", process: "挂耳" }
@@ -379,7 +388,23 @@ function NewBean({ open, form = "beans", onClose, onDone, oops }) {
     }
   }, [open, drip]);
 
+  const finish = (bean) => {
+    if (handed.current || !bean) return;
+    handed.current = true;
+    onDone(bean);
+  };
+
+  useEffect(() => {
+    if (!created) return;
+    const t = setTimeout(() => finish(created), 1600);
+    return () => clearTimeout(t);
+  }, [created]);
+
   const submit = async () => {
+    if (inflight.current || created || !f.name?.trim()) return;
+    if (drip && !(Number(f.packs) > 0)) return;
+    inflight.current = true;
+    setSaving(true);
     try {
       const bean = await api.createBean({
         ...f,
@@ -392,33 +417,58 @@ function NewBean({ open, form = "beans", onClose, onDone, oops }) {
         roasted_on: f.roasted_on || undefined,
         tags: (f.tags || "").split(/[,，\s]+/).filter(Boolean),
       });
-      onDone(bean);
+      setCreated(bean);
     } catch (e) {
       oops(e.message);
+      inflight.current = false;
+      setSaving(false);
     }
   };
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
-      title={drip ? "新建挂耳" : "新建豆子"}
+      onClose={() => {
+        if (saving && !created) return;
+        if (created) finish(created);
+        else onClose();
+      }}
+      title={created ? "加好了" : drip ? "新建挂耳" : "新建豆子"}
       sub={
-        drip
-          ? "一包就是一包，不记克重剩余。同样的再买一批，进卡里点「再入一批」。"
-          : "卡是品种。同样的豆再买一袋，进豆卡点「再入一袋」，不用在这儿重建。"
+        created
+          ? null
+          : drip
+            ? "一包就是一包，不记克重剩余。同样的再买一批，进卡里点「再入一批」。"
+            : "卡是品种。同样的豆再买一袋，进豆卡点「再入一袋」，不用在这儿重建。"
       }
       footer={
-        <>
-          <Btn variant="ghost" onClick={onClose}>
-            取消
-          </Btn>
-          <Btn onClick={submit} disabled={!f.name?.trim() || (drip && !(Number(f.packs) > 0))}>
-            {drip ? "加入挂耳" : "加入豆库"}
-          </Btn>
-        </>
+        created ? (
+          <Btn onClick={() => finish(created)}>{drip ? "去看这款挂耳" : "去看这支豆"}</Btn>
+        ) : (
+          <>
+            <Btn variant="ghost" onClick={onClose} disabled={saving}>
+              取消
+            </Btn>
+            <Btn
+              onClick={submit}
+              disabled={saving || !f.name?.trim() || (drip && !(Number(f.packs) > 0))}
+            >
+              {saving ? "加入中…" : drip ? "加入挂耳" : "加入豆库"}
+            </Btn>
+          </>
+        )
       }
     >
+      {created ? (
+        <div className="py-6 text-center">
+          <p className="m-0 text-sm text-amber">已经加进{drip ? "挂耳" : "豆库"}了</p>
+          <p className="serif mt-3 mb-0 text-2xl">{created.name}</p>
+          <p className="mt-3 mb-0 text-[13px] text-muted">
+            接下来打开这张卡。刚才那一下就算数，连点不会再新建一支。
+          </p>
+        </div>
+      ) : (
+        <>
       <Field label="名字">
         <Input
           value={f.name || ""}
@@ -483,7 +533,7 @@ function NewBean({ open, form = "beans", onClose, onDone, oops }) {
         <Input value={f.tags || ""} onChange={set("tags")} placeholder="水洗 柑橘 耶加" />
       </Field>
       <Field label="备注" hint="品牌、坐标这类写这里">
-        <Input value={f.note || ""} onChange={set("note")} placeholder='61" coffee · 7°N 40°W' />
+        <Input value={f.note || ""} onChange={set("note")} placeholder="可空" />
       </Field>
       <label className="mt-1 flex items-start gap-2 text-sm text-cream">
         <input
@@ -503,9 +553,11 @@ function NewBean({ open, form = "beans", onClose, onDone, oops }) {
         <Input
           value={f.brew_note || ""}
           onChange={set("brew_note")}
-          placeholder="KONO 法兰绒 · 富士 #7 · TDS 10-15 · 2'15&quot;"
+          placeholder="可空"
         />
       </Field>
+        </>
+      )}
     </Modal>
   );
 }

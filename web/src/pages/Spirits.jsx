@@ -1,5 +1,5 @@
 // 基酒库：一行看见酒名、买入价、风味、酒精度。可按大类筛，按含量 / 酒精度排。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
@@ -248,6 +248,7 @@ export default function Spirits({ onOpen, toast, oops }) {
           setAdding(false);
           toast(`已加入酒库：${s.name}`);
           load();
+          onOpen(s.id);
         }}
         oops={oops}
       />
@@ -257,13 +258,22 @@ export default function Spirits({ onOpen, toast, oops }) {
 
 function NewSpirit({ open, onClose, onDone, oops, kinds }) {
   const [f, setF] = useState({});
+  const [saving, setSaving] = useState(false);
+  const inflight = useRef(false);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
 
   useEffect(() => {
-    if (open) setF({ kind: "威士忌", category: "", nominal_ml: 700, abv: 40 });
+    if (open) {
+      inflight.current = false;
+      setSaving(false);
+      setF({ kind: "威士忌", category: "", nominal_ml: 700, abv: 40 });
+    }
   }, [open]);
 
   const submit = async () => {
+    if (inflight.current || !f.name?.trim()) return;
+    inflight.current = true;
+    setSaving(true);
     try {
       const spirit = await api.createSpirit({
         ...f,
@@ -275,22 +285,24 @@ function NewSpirit({ open, onClose, onDone, oops, kinds }) {
       onDone(spirit);
     } catch (e) {
       oops(e.message);
+      inflight.current = false;
+      setSaving(false);
     }
   };
 
   return (
     <Modal
       open={open}
-      onClose={onClose}
+      onClose={() => !saving && onClose()}
       title="新建基酒"
       sub="卡是酒名。同样的酒再买一瓶，进酒卡点「再入一瓶」，不用在这儿重建。"
       footer={
         <>
-          <Btn variant="ghost" onClick={onClose}>
+          <Btn variant="ghost" onClick={onClose} disabled={saving}>
             取消
           </Btn>
-          <Btn onClick={submit} disabled={!f.name?.trim()}>
-            加入酒库
+          <Btn onClick={submit} disabled={saving || !f.name?.trim()}>
+            {saving ? "加入中…" : "加入酒库"}
           </Btn>
         </>
       }

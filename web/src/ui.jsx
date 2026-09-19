@@ -93,7 +93,7 @@ export function Input({ className = "", ...rest }) {
   return (
     <input
       className={`w-full rounded-lg border border-line bg-bg px-3 py-2 text-cream
-        outline-none focus:border-amber ${className}`}
+        outline-none placeholder:text-muted/70 focus:border-amber ${className}`}
       {...rest}
     />
   );
@@ -131,7 +131,14 @@ export function Modal({ open, onClose, title, sub, children, footer, wide }) {
       <h2 className="serif m-0 text-xl">{title}</h2>
       {sub && <p className="mt-1.5 mb-0 text-[13px] text-muted">{sub}</p>}
       <div className="mt-4 space-y-3">{children}</div>
-      {footer && <div className="mt-6 flex flex-wrap justify-end gap-2">{footer}</div>}
+      {footer && (
+        <div
+          className="sticky bottom-0 z-10 -mx-6 -mb-6 mt-6 flex flex-wrap justify-end gap-2
+            border-t border-line bg-panel px-6 pb-6 pt-3"
+        >
+          {footer}
+        </div>
+      )}
     </dialog>
   );
 }
@@ -142,12 +149,16 @@ export function useToast() {
   const oops = useCallback((text) => setMsg({ text, bad: true }), []);
   useEffect(() => {
     if (!msg) return;
-    const t = setTimeout(() => setMsg(null), 2600);
+    const t = setTimeout(() => setMsg(null), 4000);
     return () => clearTimeout(t);
   }, [msg]);
   const node = msg ? (
     <div
-      className={`rise fixed bottom-7 right-7 z-50 rounded-xl px-4 py-2.5 font-semibold shadow-lg ${
+      role="status"
+      className={`rise pointer-events-none fixed left-1/2 z-[200] w-[min(92vw,28rem)] -translate-x-1/2
+        rounded-xl px-4 py-3 text-center font-semibold shadow-lg
+        top-[max(1rem,env(safe-area-inset-top))]
+        md:top-auto md:right-7 md:bottom-7 md:left-auto md:w-auto md:translate-x-0 md:text-left ${
         msg.bad ? "bg-warn text-white" : "bg-amber text-[#1a120a]"
       }`}
     >

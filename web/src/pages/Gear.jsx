@@ -1,5 +1,5 @@
 // 自己台面上的咖啡器具。登记之后冲煮指导会按滤杯形状给建议。
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
@@ -220,9 +220,12 @@ function blank(kind = "dripper") {
 function GearForm({ open, meta, initial, onClose, onDone, oops }) {
   const [f, setF] = useState(blank);
   const [busy, setBusy] = useState(false);
+  const inflight = useRef(false);
 
   useEffect(() => {
     if (open) {
+      inflight.current = false;
+      setBusy(false);
       setF(
         initial
           ? {
@@ -244,10 +247,12 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
   const methods = meta?.methods || [];
 
   const save = async () => {
+    if (inflight.current) return;
     if (!f.name.trim()) {
       oops("先写器具名字");
       return;
     }
+    inflight.current = true;
     setBusy(true);
     try {
       const payload = {
@@ -266,7 +271,7 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
       onDone(item);
     } catch (e) {
       oops(e.message);
-    } finally {
+      inflight.current = false;
       setBusy(false);
     }
   };
@@ -287,7 +292,7 @@ function GearForm({ open, meta, initial, onClose, onDone, oops }) {
             取消
           </Btn>
           <Btn onClick={save} disabled={busy || !f.name.trim()}>
-            {initial ? "保存" : "登记"}
+            {busy ? (initial ? "保存中…" : "登记中…") : initial ? "保存" : "登记"}
           </Btn>
         </>
       }

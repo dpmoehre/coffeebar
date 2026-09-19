@@ -30,6 +30,14 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
         "/api/drinks",
         json={"lot_id": spirit["lots"][0]["id"], "amount_ml": 30, "person": "丁瀚舟"},
     )
+    client.post("/api/gear", json={"name": "V60", "kind": "dripper", "family": "cone"})
+    from tests.test_photos import png_bytes
+
+    client.post(
+        f"/api/beans/{bean['id']}/photos",
+        files={"file": ("bag.png", png_bytes(), "image/png")},
+        data={"kind": "pack"},
+    )
 
     client.post("/api/auth/logout")
     assert (
@@ -44,13 +52,19 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
 
     accounts = client.get("/api/admin/accounts").json()["accounts"]
     other = next(a for a in accounts if a["email"] == "test@coffeebar.local")
+    assert other["nickname"]
     assert other["beans"] == 1
     assert other["spirits"] == 1
+    assert other["gear"] == 1
     assert other["cups"] >= 1
 
     dossier = client.get(f"/api/admin/accounts/{other['id']}").json()
-    assert [b["name"] for b in dossier["beans"]] == ["别人的豆"]
+    assert dossier["account"]["nickname"]
+    theirs = next(b for b in dossier["beans"] if b["name"] == "别人的豆")
+    assert theirs["cover"]
+    assert theirs["photo_count"] == 1
     assert [s["name"] for s in dossier["spirits"]] == ["别人的酒"]
+    assert len(dossier["gear"]) == 1
     names = {c.get("bean_name") or c.get("spirit_name") for c in dossier["consumption"]}
     assert "别人的豆" in names
     assert "别人的酒" in names
@@ -58,6 +72,8 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     card = client.get(f"/api/admin/accounts/{other['id']}/beans/{bean['id']}").json()
     assert card["name"] == "别人的豆"
     assert card["log"]
+    assert card["photos"]
+    assert card["photos"][0]["url"]
 
     bottle = client.get(f"/api/admin/accounts/{other['id']}/spirits/{spirit['id']}").json()
     assert bottle["name"] == "别人的酒"

@@ -182,7 +182,8 @@ def get_kingdom(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
 def queue(conn: sqlite3.Connection) -> list[dict]:
     """公开了、还没进王国的豆卡。"""
     rows = conn.execute(
-        """SELECT b.id, b.name, b.origin, b.roast, b.visibility, b.certified_at, a.email AS owner_email
+        """SELECT b.id, b.name, b.origin, b.roast, b.visibility, b.certified_at,
+                  a.email AS owner_email, a.nickname AS owner_nickname
              FROM bean b JOIN account a ON a.id = b.owner_id
             WHERE b.visibility = 'public' AND b.deleted_at IS NULL AND b.kingdom_id IS NULL
             ORDER BY b.updated_at DESC"""
