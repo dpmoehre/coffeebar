@@ -18,7 +18,17 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
     bean = client.post(
         "/api/beans",
-        json={"name": "别人的豆", "nominal_g": 200, "price": 80},
+        json={
+            "name": "别人的豆",
+            "origin": "肯尼亚",
+            "varietal": "SL28",
+            "process": "水洗",
+            "roast": "中浅烘",
+            "note": "黑醋栗",
+            "tags": ["水洗"],
+            "nominal_g": 200,
+            "price": 80,
+        },
     ).json()
     lot = bean["lots"][0]["id"]
     client.post("/api/brews", json={"lot_id": lot, "amount_g": 16, "person": "丁瀚舟"})
@@ -73,6 +83,17 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
 
     card = client.get(f"/api/admin/accounts/{other['id']}/beans/{bean['id']}").json()
     assert card["name"] == "别人的豆"
+    assert card["origin"] == "肯尼亚"
+    assert card["varietal"] == "SL28"
+    assert card["process"] == "水洗"
+    assert card["note"] == "黑醋栗"
+    assert card["brew"]
+    assert card["parse"]["origin"] is True
+    assert card["parse"]["varietal"] is True
+    assert card["parse"]["price"] is True
+    assert card["parse"]["photos"] is True
+    assert card["parse"]["scores"] is False
+    assert card["parse"]["producer"] is False
     assert card["log"]
     assert card["photos"]
     assert card["photos"][0]["url"]

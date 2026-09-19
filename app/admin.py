@@ -72,6 +72,29 @@ def dossier(conn: sqlite3.Connection, account_id: int) -> dict:
     }
 
 
+def parse_card(bean: dict) -> dict:
+    """后台把一张豆卡拆开：填了什么、空着什么。不识图，只读已经入档的字段。"""
+    brew = bean.get("brew") or {}
+    lots = bean.get("lots") or []
+    return {
+        "origin": bool(str(bean.get("origin") or "").strip()),
+        "varietal": bool(str(bean.get("varietal") or "").strip()),
+        "producer": bool(str(bean.get("producer") or "").strip()),
+        "process": bool(str(bean.get("process") or "").strip()),
+        "roast": bool(str(bean.get("roast") or "").strip()),
+        "altitude": bool(str(bean.get("altitude") or "").strip()),
+        "water_temp": bean.get("water_temp") is not None,
+        "note": bool(str(bean.get("note") or "").strip()),
+        "tags": bool(bean.get("tags")),
+        "photos": bool(bean.get("photos")),
+        "scores": _has_cupping(bean.get("scores")),
+        "price": any(lot.get("price") is not None for lot in lots),
+        "roast_date": any(lot.get("roasted_on") for lot in lots),
+        "brew_note": bool(str(brew.get("note") or "").strip()),
+        "places": bool(bean.get("places")),
+    }
+
+
 def bean_detail(conn: sqlite3.Connection, account_id: int, bean_id: int) -> dict:
     get_account(conn, account_id)
     bean = store.get_bean(conn, bean_id, owner_id=account_id)
@@ -82,6 +105,7 @@ def bean_detail(conn: sqlite3.Connection, account_id: int, bean_id: int) -> dict
     bean["avg_dose"] = dose
     bean["cups_left"] = stats.cups_left(bean["balance_g"], dose["avg_g"])
     bean["log"] = store.list_consumption(conn, bean_id=bean_id, owner_id=account_id, limit=40)
+    bean["parse"] = parse_card(bean)
     return bean
 
 

@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api.js";
 import { LayeredRadar } from "../components/Radar.jsx";
+import { freshnessLine } from "../freshness.js";
 import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, Select, coverSrc, g, ml, money } from "../ui.jsx";
 
 function clock(at) {
@@ -28,6 +29,7 @@ export default function Admin({ toast, oops }) {
   const [dossier, setDossier] = useState(null);
   const [tab, setTab] = useState("beans");
   const [detail, setDetail] = useState(null);
+  const [detailKind, setDetailKind] = useState(null);
   const [q, setQ] = useState("");
 
   const loadList = () =>
@@ -44,6 +46,7 @@ export default function Admin({ toast, oops }) {
     setPicked(id);
     setDossier(null);
     setDetail(null);
+    setDetailKind(null);
     setTab("beans");
     api
       .adminAccount(id)
@@ -70,6 +73,7 @@ export default function Admin({ toast, oops }) {
 
   const openBean = async (beanId) => {
     try {
+      setDetailKind("bean");
       setDetail(await api.adminBean(picked, beanId));
     } catch (e) {
       oops(e.message);
@@ -78,6 +82,7 @@ export default function Admin({ toast, oops }) {
 
   const openSpirit = async (bottleId) => {
     try {
+      setDetailKind("spirit");
       setDetail(await api.adminSpirit(picked, bottleId));
     } catch (e) {
       oops(e.message);
@@ -189,6 +194,7 @@ export default function Admin({ toast, oops }) {
                 setTab={setTab}
                 detail={detail}
                 setDetail={setDetail}
+                setDetailKind={setDetailKind}
                 openBean={openBean}
                 openSpirit={openSpirit}
                 patchStatus={patchStatus}
@@ -208,6 +214,7 @@ function AccountView({
   setTab,
   detail,
   setDetail,
+  setDetailKind,
   openBean,
   openSpirit,
   patchStatus,
@@ -264,6 +271,7 @@ function AccountView({
             onClick={() => {
               setTab(k);
               setDetail(null);
+              setDetailKind(null);
             }}
           >
             {label}
@@ -293,11 +301,11 @@ function AccountView({
                     </span>
                   )}
                   <span className="min-w-0">
-                    {b.name}
-                    <span className="ml-2 text-xs text-muted">{b.origin || ""}</span>
-                    {b.photo_count ? (
-                      <span className="ml-2 text-xs text-amber">{b.photo_count} 张图</span>
-                    ) : null}
+                    <span className="block truncate text-cream">{b.name}</span>
+                    <span className="mt-0.5 block truncate text-xs text-muted">
+                      {cardLine(b) || "几乎空卡"}
+                      {b.photo_count ? ` · ${b.photo_count} 张图` : " · 无图"}
+                    </span>
                   </span>
                 </span>
                 <span className="shrink-0 text-sm text-amber">{g(b.balance_g)}</span>
@@ -407,47 +415,49 @@ function AccountView({
         </Panel>
       )}
 
-      {detail && (
+      {detail && detailKind === "spirit" ? (
         <Panel className="mt-4">
           <div className="flex items-start justify-between gap-3">
             <h3 className="serif m-0 text-xl">{detail.name}</h3>
-            <button className="text-sm text-muted underline" onClick={() => setDetail(null)}>
+            <button className="text-sm text-muted underline" onClick={() => { setDetail(null); setDetailKind(null); }}>
               收起
             </button>
           </div>
           <p className="mt-2 mb-0 text-sm text-muted">
-            {[detail.origin, detail.varietal, detail.roast, detail.kind, detail.flavor]
-              .filter(Boolean)
-              .join(" · ") || "没有更多字段"}
+            {[detail.kind, detail.flavor].filter(Boolean).join(" · ") || "没有更多字段"}
           </p>
           {detail.lots?.length > 0 && (
             <ul className="mt-3 mb-0 list-none p-0 text-sm">
               {detail.lots.map((l) => (
                 <li key={l.id} className="text-muted">
-                  {l.nominal_g != null
-                    ? `第 ${l.seq || "?"} 袋 ${g(l.balance_g)} / 标称 ${g(l.nominal_g)}`
-                    : `${ml(l.balance_ml)} / 标称 ${ml(l.nominal_ml)}`}
+                  {`${ml(l.balance_ml)} / 标称 ${ml(l.nominal_ml)}`}
                   {l.price != null ? ` · ${money(l.price)}` : ""}
                   {l.closed_at ? " · 已关" : ""}
                 </li>
               ))}
             </ul>
           )}
-          {detail.photos ? (
-            <DetailPhotos photos={detail.photos} empty="这张卡没有照片。" />
-          ) : null}
+          {detail.photos ? <DetailPhotos photos={detail.photos} empty="这张卡没有照片。" /> : null}
           {detail.log?.length > 0 && (
             <div className="mt-3 text-sm">
               {detail.log.slice(0, 12).map((c) => (
                 <div key={c.id} className={c.voided_at ? "text-muted line-through" : "text-muted"}>
-                  {clock(c.at)} · {c.person_name || "没记"} ·{" "}
-                  {c.kind === "drink" ? ml(c.amount_ml) : g(c.amount_g)} · {money(c.cost)}
+                  {clock(c.at)} · {c.person_name || "没记"} · {ml(c.amount_ml)} · {money(c.cost)}
                 </div>
               ))}
             </div>
           )}
         </Panel>
-      )}
+      ) : null}
+      {detail && detailKind === "bean" ? (
+        <AdminBeanCard
+          detail={detail}
+          onClose={() => {
+            setDetail(null);
+            setDetailKind(null);
+          }}
+        />
+      ) : null}
     </>
   );
 }
@@ -940,6 +950,200 @@ const ARCHIVE_FIELDS = [
   ["altitude", "海拔"],
   ["water_temp", "水温"],
 ];
+
+const PARSE_LABELS = [
+  ["origin", "产地"],
+  ["varietal", "豆种"],
+  ["producer", "处理厂"],
+  ["process", "处理法"],
+  ["roast", "烘焙"],
+  ["altitude", "海拔"],
+  ["water_temp", "水温"],
+  ["note", "描述"],
+  ["tags", "标签"],
+  ["photos", "照片"],
+  ["scores", "杯测"],
+  ["price", "进价"],
+  ["roast_date", "烘焙日"],
+  ["brew_note", "冲煮备注"],
+  ["places", "落点"],
+];
+
+const BREW_METHOD = {
+  v60: "V60 四段",
+  hoffmann: "Hoffmann 一杯",
+  kasuya: "4:6 粕谷",
+  kalita: "Kalita",
+  volcano: "多段式火山冲",
+};
+
+function cardLine(b) {
+  const bits = [b.origin, b.varietal, b.process, b.roast].filter(Boolean);
+  if (b.tags?.length) bits.push(b.tags.slice(0, 3).join("、"));
+  return bits.join(" · ");
+}
+
+function archiveValue(bean, key) {
+  const v = bean?.[key];
+  if (key === "water_temp" && v != null && v !== "") return `${v} °C`;
+  if (v == null || String(v).trim() === "") return "没填";
+  return String(v);
+}
+
+function AdminBeanCard({ detail, onClose }) {
+  const parsed = detail.parse || {};
+  const brew = detail.brew || {};
+  const filled = PARSE_LABELS.filter(([k]) => parsed[k]).length;
+  const drip = (detail.form || "beans") === "dripbag";
+  return (
+    <div className="mt-4 space-y-4">
+      <Panel>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="serif m-0 text-xl">{detail.name}</h3>
+            <p className="mt-1 mb-0 text-sm text-muted">
+              {detail.seed ? "进门练手卡 · " : ""}
+              {detail.certified ? "已认证" : detail.visibility === "public" ? "公开 · 未认证" : "只自己看"}
+              {freshnessLine(detail.freshness) ? ` · ${freshnessLine(detail.freshness)}` : ""}
+            </p>
+          </div>
+          <button className="text-sm text-muted underline" onClick={onClose}>
+            收起
+          </button>
+        </div>
+        <p className="mt-3 mb-0 text-xs text-muted">
+          读档 {filled}/{PARSE_LABELS.length} 项。服务端不识包装图，空着的就是还没入档。
+        </p>
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {PARSE_LABELS.map(([k, label]) => (
+            <span
+              key={k}
+              className={`rounded-full border px-2 py-0.5 text-xs ${
+                parsed[k] ? "border-amber/40 text-amber" : "border-line text-muted"
+              }`}
+            >
+              {parsed[k] ? `有${label}` : `没${label}`}
+            </span>
+          ))}
+        </div>
+        <dl className="mt-4 grid gap-2 sm:grid-cols-2">
+          {ARCHIVE_FIELDS.map(([k, label]) => (
+            <div key={k}>
+              <dt className="text-xs text-muted">{label}</dt>
+              <dd className="m-0 text-sm text-cream">{archiveValue(detail, k)}</dd>
+            </div>
+          ))}
+        </dl>
+        {detail.tags?.length > 0 && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {detail.tags.map((t) => (
+              <b
+                key={t}
+                className="rounded-full border border-line px-2 py-0.5 text-xs font-normal text-muted"
+              >
+                {t}
+              </b>
+            ))}
+          </div>
+        )}
+        <div className="mt-4">
+          <div className="text-xs text-muted">豆卡描述</div>
+          <p className="mt-1 mb-0 text-sm leading-relaxed text-cream">
+            {detail.note?.trim() || "没写描述"}
+          </p>
+        </div>
+        <div className="mt-4">
+          <div className="text-xs text-muted">冲煮</div>
+          <p className="mt-1 mb-0 text-sm text-cream">
+            {[
+              BREW_METHOD[brew.method] || brew.method,
+              brew.dose_g != null ? `${brew.dose_g} g` : null,
+              brew.ratio != null ? `1:${brew.ratio}` : null,
+              brew.note?.trim(),
+            ]
+              .filter(Boolean)
+              .join(" · ") || "没写冲煮"}
+          </p>
+        </div>
+      </Panel>
+
+      <Panel>
+        <div className="serif text-lg">{drip ? "挂耳批次" : "袋子"}</div>
+        <p className="mt-1 mb-0 text-sm text-muted">
+          {drip
+            ? `还剩 ${detail.remaining_packs ?? 0} 包`
+            : `还剩 ${g(detail.balance_g)} · 还能冲约 ${detail.cups_left ?? 0} 杯`}
+          {detail.avg_dose?.avg_g ? ` · 均粉 ${g(detail.avg_dose.avg_g)}` : ""}
+        </p>
+        {detail.lots?.length ? (
+          <ul className="mt-3 mb-0 list-none space-y-2 p-0 text-sm">
+            {detail.lots.map((l) => (
+              <li key={l.id} className="text-cream">
+                {drip ? `第 ${l.seq || "?"} 批` : `第 ${l.seq || "?"} 袋`}
+                {l.nominal_g != null ? ` · 标称 ${g(l.nominal_g)}` : ""}
+                {l.measured_g != null ? ` · 实称 ${g(l.measured_g)}` : ""}
+                {l.balance_g != null && !drip ? ` · 剩余 ${g(l.balance_g)}` : ""}
+                {l.price != null ? ` · ${money(l.price)}` : " · 没填价"}
+                {l.bought_on ? ` · 购入 ${l.bought_on}` : ""}
+                {l.roasted_on ? ` · 烘焙 ${l.roasted_on}` : " · 没填烘焙日"}
+                {l.opened_on ? ` · 开封 ${l.opened_on}` : " · 未开封"}
+                {l.closed_at ? " · 已关" : ""}
+                {l.note ? ` · ${l.note}` : ""}
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-3 mb-0 text-sm text-muted">还没入袋。</p>
+        )}
+      </Panel>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Panel>
+          <div className="serif text-lg">照片</div>
+          <DetailPhotos photos={detail.photos} empty="这张卡没有照片。" />
+        </Panel>
+        <Panel>
+          <div className="serif text-lg">杯测</div>
+          <LayeredRadar
+            base={detail.score_avg || detail.scores}
+            overlay={detail.scores}
+            layered={(detail.score_avg?.cups || 0) > 1}
+          />
+          {detail.scores?.comment ? (
+            <p className="serif mt-3 mb-0 text-[15px] leading-relaxed text-cream">
+              {detail.scores.comment}
+            </p>
+          ) : (
+            <p className="mt-3 mb-0 text-sm text-muted">还没写杯测评语。</p>
+          )}
+        </Panel>
+      </div>
+
+      <Panel>
+        <div className="serif text-lg">地图钉</div>
+        <p className="mt-2 mb-0 text-sm text-cream">
+          {detail.places?.length
+            ? detail.places.map((p) => p.label).join("、")
+            : "还没定点"}
+        </p>
+      </Panel>
+
+      {detail.log?.length > 0 && (
+        <Panel>
+          <div className="serif text-lg">流水</div>
+          <div className="mt-3 text-sm">
+            {detail.log.slice(0, 12).map((c) => (
+              <div key={c.id} className={c.voided_at ? "text-muted line-through" : "text-muted"}>
+                {clock(c.at)} · {c.person_name || "没记"} ·{" "}
+                {c.kind === "drink" ? ml(c.amount_ml) : g(c.amount_g)} · {money(c.cost)}
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+    </div>
+  );
+}
 
 function gaps(checklist) {
   return CHECK_LABELS.filter(([k]) => !checklist?.[k]).map(([, label]) => `没${label}`);
