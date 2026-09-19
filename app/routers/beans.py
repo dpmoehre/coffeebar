@@ -169,7 +169,9 @@ def api_guess_places(
     bean = store.get_bean(conn, bean_id, owner_id=account["id"])
     if not bean:
         raise HTTPException(404, "没有这支豆")
-    pins = places.guess_again(conn, bean_id, bean.get("origin"), bean.get("producer"))
+    pins = places.guess_again(
+        conn, bean_id, bean.get("origin"), bean.get("producer"), bean.get("name")
+    )
     bean = store.get_bean(conn, bean_id, owner_id=account["id"])
     return {"places": pins, "certification_dropped": bool(bean and not bean.get("certified"))}
 

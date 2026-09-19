@@ -262,6 +262,8 @@ export const api = {
   adminAccounts: () => req("GET", "/api/admin/accounts"),
   adminAccount: (id) => req("GET", `/api/admin/accounts/${id}`),
   adminBean: (accountId, beanId) => req("GET", `/api/admin/accounts/${accountId}/beans/${beanId}`),
+  adminGuessPlaces: (accountId, beanId) =>
+    req("POST", `/api/admin/accounts/${accountId}/beans/${beanId}/places/guess`, {}),
   adminSpirit: (accountId, bottleId) =>
     req("GET", `/api/admin/accounts/${accountId}/spirits/${bottleId}`),
   adminSetStatus: (id, status) => req("PATCH", `/api/admin/accounts/${id}`, { status }),

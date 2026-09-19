@@ -165,6 +165,16 @@ def api_admin_bean(
     return admin_mod.bean_detail(conn, account_id, bean_id)
 
 
+@router.post("/api/admin/accounts/{account_id}/beans/{bean_id}/places/guess")
+def api_admin_guess_places(
+    account_id: int,
+    bean_id: int,
+    conn: sqlite3.Connection = Depends(get_conn),
+    account: dict = Depends(current_admin),
+):
+    return admin_mod.guess_account_places(conn, account_id, bean_id)
+
+
 @router.get("/api/admin/accounts/{account_id}/spirits/{bottle_id}")
 def api_admin_spirit(
     account_id: int,

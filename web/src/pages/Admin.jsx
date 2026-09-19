@@ -80,6 +80,28 @@ export default function Admin({ toast, oops }) {
     }
   };
 
+  const guessBeanPlaces = async (beanId) => {
+    try {
+      const out = await api.adminGuessPlaces(picked, beanId);
+      setDetailKind("bean");
+      setDetail(out);
+      const labels = (out.places || []).map((p) => p.label).filter(Boolean);
+      toast(labels.length ? `已钉 ${labels.join("、")}` : "词典对不上名字和产地，没钉");
+      setDossier((d) =>
+        d
+          ? {
+              ...d,
+              beans: d.beans.map((b) =>
+                b.id === beanId ? { ...b, placed: Boolean(out.places?.length), places: out.places } : b,
+              ),
+            }
+          : d,
+      );
+    } catch (e) {
+      oops(e.message);
+    }
+  };
+
   const openSpirit = async (bottleId) => {
     try {
       setDetailKind("spirit");
@@ -196,6 +218,7 @@ export default function Admin({ toast, oops }) {
                 setDetail={setDetail}
                 setDetailKind={setDetailKind}
                 openBean={openBean}
+                guessBeanPlaces={guessBeanPlaces}
                 openSpirit={openSpirit}
                 patchStatus={patchStatus}
                 kick={kick}
@@ -216,6 +239,7 @@ function AccountView({
   setDetail,
   setDetailKind,
   openBean,
+  guessBeanPlaces,
   openSpirit,
   patchStatus,
   kick,
@@ -305,6 +329,7 @@ function AccountView({
                     <span className="mt-0.5 block truncate text-xs text-muted">
                       {cardLine(b) || "几乎空卡"}
                       {b.photo_count ? ` · ${b.photo_count} 张图` : " · 无图"}
+                      {b.placed === false ? " · 没定点" : ""}
                     </span>
                   </span>
                 </span>
@@ -456,6 +481,7 @@ function AccountView({
             setDetail(null);
             setDetailKind(null);
           }}
+          onGuess={() => guessBeanPlaces(detail.id)}
         />
       ) : null}
     </>
@@ -990,7 +1016,7 @@ function archiveValue(bean, key) {
   return String(v);
 }
 
-function AdminBeanCard({ detail, onClose }) {
+function AdminBeanCard({ detail, onClose, onGuess }) {
   const parsed = detail.parse || {};
   const brew = detail.brew || {};
   const filled = PARSE_LABELS.filter(([k]) => parsed[k]).length;
@@ -1126,6 +1152,13 @@ function AdminBeanCard({ detail, onClose }) {
             ? detail.places.map((p) => p.label).join("、")
             : "还没定点"}
         </p>
+        {onGuess ? (
+          <div className="mt-3">
+            <Btn variant="ghost" onClick={onGuess}>
+              {detail.places?.length ? "按词典重钉" : "按词典钉上"}
+            </Btn>
+          </div>
+        ) : null}
       </Panel>
 
       {detail.log?.length > 0 && (

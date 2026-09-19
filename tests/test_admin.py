@@ -40,6 +40,8 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
         "/api/drinks",
         json={"lot_id": spirit["lots"][0]["id"], "amount_ml": 30, "person": "丁瀚舟"},
     )
+    named = client.post("/api/beans", json={"name": "耶加雪菲"}).json()
+    assert named["places"]
     client.post("/api/gear", json={"name": "V60", "kind": "dripper", "family": "cone"})
     from tests.test_photos import png_bytes
 
@@ -65,7 +67,7 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     assert other["nickname"]
     assert other["nickname"] != "吧友"
     assert other["name"] == other["nickname"]
-    assert other["beans"] == 1
+    assert other["beans"] == 2
     assert other["spirits"] == 1
     assert other["gear"] == 1
     assert other["cups"] >= 1
@@ -75,6 +77,9 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     theirs = next(b for b in dossier["beans"] if b["name"] == "别人的豆")
     assert theirs["cover"]
     assert theirs["photo_count"] == 1
+    assert theirs["placed"] is True
+    yir = next(b for b in dossier["beans"] if b["name"] == "耶加雪菲")
+    assert yir["placed"] is True
     assert [s["name"] for s in dossier["spirits"]] == ["别人的酒"]
     assert len(dossier["gear"]) == 1
     names = {c.get("bean_name") or c.get("spirit_name") for c in dossier["consumption"]}
@@ -94,9 +99,16 @@ def test_admin_sees_other_account_beans_and_drinks(client, monkeypatch):
     assert card["parse"]["photos"] is True
     assert card["parse"]["scores"] is False
     assert card["parse"]["producer"] is False
+    assert card["parse"]["places"] is True
     assert card["log"]
     assert card["photos"]
     assert card["photos"][0]["url"]
+
+    pinned = client.post(
+        f"/api/admin/accounts/{other['id']}/beans/{named['id']}/places/guess"
+    ).json()
+    assert pinned["places"]
+    assert "耶加雪菲" in pinned["places"][0]["label"]
 
     bottle = client.get(f"/api/admin/accounts/{other['id']}/spirits/{spirit['id']}").json()
     assert bottle["name"] == "别人的酒"

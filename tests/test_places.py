@@ -32,6 +32,18 @@ def test_unknown_origin_empty():
     assert places.guess(None, None) == []
 
 
+def test_guess_falls_back_to_bean_name():
+    assert [p["key"] for p in places.guess(None, None, "耶加雪菲")] == ["yirgacheffe"]
+    assert places.guess(None, None, "哈哈哈") == []
+
+
+def test_create_named_yirgacheffe_gets_pin(conn):
+    bean_id = store.create_bean(conn, {"name": "耶加雪菲"})
+    pins = places.list_places(conn, bean_id)
+    assert len(pins) == 1
+    assert "耶加雪菲" in pins[0]["label"]
+
+
 def test_origin_guides_cover_countries_and_regions():
     keys = {p["key"] for p in places._PLACES if p["level"] <= 1}
     guides = {o["key"]: o for o in places.origin_guides()}

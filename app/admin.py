@@ -57,6 +57,8 @@ def dossier(conn: sqlite3.Connection, account_id: int) -> dict:
         shots = photos.list_bean_photos(conn, b["id"])
         b["photo_count"] = len(shots)
         b["cover"] = photos.cover_of_bean(conn, b["id"], shots)
+        b["places"] = places.list_places(conn, b["id"])
+        b["placed"] = bool(b["places"])
     bottles = spirits.list_spirits(conn, "all", owner_id=account_id)
     people = store.list_people(conn, include_inactive=True, owner_id=account_id)
     log = store.list_consumption(conn, owner_id=account_id, limit=80)
@@ -107,6 +109,16 @@ def bean_detail(conn: sqlite3.Connection, account_id: int, bean_id: int) -> dict
     bean["log"] = store.list_consumption(conn, bean_id=bean_id, owner_id=account_id, limit=40)
     bean["parse"] = parse_card(bean)
     return bean
+
+
+def guess_account_places(conn: sqlite3.Connection, account_id: int, bean_id: int) -> dict:
+    bean = store.get_bean(conn, bean_id, owner_id=account_id)
+    if not bean:
+        raise HTTPException(404, "没有这支豆")
+    places.guess_again(
+        conn, bean_id, bean.get("origin"), bean.get("producer"), bean.get("name")
+    )
+    return bean_detail(conn, account_id, bean_id)
 
 
 def spirit_detail(conn: sqlite3.Connection, account_id: int, bottle_id: int) -> dict:
@@ -234,7 +246,9 @@ def review_queue(conn: sqlite3.Connection, status: str = "pending") -> list[dict
         scores = store.latest_score(conn, d["id"])
         price = review_price(conn, d["id"])
         d["certified"] = bool(d.get("certified_at"))
-        d["places"] = places.review_places(conn, d["id"], d.get("origin"), d.get("producer"))
+        d["places"] = places.review_places(
+            conn, d["id"], d.get("origin"), d.get("producer"), d.get("name")
+        )
         d["cover"] = photos.cover_of_bean(conn, d["id"], shots)
         d["photo_count"] = len(shots)
         d["price"] = price
@@ -261,7 +275,9 @@ def review_bean(conn: sqlite3.Connection, bean_id: int) -> dict:
     log = store.list_scores(conn, bean_id)
     scores = log[0] if log else None
     price = review_price(conn, bean_id)
-    pins = places.review_places(conn, bean_id, bean.get("origin"), bean.get("producer"))
+    pins = places.review_places(
+        conn, bean_id, bean.get("origin"), bean.get("producer"), bean.get("name")
+    )
     return {
         "id": bean["id"],
         "name": bean["name"],
@@ -312,7 +328,9 @@ def certify_bean(
     bean = _bean_row(conn, bean_id)
     if (bean.get("visibility") or "private") != "public":
         raise store.Conflict("先让主人把这张卡公开，才能认证")
-    check = places.review_places(conn, bean_id, bean.get("origin"), bean.get("producer"))
+    check = places.review_places(
+        conn, bean_id, bean.get("origin"), bean.get("producer"), bean.get("name")
+    )
     if verify_places and check["warnings"] and not force_places:
         raise store.Conflict(
             "地图落点还没对上："
@@ -359,5 +377,7 @@ def review_guess_places(conn: sqlite3.Connection, bean_id: int) -> dict:
     bean = _bean_row(conn, bean_id)
     if (bean.get("visibility") or "private") != "public":
         raise store.Conflict("这张卡还没公开，不用审")
-    places.guess_again(conn, bean_id, bean.get("origin"), bean.get("producer"))
+    places.guess_again(
+        conn, bean_id, bean.get("origin"), bean.get("producer"), bean.get("name")
+    )
     return review_bean(conn, bean_id)

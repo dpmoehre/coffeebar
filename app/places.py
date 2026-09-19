@@ -491,8 +491,8 @@ def origin_guides() -> list[dict]:
     return out
 
 
-def guess(origin: str | None, producer: str | None = None) -> list[dict]:
-    """从产地 + 处理厂文本推出一组钉。同一 key 只留一次。"""
+def guess(origin: str | None, producer: str | None = None, name: str | None = None) -> list[dict]:
+    """从产地 + 处理厂文本推出一组钉。对不上时再看豆名。同一 key 只留一次。"""
     segments = split_origins(origin)
     if producer and producer.strip():
         segments.append(producer.strip())
@@ -512,6 +512,17 @@ def guess(origin: str | None, producer: str | None = None) -> list[dict]:
             )
     if not out and (origin or producer):
         hit = match_segment(" ".join(x for x in (origin, producer) if x))
+        if hit:
+            out.append(
+                {
+                    "key": hit["key"],
+                    "label": hit["label"],
+                    "lat": hit["lat"],
+                    "lng": hit["lng"],
+                }
+            )
+    if not out and name:
+        hit = match_segment(name)
         if hit:
             out.append(
                 {
@@ -569,13 +580,17 @@ def _insert(conn: sqlite3.Connection, bean_id: int, pins: list[dict], source: st
 
 
 def sync_gazetteer(
-    conn: sqlite3.Connection, bean_id: int, origin: str | None, producer: str | None
+    conn: sqlite3.Connection,
+    bean_id: int,
+    origin: str | None,
+    producer: str | None,
+    name: str | None = None,
 ) -> list[dict]:
     """没有手定点时，按文本重写词典钉。有手定点则原样返回。"""
     if has_click(conn, bean_id):
         return list_places(conn, bean_id)
     conn.execute("DELETE FROM bean_place WHERE bean_id = ? AND source = 'gazetteer'", (bean_id,))
-    _insert(conn, bean_id, guess(origin, producer), "gazetteer")
+    _insert(conn, bean_id, guess(origin, producer, name), "gazetteer")
     return list_places(conn, bean_id)
 
 
@@ -605,11 +620,15 @@ def set_click_places(conn: sqlite3.Connection, bean_id: int, pins: list[dict]) -
 
 
 def guess_again(
-    conn: sqlite3.Connection, bean_id: int, origin: str | None, producer: str | None
+    conn: sqlite3.Connection,
+    bean_id: int,
+    origin: str | None,
+    producer: str | None,
+    name: str | None = None,
 ) -> list[dict]:
     """清掉手定，按词典重猜。"""
     conn.execute("DELETE FROM bean_place WHERE bean_id = ?", (bean_id,))
-    pins = sync_gazetteer(conn, bean_id, origin, producer)
+    pins = sync_gazetteer(conn, bean_id, origin, producer, name)
     from . import store
 
     store.clear_certification(conn, bean_id)
@@ -626,11 +645,15 @@ def _km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
 
 
 def review_places(
-    conn: sqlite3.Connection, bean_id: int, origin: str | None, producer: str | None
+    conn: sqlite3.Connection,
+    bean_id: int,
+    origin: str | None,
+    producer: str | None,
+    name: str | None = None,
 ) -> dict:
     """对照当前钉和词典推测，给审核用。"""
     current = list_places(conn, bean_id)
-    gazetteer = guess(origin, producer)
+    gazetteer = guess(origin, producer, name)
     warnings: list[str] = []
     if not current:
         warnings.append("还没有地图落点")
@@ -660,7 +683,7 @@ def review_places(
 def backfill(conn: sqlite3.Connection) -> int:
     """老库里还没有落点的豆，启动时补一回词典钉。"""
     rows = conn.execute(
-        "SELECT id, origin, producer FROM bean WHERE deleted_at IS NULL"
+        "SELECT id, origin, producer, name FROM bean WHERE deleted_at IS NULL"
     ).fetchall()
     n = 0
     for r in rows:
@@ -669,7 +692,7 @@ def backfill(conn: sqlite3.Connection) -> int:
         ).fetchone()
         if has:
             continue
-        if sync_gazetteer(conn, r["id"], r["origin"], r["producer"]):
+        if sync_gazetteer(conn, r["id"], r["origin"], r["producer"], r["name"]):
             n += 1
     return n
 

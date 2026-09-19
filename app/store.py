@@ -325,7 +325,9 @@ def create_bean(conn: sqlite3.Connection, data: dict) -> int:
         ),
     )
     set_tags(conn, bean_id, data.get("tags") or [])
-    places.sync_gazetteer(conn, bean_id, data.get("origin"), data.get("producer"))
+    places.sync_gazetteer(
+        conn, bean_id, data.get("origin"), data.get("producer"), data.get("name")
+    )
     if vis != "private":
         conn.execute("UPDATE bean SET visibility = ? WHERE id = ?", (vis, bean_id))
     return bean_id
@@ -360,10 +362,12 @@ def update_bean(conn: sqlite3.Connection, bean_id: int, data: dict) -> None:
         conn.execute(f"UPDATE bean SET {', '.join(sets)} WHERE id = ?", vals)
     if "tags" in data:
         set_tags(conn, bean_id, data["tags"] or [])
-    if "origin" in data or "producer" in data:
-        row = _row(conn.execute("SELECT origin, producer FROM bean WHERE id = ?", (bean_id,)))
+    if "origin" in data or "producer" in data or "name" in data:
+        row = _row(
+            conn.execute("SELECT origin, producer, name FROM bean WHERE id = ?", (bean_id,))
+        )
         if row:
-            places.sync_gazetteer(conn, bean_id, row["origin"], row["producer"])
+            places.sync_gazetteer(conn, bean_id, row["origin"], row["producer"], row["name"])
     if identity_changed or vis_changed_to_private:
         clear_certification(conn, bean_id)
 
