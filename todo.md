@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-26
+
+- **关袋补整包购入价**：袋子空了，「喝掉的钱」补到这一包买入价；已记的杯和按人不动。绿标已关的那袋按 102 元补上。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_stock.py tests/test_stats.py tests/test_api.py::test_close_lot_reports_deviation`。
+
 ## 2026-09-20
 
 - **后台账号更清楚**：列表写真实用户名和有没有器具；点开豆卡能读完整档案；没填产地但名字能对上词典的会补地图钉。见 [docs/005-🚧](docs/005-🚧-社区版与多租户.md) / [docs/007-🚧](docs/007-🚧-豆子地图.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。

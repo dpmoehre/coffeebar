@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-26",
+    title: "袋子空了，喝掉的钱补上整包价",
+    notes: [
+      "点「这袋用完」之后，这一包的购入价会进「喝掉的钱」。已经记下的杯还在，余数不算谁的一杯。",
+      "瑰夏村绿标关袋后按整包 102 元算进去了。",
+    ],
+  },
+  {
     date: "2026-09-20",
     title: "后台能看见谁、有没有器具、豆子照片",
     notes: [

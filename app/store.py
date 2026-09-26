@@ -1231,9 +1231,79 @@ def adjust_lot(conn: sqlite3.Connection, lot_id: int, actual_g: float, note: str
     return delta
 
 
+SETTLE_NOTE = "关袋补整包购入"
+
+
+def lot_coffee_spent(conn: sqlite3.Connection, lot_id: int) -> float:
+    """这袋已经摊进「喝掉的钱」的豆钱，不含滤纸。"""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(c.amount_g * COALESCE(c.unit_cost, 0)), 0)
+            FROM consumption_event c
+           WHERE c.lot_id = ? AND c.kind = 'coffee' AND c.voided_at IS NULL""",
+        (lot_id,),
+    ).fetchone()
+    return float(row[0] or 0)
+
+
+@db.atomic
+def settle_lot_price(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> dict | None:
+    """把这袋「喝掉的钱」补到购入价。新记 as_cup=0，不改旧杯，账面保持 0。"""
+    lot = get_lot(conn, lot_id)
+    if not lot:
+        raise Conflict("没有这一袋")
+    if bean_form(conn, lot["bean_id"]) == "dripbag":
+        return None
+    price = lot.get("price")
+    unit = lot.get("unit_cost")
+    if not price or not unit or unit <= 0:
+        return None
+    gap = float(price) - lot_coffee_spent(conn, lot_id)
+    if gap <= 0.005:
+        return None
+    gap_g = gap / float(unit)
+    ts = db.now()
+    text = note or SETTLE_NOTE
+    conn.execute(
+        "INSERT INTO stock_event (lot_id, kind, delta_g, note, at) VALUES (?, 'adjust', ?, ?, ?)",
+        (lot_id, gap_g, text, ts),
+    )
+    closed = lot["closed_at"]
+    if closed:
+        conn.execute("UPDATE bean_lot SET closed_at = NULL WHERE id = ?", (lot_id,))
+    try:
+        return record_brew(
+            conn,
+            {
+                "lot_id": lot_id,
+                "amount_g": gap_g,
+                "as_cup": 0,
+                "note": text,
+            },
+        )
+    finally:
+        if closed:
+            conn.execute("UPDATE bean_lot SET closed_at = ? WHERE id = ?", (closed, lot_id))
+
+
+def _undo_price_settle(conn: sqlite3.Connection, lot_id: int) -> None:
+    """改整袋补录前，先撤掉关袋补价，避免花双份。"""
+    rows = conn.execute(
+        """SELECT id FROM consumption_event
+           WHERE lot_id = ? AND as_cup = 0 AND voided_at IS NULL AND note = ?""",
+        (lot_id, SETTLE_NOTE),
+    ).fetchall()
+    for row in rows:
+        void_one(conn, row["id"], "改整袋补录")
+    conn.execute(
+        """UPDATE stock_event SET delta_g = 0, note = ?
+           WHERE lot_id = ? AND kind = 'adjust' AND note = ?""",
+        ("关袋补整包购入（已改标称）", lot_id, SETTLE_NOTE),
+    )
+
+
 @db.atomic
 def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) -> float:
-    """这袋用完：人确认才关，账面余数记成偏差结清。返回偏差克重。"""
+    """这袋用完：人确认才关。账面余数结清，喝掉的钱补到这包购入价。"""
     lot = get_lot(conn, lot_id)
     if not lot:
         raise Conflict("没有这一袋")
@@ -1250,6 +1320,7 @@ def close_lot(conn: sqlite3.Connection, lot_id: int, note: str | None = None) ->
         (lot_id, -balance, note or f"关袋结清偏差 {balance:+.1f} g", ts),
     )
     conn.execute("UPDATE bean_lot SET closed_at = ? WHERE id = ?", (ts, lot_id))
+    settle_lot_price(conn, lot_id)
     return balance
 
 
@@ -1420,6 +1491,7 @@ def retarget_finished_lot(
     closed = lot["closed_at"]
     if closed:
         conn.execute("UPDATE bean_lot SET closed_at = NULL WHERE id = ?", (lot_id,))
+    _undo_price_settle(conn, lot_id)
     out = record_writeoff(conn, lot_id, note)
     if closed:
         close_lot(conn, lot_id, "关袋（整袋消耗已另记）")

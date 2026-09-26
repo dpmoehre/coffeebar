@@ -322,7 +322,7 @@ def adjust_lot(lot_id: int, actual_g: float, note: str | None = None) -> Any:
 
 @mcp.tool()
 def close_lot(lot_id: int, note: str | None = None) -> Any:
-    """这袋用完并结清偏差。必须人明确说要用完。"""
+    """这袋用完：结清账面，并把喝掉的钱补到这包购入价。必须人明确说要用完。"""
     return _call(client().close_lot, lot_id, note)
 
 

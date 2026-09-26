@@ -86,7 +86,7 @@ export default function Stats({ toast, oops }) {
               label="喝掉的钱"
               value={money(s.spent).replace("¥", "")}
               unit="¥"
-              hint="按每笔冻结的单价摊，含未记到人的整袋"
+              hint="关袋后补到这包购入价；整袋补录不算到人"
             />
             <Kpi
               label="买进来的钱"

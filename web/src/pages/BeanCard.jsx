@@ -803,7 +803,7 @@ function LotRow({ lot, drip = false, onDone, onOpenBag, guarded, toast, oops }) 
               className="text-muted underline hover:text-warn"
               onClick={() =>
                 guarded(async () => {
-                  if (!window.confirm("这袋真的冲完了吗？余数会记成偏差。")) return;
+                  if (!window.confirm("这袋真的冲完了吗？余数记成偏差，喝掉的钱补到这包购入价。")) return;
                   const out = await api.closeLot(lot.id);
                   toast(`关袋，偏差 ${out.deviation_g > 0 ? "+" : ""}${out.deviation_g} g`);
                   onDone();

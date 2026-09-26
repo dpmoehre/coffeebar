@@ -70,6 +70,7 @@ def test_close_lot_zeroes_balance_and_reports_deviation(conn):
     lot = store.get_lot(conn, lot_id)
     assert lot["closed_at"] is not None
     assert lot["balance_g"] == pytest.approx(0)
+    assert stats.summary(conn, "all")["spent"] == pytest.approx(128.0)
 
 
 def test_cannot_brew_from_closed_lot(conn):
@@ -126,7 +127,9 @@ def test_void_on_closed_lot_keeps_balance_zero(conn):
             "SELECT kind FROM stock_event WHERE lot_id = ? ORDER BY id", (lot_id,)
         ).fetchall()
     ]
-    assert kinds == ["intake", "close_lot", "adjust"]
+    assert kinds[0] == "intake"
+    assert "close_lot" in kinds
+    assert kinds[-1] == "adjust"
 
 
 def test_unvoid_restores(conn):
@@ -171,7 +174,9 @@ def test_delete_voided_on_closed_lot_keeps_adjust(conn):
             "SELECT kind FROM stock_event WHERE lot_id = ? ORDER BY id", (lot_id,)
         ).fetchall()
     ]
-    assert kinds == ["intake", "close_lot", "adjust"]
+    assert kinds[0] == "intake"
+    assert "close_lot" in kinds
+    assert kinds[-1] == "adjust"
 
 
 def test_multiple_lots_are_chosen_explicitly(conn):

@@ -350,7 +350,7 @@ def api_close(
     conn: sqlite3.Connection = Depends(get_conn),
     account: dict = Depends(current_account),
 ):
-    """这袋用完：人确认才关，余数记成偏差。"""
+    """这袋用完：人确认才关，余数记成偏差，喝掉的钱补到这包购入价。"""
     auth.assert_owner(auth.lot_bean_owner(conn, lot_id), account["id"], "没有这一袋")
     diff = store.close_lot(conn, lot_id, (payload or {}).get("note"))
     return {"deviation_g": round(diff, 1), "lot": store.get_lot(conn, lot_id)}

@@ -137,6 +137,24 @@ def test_retarget_finished_lot_then_writeoff(conn):
     assert store.list_beans(conn, "history")[0]["id"] == bean_id
 
 
+def test_close_lot_fills_spent_to_bag_price(conn):
+    """袋子空了，喝掉的钱补到这一包购入价，不算谁的一杯。"""
+    _, lot_id = make_bean(conn, nominal=227, price=102.0)
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 47, "person": "戚浩辰"})
+    store.adjust_lot(conn, lot_id, 82.351)
+    store.close_lot(conn, lot_id, "喝完了")
+
+    s = stats.summary(conn, "all")
+    assert s["spent"] == pytest.approx(102.0)
+    assert s["bought"] == pytest.approx(102.0)
+    assert s["beans_g"] == pytest.approx(227)
+    assert s["cups"] == 1
+    assert s["by_person"][0]["beans_g"] == pytest.approx(47)
+    assert s["by_person"][0]["spent"] == pytest.approx(21.12)
+    assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(0)
+    assert store.settle_lot_price(conn, lot_id) is None
+
+
 def test_summary_separates_spent_from_bought(conn):
     """喝掉的钱和买进来的钱是两笔，不能混。"""
     _, lot_id = make_bean(conn, nominal=200, price=128.0)
