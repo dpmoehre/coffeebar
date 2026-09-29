@@ -279,12 +279,17 @@ def by_bean(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
 
 
 def daily_series(conn: sqlite3.Connection, where: str, args: tuple) -> list[dict]:
-    """按业务日（凌晨 4 点分界）汇总克数，画消耗速度曲线。"""
+    """按业务日（凌晨 4 点分界）汇总真正冲下去的克数。
+
+    整袋补录和关袋补价是 as_cup=0，会把一天抬成一整包，不进这条曲线。
+    那些钱仍在「喝掉的钱」里。
+    """
     cur = conn.execute(
         f"""SELECT date(c.at, '-{db.DAY_CUTOFF_HOURS} hours') AS day,
                    COALESCE(SUM(c.amount_g), 0) AS beans_g,
-                   COALESCE(SUM(CASE WHEN COALESCE(c.as_cup, 1) = 1 THEN 1 ELSE 0 END), 0) AS cups
-            FROM consumption_event c WHERE {where}
+                   COUNT(*) AS cups
+            FROM consumption_event c
+            WHERE {where} AND COALESCE(c.as_cup, 1) = 1
             GROUP BY day ORDER BY day""",
         args,
     )

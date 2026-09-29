@@ -112,6 +112,7 @@ def test_writeoff_counts_weight_and_money_not_cups_or_people(conn):
     assert beans["西达摩"]["beans_g"] == pytest.approx(500)
     assert beans["西达摩"]["cups"] == 1
     assert stats.average_dose(conn)["avg_g"] == pytest.approx(16.0)
+    assert sum(d["beans_g"] for d in s["daily"]) == pytest.approx(16)
 
 
 def test_retarget_finished_lot_then_writeoff(conn):
@@ -134,6 +135,7 @@ def test_retarget_finished_lot_then_writeoff(conn):
     assert s["cups"] == 0
     assert s["bought"] == pytest.approx(102.0)
     assert s["by_person"] == []
+    assert s["daily"] == []
     assert store.list_beans(conn, "history")[0]["id"] == bean_id
 
 
@@ -151,6 +153,7 @@ def test_close_lot_fills_spent_to_bag_price(conn):
     assert s["cups"] == 1
     assert s["by_person"][0]["beans_g"] == pytest.approx(47)
     assert s["by_person"][0]["spent"] == pytest.approx(21.12)
+    assert sum(d["beans_g"] for d in s["daily"]) == pytest.approx(47)
     assert store.get_lot(conn, lot_id)["balance_g"] == pytest.approx(0)
     assert store.settle_lot_price(conn, lot_id) is None
 

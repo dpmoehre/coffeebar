@@ -119,6 +119,7 @@ export default function Stats({ toast, oops }) {
           <div className="mt-4 grid gap-4 lg:grid-cols-2">
             <Panel>
               <div className="serif text-lg">消耗速度（克 / 天）</div>
+              <p className="mt-1 mb-0 text-xs text-muted">只算记下的杯。整袋补录不进这条线，钱仍在上面。</p>
               <Spark data={s.daily} />
             </Panel>
 

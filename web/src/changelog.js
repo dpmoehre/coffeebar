@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-29",
+    title: "消耗速度不再被整袋补录抬高",
+    notes: [
+      "马森秋和墨白是整袋记进账的，不是那天冲了一公斤。消耗速度只算真正记下的杯。",
+      "这两袋的钱还在「喝掉的钱」里。",
+    ],
+  },
+  {
+    date: "2026-09-29",
     title: "马森秋和墨白记进喝掉的钱",
     notes: [
       "这两袋早先的整袋补录被撤回了，喝掉的钱里就没它们。现在按整包各 102 元重新算进去。",
