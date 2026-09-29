@@ -215,6 +215,7 @@ export default function Admin({ toast, oops }) {
                 tab={tab}
                 setTab={setTab}
                 detail={detail}
+                detailKind={detailKind}
                 setDetail={setDetail}
                 setDetailKind={setDetailKind}
                 openBean={openBean}
@@ -236,6 +237,7 @@ function AccountView({
   tab,
   setTab,
   detail,
+  detailKind,
   setDetail,
   setDetailKind,
   openBean,

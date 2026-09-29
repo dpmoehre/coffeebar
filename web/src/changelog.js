@@ -22,6 +22,13 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-09-29",
+    title: "后台点开别人的豆卡不再黑屏",
+    notes: [
+      "后台里点一张豆卡或酒卡，页面会空掉、只剩深色底。现在会停在原处，下面展开这张卡。",
+    ],
+  },
+  {
+    date: "2026-09-29",
     title: "消耗速度不再被整袋补录抬高",
     notes: [
       "马森秋和墨白是整袋记进账的，不是那天冲了一公斤。消耗速度只算真正记下的杯。",
