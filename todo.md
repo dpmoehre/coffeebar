@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-09-29
+
+- **马森秋、墨白重新计入喝掉的钱**：整袋补录曾被撤回，各 500 g / 102 元已记回；不算杯、不算到人。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。
+
 ## 2026-09-26
 
 - **关袋补整包购入价**：袋子空了，「喝掉的钱」补到这一包买入价；已记的杯和按人不动。绿标已关的那袋按 102 元补上。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_stock.py tests/test_stats.py tests/test_api.py::test_close_lot_reports_deviation`。

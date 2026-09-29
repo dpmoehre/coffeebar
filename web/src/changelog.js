@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-09-29",
+    title: "马森秋和墨白记进喝掉的钱",
+    notes: [
+      "这两袋早先的整袋补录被撤回了，喝掉的钱里就没它们。现在按整包各 102 元重新算进去。",
+      "不算多一杯，也不算到谁头上。",
+    ],
+  },
+  {
     date: "2026-09-26",
     title: "袋子空了，喝掉的钱补上整包价",
     notes: [
