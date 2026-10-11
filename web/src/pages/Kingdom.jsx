@@ -222,7 +222,7 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
           </Btn>
         </div>
         <p className="mt-2 mb-0 text-[13px] text-muted">
-          {bean.cups} 人杯测 · {bean.favorites} 人收藏
+          {bean.cups} 次杯测 · {bean.favorites} 人收藏
           {bean.avg?.overall != null ? ` · 总体均分 ${bean.avg.overall}` : ""}
         </p>
       </header>
@@ -266,12 +266,18 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
 
       <Panel className="mt-5">
         <div className="serif text-lg">杯测与评价</div>
+        <p className="mt-1 mb-0 text-[13px] text-muted">
+          豆卡和广场上的每一次杯测都在这里，并写上那一杯的冲煮。
+        </p>
         {bean.scores?.length ? (
           <div className="mt-4 space-y-4">
-            {bean.scores.map((s, i) => (
-              <div key={i} className="border-b border-line pb-4 last:border-0 last:pb-0">
+            {bean.scores.map((s) => (
+              <div key={s.key || s.id} className="border-b border-line pb-4 last:border-0 last:pb-0">
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
-                  <span className="text-cream">{s.author}</span>
+                  <span className="text-cream">
+                    {s.author}
+                    {s.at ? <span className="ml-2 text-[13px] text-muted">{s.at.slice(5, 16)}</span> : null}
+                  </span>
                   <span className="text-sm text-amber">
                     {s.overall != null ? `总体 ${s.overall}` : "没打总体"}
                   </span>
@@ -284,6 +290,7 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
                 {s.comment ? (
                   <p className="serif mt-2 mb-0 text-[15px] leading-relaxed">{s.comment}</p>
                 ) : null}
+                <BrewLine brew={s.brew} comment={s.comment} />
                 {s.photos?.length ? (
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {s.photos.map((p) => (
@@ -304,6 +311,45 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
         )}
       </Panel>
     </>
+  );
+}
+
+function ratioText(n) {
+  if (n == null || n === 0) return "";
+  return `1:${Number(n)}`;
+}
+
+function clock(s) {
+  if (s == null) return "";
+  const n = Number(s);
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+}
+
+function BrewLine({ brew, comment }) {
+  if (!brew) return null;
+  const bits = [
+    brew.method_label || brew.method,
+    brew.dose_g != null ? `粉 ${brew.dose_g} g` : null,
+    brew.ratio != null ? ratioText(brew.ratio) : null,
+    brew.total_s != null ? clock(brew.total_s) : null,
+  ].filter(Boolean);
+  const stages = (brew.stages || []).filter((s) => s && typeof s === "object");
+  const note = brew.note && brew.note.trim() !== (comment || "").trim() ? brew.note : null;
+  if (!bits.length && !stages.length && !note) return null;
+  return (
+    <div className="mt-2 text-[13px] text-muted">
+      {bits.length ? <div>冲煮 · {bits.join(" · ")}</div> : null}
+      {stages.map((s, i) => (
+        <div key={i}>
+          {s.name}
+          {s.add_g ? ` +${s.add_g} g` : " 停手"}
+          {s.add_ratio ? ` ${ratioText(s.add_ratio)}` : ""}
+          {s.target_g != null ? ` → 秤到 ${s.target_g} g` : ""}
+          {s.target_ratio ? ` ${ratioText(s.target_ratio)}` : ""}
+        </div>
+      ))}
+      {note ? <p className="serif mt-1 mb-0 text-[15px] leading-relaxed text-cream">{note}</p> : null}
+    </div>
   );
 }
 
@@ -353,7 +399,9 @@ function ScoreForm({ bean, onDone, toast, oops }) {
   return (
     <Panel className="mt-5">
       <div className="serif text-lg">{bean.mine ? "改我的杯测" : "我也评一杯"}</div>
-      <p className="mt-1 mb-0 text-[13px] text-muted">在雷达上点或拖一条轴。格子可以收着。一人一豆一条，可改。</p>
+      <p className="mt-1 mb-0 text-[13px] text-muted">
+        在雷达上点或拖一条轴。格子可以收着。这里保存的是你在王国里的那一条，再保存会覆盖它；豆卡上的每次杯测仍逐条留在上面。
+      </p>
       <Radar
         scores={form}
         editable

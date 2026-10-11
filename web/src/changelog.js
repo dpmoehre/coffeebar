@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-10-11",
+    title: "王国里能看到每一次杯测和冲煮",
+    notes: [
+      "打开王国里的一支豆，豆卡和广场上的每次杯测都会列出来，分数和评价都在。",
+      "旁边写着那一杯怎么冲的：方式、粉量、粉水比、各段，以及冲煮备注。",
+    ],
+  },
+  {
     date: "2026-09-29",
     title: "后台点开别人的豆卡不再黑屏",
     notes: [

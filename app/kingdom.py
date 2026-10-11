@@ -1,16 +1,21 @@
 """咖啡王国：公共豆种上的一起杯测、评价、收藏。
 
 私人豆卡（库存、进价）仍只自己看。管理员把公开卡收到王国后，
-同一支豆只有一条，大家各打一份杯测（一人一豆一条，可改）。
+同一支豆只有一条。王国页上亲手打的分仍是一人一条、可改。
+挂过来的广场卡上，每次豆卡杯测都列出来，并带上附近那杯的冲煮。
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
 
 from fastapi import HTTPException
 
-from . import auth, db, photos, store
+from . import auth, brew as brew_mod, db, photos, store
+
+# 杯测和冲煮常常一前一后写下。超过这段就不当成同一杯。
+BREW_MATCH_S = 6 * 3600
 
 DIMS = ("dry", "flavor", "aftertaste", "acidity", "sweetness", "body", "balance", "overall")
 
@@ -59,22 +64,200 @@ def _avg(rows: list[sqlite3.Row]) -> dict | None:
     return out
 
 
+def _text(value) -> str | None:
+    if value is None:
+        return None
+    text = str(value).strip()
+    return text or None
+
+
+def _num(value):
+    if value is None or value == "":
+        return None
+    try:
+        return float(value)
+    except (TypeError, ValueError):
+        return None
+
+
+def _same_cup(a, b) -> bool:
+    """收录时拷进王国的那条，和豆卡上同一杯对得上就不重复列。"""
+    if _text(a["comment"]) != _text(b["comment"]):
+        return False
+    return all(_num(a[k]) == _num(b[k]) for k in DIMS)
+
+
+def _stages(raw) -> list[dict]:
+    if isinstance(raw, list):
+        data = raw
+    elif not raw:
+        return []
+    else:
+        try:
+            data = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+    if not isinstance(data, list):
+        return []
+    keep = ("name", "add_g", "target_g", "add_ratio", "target_ratio", "elapsed_s", "seconds")
+    out = []
+    for item in data:
+        if isinstance(item, dict):
+            out.append({k: item.get(k) for k in keep})
+    return out
+
+
+def _brew_public(row) -> dict | None:
+    """冲煮写给王国看的那一层。不带单价、库存、滤纸钱。"""
+    method = row["brew_method"]
+    stages = _stages(row["brew_stages"])
+    note = _text(row["note"])
+    dose = row["amount_g"]
+    ratio = row["brew_ratio"]
+    total_s = row["brew_total_s"]
+    if method is None and dose is None and ratio is None and total_s is None and not note and not stages:
+        return None
+    label = brew_mod.METHODS.get(method, method) if method else None
+    return {
+        "method": method,
+        "method_label": label,
+        "dose_g": dose,
+        "ratio": ratio,
+        "total_s": total_s,
+        "note": note,
+        "stages": stages,
+    }
+
+
+def _brews_of(conn: sqlite3.Connection, bean_id: int) -> list:
+    return conn.execute(
+        """SELECT c.at, c.amount_g, c.brew_method, c.brew_ratio, c.brew_total_s,
+                  c.brew_stages, c.note
+             FROM consumption_event c
+             JOIN bean_lot l ON l.id = c.lot_id
+            WHERE l.bean_id = ? AND c.kind = 'coffee' AND c.as_cup = 1
+              AND c.voided_at IS NULL""",
+        (bean_id,),
+    ).fetchall()
+
+
+def _closest_brew(brews, at: str | None) -> dict | None:
+    if not at or not brews:
+        return None
+    try:
+        target = db.parse(at)
+    except (TypeError, ValueError):
+        return None
+    best = None
+    gap = None
+    for row in brews:
+        try:
+            delta = abs((db.parse(row["at"]) - target).total_seconds())
+        except (TypeError, ValueError):
+            continue
+        if delta <= BREW_MATCH_S and (gap is None or delta < gap):
+            best = row
+            gap = delta
+    return _brew_public(best) if best else None
+
+
 def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, name: str, mine: bool) -> dict:
     d = {k: row[k] for k in DIMS}
     d["id"] = row["id"]
+    d["key"] = f"kingdom-{row['id']}"
+    d["source"] = "kingdom"
     d["comment"] = row["comment"]
     d["at"] = row["updated_at"] or row["created_at"]
     d["author"] = _author_label(name, mine)
     d["mine"] = mine
     d["photos"] = photos.list_kingdom_score_photos(conn, row["id"])
+    d["brew"] = None
     return d
+
+
+def cupping_log(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None) -> list[dict]:
+    """广场卡上的每一次豆卡杯测，加上王国页上多出来的那条。
+
+    收录时种进去的王国分如果和豆卡上同一杯一样，只留豆卡那条，避免看两遍。
+    """
+    cards = conn.execute(
+        """SELECT b.id, b.owner_id, a.nickname
+             FROM bean b JOIN account a ON a.id = b.owner_id
+            WHERE b.kingdom_id = ? AND b.deleted_at IS NULL AND b.visibility = 'public'
+            ORDER BY b.id""",
+        (kingdom_id,),
+    ).fetchall()
+    events: list[dict] = []
+    for card in cards:
+        brews = _brews_of(conn, card["id"])
+        name = auth.public_name(card)
+        mine = viewer_id == card["owner_id"]
+        rows = conn.execute(
+            "SELECT * FROM bean_score WHERE bean_id = ? ORDER BY at DESC, id DESC",
+            (card["id"],),
+        ).fetchall()
+        for row in rows:
+            item = {k: row[k] for k in DIMS}
+            item.update(
+                {
+                    "id": row["id"],
+                    "key": f"card-{row['id']}",
+                    "source": "card",
+                    "comment": row["comment"],
+                    "at": row["at"],
+                    "author_id": card["owner_id"],
+                    "author": _author_label(name, mine),
+                    "mine": mine,
+                    "photos": [],
+                    "brew": _closest_brew(brews, row["at"]),
+                }
+            )
+            events.append(item)
+
+    authors = {
+        r["id"]: auth.public_name(r)
+        for r in conn.execute(
+            """SELECT a.id, a.nickname FROM account a
+               JOIN kingdom_score s ON s.author_id = a.id WHERE s.kingdom_id = ?""",
+            (kingdom_id,),
+        )
+    }
+    kingdom_rows = conn.execute(
+        "SELECT * FROM kingdom_score WHERE kingdom_id = ? ORDER BY updated_at DESC, id DESC",
+        (kingdom_id,),
+    ).fetchall()
+    for row in kingdom_rows:
+        match = next(
+            (
+                ev
+                for ev in events
+                if ev.get("author_id") == row["author_id"] and _same_cup(ev, row)
+            ),
+            None,
+        )
+        if match is not None:
+            shots = photos.list_kingdom_score_photos(conn, row["id"])
+            if shots and not match["photos"]:
+                match["photos"] = shots
+            continue
+        pub = _score_public(
+            conn,
+            row,
+            name=authors.get(row["author_id"], ""),
+            mine=viewer_id == row["author_id"],
+        )
+        pub["author_id"] = row["author_id"]
+        events.append(pub)
+
+    events.sort(key=lambda s: (s.get("at") or "", int(s["id"])), reverse=True)
+    for ev in events:
+        ev.pop("author_id", None)
+    return events
 
 
 def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) -> dict:
     kid = row["id"]
-    scores = conn.execute(
-        "SELECT * FROM kingdom_score WHERE kingdom_id = ?", (kid,)
-    ).fetchall()
+    scores = cupping_log(conn, kid, viewer_id)
     favs = conn.execute(
         "SELECT COUNT(*) FROM kingdom_favorite WHERE kingdom_id = ?", (kid,)
     ).fetchone()[0]
@@ -87,7 +270,7 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
                 (kid, viewer_id),
             ).fetchone()
         )
-        mine = next((s for s in scores if s["author_id"] == viewer_id), None)
+        mine = next((s for s in scores if s["mine"]), None)
         if mine:
             mine_score = mine["overall"]
     shots = _photos(conn, kid)
@@ -118,7 +301,7 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
 
 
 def teaser(conn: sqlite3.Connection, kingdom_id: int | None) -> dict | None:
-    """广场卡上挂的那一小条：王国名字、均分、杯测人数。"""
+    """广场卡上挂的那一小条：王国名字、均分、杯测次数。"""
     if not kingdom_id:
         return None
     row = conn.execute("SELECT * FROM kingdom_bean WHERE id = ?", (kingdom_id,)).fetchone()
@@ -150,24 +333,7 @@ def get_kingdom(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
         return None
     out = _brief(conn, row, viewer_id)
     out["photos"] = _photos(conn, kingdom_id)
-    authors = {
-        r["id"]: auth.public_name(r)
-        for r in conn.execute(
-            """SELECT a.id, a.nickname FROM account a
-               JOIN kingdom_score s ON s.author_id = a.id WHERE s.kingdom_id = ?""",
-            (kingdom_id,),
-        )
-    }
-    scores = conn.execute(
-        "SELECT * FROM kingdom_score WHERE kingdom_id = ? ORDER BY updated_at DESC, id DESC",
-        (kingdom_id,),
-    ).fetchall()
-    out["scores"] = [
-        _score_public(
-            conn, s, name=authors.get(s["author_id"], ""), mine=viewer_id == s["author_id"]
-        )
-        for s in scores
-    ]
+    out["scores"] = cupping_log(conn, kingdom_id, viewer_id)
     out["mine"] = next((s for s in out["scores"] if s["mine"]), None)
     linked = conn.execute(
         """SELECT id, name, visibility FROM bean

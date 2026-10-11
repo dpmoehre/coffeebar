@@ -254,3 +254,84 @@ def test_delete_account_drops_cupping_photos(client, monkeypatch):
     assert not (db.PHOTO_DIR / name).exists()
     _login(client, "boss@coffeebar.local")
     assert client.get(f"/api/kingdom/{kid}").json()["scores"] == []
+
+
+def test_kingdom_lists_each_card_cupping_with_brew(client, monkeypatch):
+    """广场卡上的每次杯测都进王国，并带上附近那杯的冲煮。不带进价和库存。"""
+    monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
+    bean = _public_bean(client, "【测试】雪峰")
+    lot = client.post(f"/api/beans/{bean['id']}/lots", json={"nominal_g": 200}).json()
+    brewed = client.post(
+        "/api/brews",
+        json={
+            "lot_id": lot["id"],
+            "amount_g": 15.4,
+            "brew_method": "v60",
+            "brew_ratio": 15,
+            "brew_total_s": 125,
+            "brew_stages": [
+                {
+                    "name": "闷蒸",
+                    "add_g": 37,
+                    "target_g": 37,
+                    "add_ratio": 2.4,
+                    "target_ratio": 2.4,
+                }
+            ],
+            "note": "不过冰 · 1:2.4 / 1:8 / 1:15 · 2:05 节流",
+        },
+    )
+    assert brewed.status_code == 201, brewed.text
+    assert (
+        client.post(
+            f"/api/beans/{bean['id']}/scores",
+            json={"overall": 8, "sweetness": 9, "body": 7, "comment": "闻香葡萄"},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/api/beans/{bean['id']}/scores",
+            json={"overall": 8, "sweetness": 9, "aftertaste": 8, "comment": "回甜明显"},
+        ).status_code
+        == 201
+    )
+
+    _login(client, "plaza@coffeebar.local")
+    other = _public_bean(client, "【测试】雪峰广场")
+    assert (
+        client.post(
+            f"/api/beans/{other['id']}/scores",
+            json={"overall": 6, "comment": "广场另一杯"},
+        ).status_code
+        == 201
+    )
+
+    _login(client, "boss@coffeebar.local")
+    kid = client.post(f"/api/admin/kingdom/collect/{bean['id']}", json={}).json()["id"]
+    hung = client.post(
+        f"/api/admin/kingdom/collect/{other['id']}",
+        json={"kingdom_id": kid},
+    )
+    assert hung.status_code == 200, hung.text
+    card = hung.json()
+    comments = [s["comment"] for s in card["scores"]]
+    assert comments == ["广场另一杯", "回甜明显", "闻香葡萄"]
+    assert card["cups"] == 3
+    assert "balance_g" not in card
+    assert "unit_cost" not in card
+    grape = next(s for s in card["scores"] if s["comment"] == "闻香葡萄")
+    brew = grape["brew"]
+    assert brew["method"] == "v60"
+    assert brew["method_label"] == "V60 四段"
+    assert brew["dose_g"] == 15.4
+    assert brew["ratio"] == 15
+    assert brew["total_s"] == 125
+    assert brew["stages"][0]["name"] == "闷蒸"
+    assert brew["stages"][0]["target_ratio"] == 2.4
+    assert "不过冰" in brew["note"]
+    assert "cost" not in brew
+    assert "unit_cost" not in brew
+    plain = next(s for s in card["scores"] if s["comment"] == "广场另一杯")
+    assert plain["brew"] is None
+    assert plain["author"] == "plaza"
