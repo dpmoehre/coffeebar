@@ -213,16 +213,22 @@ function Get-CpolarHostname {
 }
 
 function Test-CpolarOnHost([string]$HostName) {
-    $log = Join-Path $env:USERPROFILE "coffeebar-cpolar.log"
-    if (Test-Path $log) {
-        $pat = "Tunnel established at https://{0}" -f [regex]::Escape($HostName)
-        if (Select-String -Path $log -Pattern $pat -Quiet) { return $true }
+    # 旧日志里出现过一次「Tunnel established」不能当成现在还通。
+    # 进程活着但控制连接被掐掉时，外网会 404，必须重开。
+    foreach ($api in @("http://127.0.0.1:4040/api/tunnels", "http://127.0.0.1:9200/api/tunnels")) {
+        try {
+            $data = Invoke-RestMethod -Uri $api -TimeoutSec 3
+            $hit = @($data.tunnels) | Where-Object { $_.public_url -like "https://$HostName*" }
+            if ($hit) { return $true }
+            if ($null -ne $data.tunnels) { return $false }
+        } catch { }
     }
-    if (Test-Path $UrlFile) {
-        $cur = (Get-Content $UrlFile -Raw -ErrorAction SilentlyContinue)
-        if ($cur -and $cur.Contains($HostName)) { return $true }
+    try {
+        $r = Invoke-WebRequest -UseBasicParsing -TimeoutSec 8 -Uri ("https://{0}/api/health" -f $HostName)
+        return $r.StatusCode -eq 200
+    } catch {
+        return $false
     }
-    return $false
 }
 
 function Start-CpolarDetached {

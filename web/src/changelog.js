@@ -22,6 +22,14 @@ export function groupByDate(entries = CHANGELOG) {
 export const CHANGELOG = [
   {
     date: "2026-10-11",
+    title: "外出地址断了会自己重连",
+    notes: [
+      "https://coffeebar.nas.cpolar.cn/ 这阵子打不开，是隧道断了，店里这台网页还在。",
+      "已经重新接上。之后如果又断，这台机器会自己把隧道重开。",
+    ],
+  },
+  {
+    date: "2026-10-11",
     title: "王国里能看到每一次杯测和冲煮",
     notes: [
       "打开王国里的一支豆，豆卡和广场上的每次杯测都会列出来，分数和评价都在。",
