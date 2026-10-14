@@ -54,7 +54,11 @@ def list_people(
                        (SELECT COUNT(*) FROM consumption_event c
                          WHERE c.person_id = p.id AND c.voided_at IS NULL) AS cups
                 FROM person p WHERE {' AND '.join(where)}
-                ORDER BY p.active DESC, p.name""",
+                ORDER BY p.active DESC,
+                         (SELECT COUNT(*) FROM consumption_event c
+                           WHERE c.person_id = p.id AND c.voided_at IS NULL
+                             AND c.kind = 'coffee' AND COALESCE(c.as_cup, 1) = 1) DESC,
+                         p.name""",
             args,
         )
     )

@@ -353,3 +353,41 @@ def test_restock_flags_low_spirit(conn):
     assert len(items) == 1
     assert "不够一杯了" in items[0]["reasons"]
     assert items[0]["pours_left"] == 0
+
+
+def test_habits_expand_past_beans_already_drunk():
+    """不过冰不算过冰。下一袋避开已经喝过的处理法，不按豆名下结论。"""
+    from app import habits
+
+    base = {
+        "amount_g": 15.2,
+        "brew_method": "v60",
+        "roast": "浅烘",
+        "origin": "卢旺达 Mugenza",
+        "varietal": "红波旁 Red Bourbon",
+        "process": "厌氧日晒",
+    }
+    rows = [{**base, "note": "过冰"} for _ in range(4)] + [
+        {**base, "note": "不过冰 · 1:15 · 88°C"},
+        {**base, "note": "不过冰"},
+    ]
+    got = habits.for_cups(rows)
+    assert got["ice"]["hot"] == 2
+    assert got["ice"]["iced"] == 4
+    assert "最近几杯改成不过冰" in got["ice"]["line"]
+    assert got["origin"]["label"] == "卢旺达"
+    assert got["varietal"]["label"] == "红波旁"
+    assert got["brew_method"]["label"] == "V60 四段"
+    assert "最常喝" not in got["sentence"]
+    titles = [b["process"] for b in got["buy"]]
+    assert "黄蜜" in titles
+    assert "厌氧日晒" not in titles
+
+
+def test_people_with_more_cups_listed_first(conn):
+    _, lot_id = make_bean(conn)
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "孙琦"})
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    store.record_brew(conn, {"lot_id": lot_id, "amount_g": 15, "person": "戚浩辰"})
+    names = [p["name"] for p in store.list_people(conn)]
+    assert names.index("戚浩辰") < names.index("孙琦")

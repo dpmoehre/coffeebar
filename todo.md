@@ -7,6 +7,8 @@
 
 ## 2026-10-14
 
+- **画像改看喝法**：不再用「最常喝某一支豆」下结论。看烘焙、产地、豆种、冲法、粉量、过冰，并判断是不是老手；下次买的豆子可以是黄蜜、冷泉、暗房这类还没喝过的。喝得最多的人排在画像第一位。见 [docs/014-✅](docs/014-✅-画像推一杯.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_stats.py::test_habits_expand_past_beans_already_drunk tests/test_stats.py::test_people_with_more_cups_listed_first`。
+
 - **滴完再注，王国杯测带雷达**：新冲煮方式是总水对半、滴完再注；雪峰推荐设成 14 g / 200 g、88°C。王国列出没打分的冲煮，杯测不写谁喝的，每一杯旁边有自己的雷达。广场公开卡能看到冲煮指导。见 [docs/003-🚧](docs/003-🚧-豆子第一期实现.md) / [docs/020-🚧](docs/020-🚧-咖啡王国.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_brew.py tests/test_kingdom.py`。
 
 ## 2026-10-11

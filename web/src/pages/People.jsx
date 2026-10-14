@@ -115,7 +115,9 @@ function Profile({ p, onOpenCalendar, onOpenBean }) {
         <p className="serif m-0 max-w-[52ch] text-2xl leading-snug">
           {!p.enough_sample
             ? `${p.name} 才喝了 ${p.cups} 杯，还不够判断口味。`
-            : summarize(p)}
+            : p.habits?.sentence
+              ? `${p.name}${p.habits.sentence}`
+              : summarize(p)}
         </p>
         {onOpenCalendar && (
           <Btn variant="ghost" onClick={() => onOpenCalendar(p.id)}>
@@ -164,25 +166,46 @@ function Profile({ p, onOpenCalendar, onOpenBean }) {
         </Panel>
 
         <Panel>
-          <div className="serif text-lg">常喝</div>
-          {p.top_beans.length === 0 ? (
-            <p className="mt-3 text-muted">还没有。</p>
-          ) : (
-            <div className="mt-2">
-              {p.top_beans.map((b) => (
-                <div key={b.id} className="border-b border-line py-2.5 last:border-0">
-                  <div className="flex justify-between gap-2 text-sm">
-                    <span className="truncate">{b.name}</span>
-                    <span className="whitespace-nowrap text-amber">
-                      {b.cups} 杯 · {Math.round(b.beans_g)} g
-                    </span>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
+          <div className="serif text-lg">喝法</div>
+          <p className="mt-1 text-xs text-muted">按烘焙、产地、豆种和冲法看，不按某一包豆的名字。</p>
+          <HabitList habits={p.habits} dose={p.avg_dose_g} />
         </Panel>
       </div>
+
+      {p.habits?.buy?.length > 0 && (
+        <Panel className="mt-4">
+          <div className="serif text-lg">下次可以买</div>
+          <p className="mt-1 mb-3 text-xs text-muted">
+            按他已经喝过的口味往外扩，不限于吧台上现有的豆子和处理法。
+          </p>
+          <div className="space-y-3">
+            {p.habits.buy.map((b) => (
+              <div key={b.title} className="border-b border-line pb-3 last:border-0 last:pb-0">
+                <div className="text-cream">{b.title}</div>
+                <div className="mt-1 text-[13px] text-amber">
+                  {[b.origin, b.varietal, b.process].filter(Boolean).join(" · ")}
+                </div>
+                <p className="mt-1 mb-0 text-sm text-muted">{b.why}</p>
+              </div>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {p.top_beans?.length > 0 && (
+        <Panel className="mt-4">
+          <div className="serif text-lg">喝过的豆</div>
+          <p className="mt-1 text-xs text-muted">一包两包就会喝完，这里只是记录，不当成口味结论。</p>
+          {p.top_beans.map((b) => (
+            <div key={b.id} className="flex justify-between gap-2 border-b border-line py-2.5 text-sm last:border-0">
+              <span className="truncate">{b.name}</span>
+              <span className="whitespace-nowrap text-amber">
+                {b.cups} 杯 · {Math.round(b.beans_g)} g
+              </span>
+            </div>
+          ))}
+        </Panel>
+      )}
 
       <Panel className="mt-4">
         <div className="serif text-lg">追踪记录</div>
@@ -264,6 +287,29 @@ function NextCup({ suggest, onOpenBean }) {
         </button>
       ))}
     </Panel>
+  );
+}
+
+function HabitList({ habits, dose }) {
+  if (!habits) return <p className="mt-3 text-muted">还没有。</p>;
+  const rows = [
+    ["烘焙", habits.roast?.label],
+    ["产地", habits.origin?.label],
+    ["豆种", habits.varietal?.label],
+    ["冲煮", habits.brew_method?.label],
+    ["粉量", dose != null ? `大约 ${dose} g` : null],
+    ["过冰", habits.ice?.line],
+    ["判断", habits.veteran?.line],
+  ];
+  return (
+    <div className="mt-3 space-y-2">
+      {rows.map(([label, value]) => (
+        <div key={label} className="text-sm">
+          <span className="text-muted">{label}</span>
+          <span className="ml-2 text-cream">{value || "还看不出来"}</span>
+        </div>
+      ))}
+    </div>
   );
 }
 

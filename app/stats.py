@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-from . import db, photos, store
+from . import db, habits as habits_mod, photos, store
 from . import suggest as suggest_mod
 
 FALLBACK_DOSE = 15.0   # 一杯都还没冲过时的兜底
@@ -481,6 +481,16 @@ def person_profile(
     }
     enough = cups >= 3
     owner = person["owner_id"] if owner_id is None else owner_id
+    habit_rows = conn.execute(
+        f"""SELECT c.amount_g, c.brew_method, c.note,
+                   b.roast, b.origin, b.varietal, b.process
+            FROM consumption_event c
+            JOIN bean_lot l ON l.id = c.lot_id
+            JOIN bean b ON b.id = l.bean_id
+            WHERE {where}
+            ORDER BY c.at, c.id""",
+        args,
+    ).fetchall()
     return {
         "id": person_id,
         "name": person["name"],
@@ -492,6 +502,7 @@ def person_profile(
         "top_beans": top,
         "taste": taste_out,
         "enough_sample": enough,
+        "habits": habits_mod.for_cups(habit_rows),
         "suggest": suggest_mod.for_person(
             conn,
             person_id,
