@@ -465,6 +465,8 @@ function PublicCard({ id, onBack, onOpenMine, onOpenKingdom, admin, toast, oops 
         )}
       </header>
 
+      {bean.brew ? <PlazaBrew brew={bean.brew} /> : null}
+
       {bean.kingdom && onOpenKingdom ? (
         <Panel className="mt-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
@@ -593,6 +595,42 @@ function PlazaGearList({ onOpen, oops }) {
         </div>
       )}
     </>
+  );
+}
+
+function plazaClock(s) {
+  if (s == null) return "";
+  const n = Number(s);
+  return `${Math.floor(n / 60)}:${String(n % 60).padStart(2, "0")}`;
+}
+
+function PlazaBrew({ brew }) {
+  const bits = [
+    brew.method_label || brew.method,
+    brew.water_temp != null ? `${brew.water_temp}°C` : null,
+    brew.dose_g != null ? `粉 ${brew.dose_g} g` : null,
+    brew.ratio != null ? `1:${Number(brew.ratio)}` : null,
+    brew.total_water_g != null ? `水 ${brew.total_water_g} g` : null,
+    brew.total_seconds != null ? plazaClock(brew.total_seconds) : null,
+  ].filter(Boolean);
+  return (
+    <Panel className="mt-5">
+      <div className="serif text-lg">冲煮指导</div>
+      <p className="mt-1 mb-0 text-sm text-amber">{bits.join(" · ")}</p>
+      {brew.note ? <p className="serif mt-2 mb-0 text-[15px] leading-relaxed">{brew.note}</p> : null}
+      {(brew.stages || []).length > 0 ? (
+        <div className="mt-2 text-[13px] text-muted">
+          {brew.stages.map((s, i) => (
+            <div key={i}>
+              {s.name}
+              {s.add_g ? ` +${s.add_g} g` : " 停手"}
+              {s.target_g != null ? ` → 秤到 ${s.target_g} g` : ""}
+              {s.how ? ` · ${s.how}` : ""}
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </Panel>
   );
 }
 

@@ -18,6 +18,7 @@ METHODS = {
     "kasuya": "4:6 粕谷",
     "kalita": "Kalita",
     "volcano": "多段式火山冲",
+    "drip2": "滴完再注",
 }
 
 # 每种方式默认要哪种滤杯。具体型号和备注在器具目录里，不写死在这里。
@@ -27,6 +28,7 @@ METHOD_META = {
     "kasuya": {"family": "cone", "need": "锥形滤杯", "kettle": "gooseneck"},
     "kalita": {"family": "flat", "need": "平底滤杯（Kalita Wave）", "kettle": "gooseneck"},
     "volcano": {"family": "cone", "need": "锥形滤杯；细嘴壶更好", "kettle": "gooseneck"},
+    "drip2": {"family": "cone", "need": "锥形滤杯", "kettle": "gooseneck"},
 }
 
 
@@ -129,6 +131,19 @@ def plan(method: str, dose_g: float, ratio: float) -> dict:
                 "center_pour",
             ))
         raw.append((0, 25, "停手，等粉墙塌下去", "滤干", "总时间偏长就调粗研磨", "drawdown"))
+    elif method == "drip2":
+        # 豆卡推荐：总水对半。第一段注完等它滴干，再注完剩下的。
+        # 14 g / 200 g 时第一段正好 100 g。秒数是默认节奏，卡上没写死每一段多久。
+        half = _split(total, [0.5, 0.5])
+        raw = [
+            (half[0], 40, "绕圈注到总水的一半", "粉床吃进前半杯水",
+             "先把前半段的酸甜定下来", "spiral"),
+            (0, 45, "停手，等这一段滴完再注", "液面落下去、粉床露出来",
+             "别一直泡着，滴完再进下一段", "drawdown"),
+            (half[1], 40, "再注完剩下的水", "注满总水",
+             "后半段补浓度和厚度", "center_pour"),
+            (0, 40, "停手等滤完", "滤干", "总时间偏长就调粗研磨", "drawdown"),
+        ]
     else:  # kalita
         pours = _split(total - bloom, [1 / 3, 1 / 3, 1 / 3])
         raw = [
@@ -260,6 +275,10 @@ def grind_hint(cups: list[dict]) -> dict | None:
 
 
 def _stage_name(method: str, index: int, add: int) -> str:
+    if method == "drip2":
+        if add == 0:
+            return "滴完" if index == 1 else "滴滤"
+        return "第一段" if index == 0 else "第二段"
     if add == 0:
         return "滴滤"
     if index == 0:

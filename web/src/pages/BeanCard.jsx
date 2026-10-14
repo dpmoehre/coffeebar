@@ -1131,6 +1131,7 @@ const METHOD = {
   kasuya: "4:6 粕谷",
   kalita: "Kalita",
   volcano: "多段式火山冲",
+  drip2: "滴完再注",
 };
 
 function wr(n) {

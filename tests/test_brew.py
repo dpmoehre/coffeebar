@@ -5,7 +5,7 @@ import pytest
 from app import brew
 
 
-ALL = ["v60", "hoffmann", "kasuya", "kalita", "volcano"]
+ALL = ["v60", "hoffmann", "kasuya", "kalita", "volcano", "drip2"]
 
 
 @pytest.mark.parametrize("method", ALL)
@@ -73,6 +73,17 @@ def test_volcano_scales_with_dose():
     assert p["total_water_g"] == 280
     assert sum(s["add_g"] for s in p["stages"]) == 280
     assert p["total_seconds"] == 135, "段数固定，改粉量只改水量"
+
+
+def test_drip2_half_then_the_rest():
+    """豆卡：14 g 粉、200 g 水，第一段 100 g，滴完再注完剩下的。"""
+    p = brew.plan("drip2", 14, 200 / 14)
+    assert p["method_label"] == "滴完再注"
+    assert p["total_water_g"] == 200
+    assert [s["name"] for s in p["stages"]] == ["第一段", "滴完", "第二段", "滴滤"]
+    assert [s["add_g"] for s in p["stages"]] == [100, 0, 100, 0]
+    assert p["stages"][1]["scene"] == "drawdown"
+    assert p["stages"][-1]["add_g"] == 0
 
 
 def test_stage_ratios_match_grams_over_dose():

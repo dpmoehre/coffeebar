@@ -335,3 +335,58 @@ def test_kingdom_lists_each_card_cupping_with_brew(client, monkeypatch):
     plain = next(s for s in card["scores"] if s["comment"] == "广场另一杯")
     assert plain["brew"] is None
     assert plain["author"] == "plaza"
+
+
+def test_kingdom_lists_unmatched_brews_without_drinker_names(client, monkeypatch):
+    monkeypatch.setenv("COFFEEBAR_ADMIN_EMAILS", "boss@coffeebar.local")
+    bean = _public_bean(client, "【测试】滴完再注")
+    lot = client.post(f"/api/beans/{bean['id']}/lots", json={"nominal_g": 200}).json()
+    old = client.post(
+        "/api/brews",
+        json={
+            "lot_id": lot["id"],
+            "amount_g": 14,
+            "person": "戚浩辰",
+            "brew_method": "drip2",
+            "brew_ratio": 14.29,
+            "at": "2020-01-01 08:00:00",
+            "note": "戚浩辰 · 第一段 100 g",
+        },
+    )
+    assert old.status_code == 201, old.text
+    assert (
+        client.post(
+            f"/api/beans/{bean['id']}/scores",
+            json={"overall": 8, "acidity": 9, "comment": "戚浩辰 · 酸质很坚挺"},
+        ).status_code
+        == 201
+    )
+    assert (
+        client.post(
+            f"/api/beans/{bean['id']}/brew-default",
+            json={
+                "method": "drip2",
+                "dose_g": 14,
+                "ratio": 14.29,
+                "note": "88°C。第一段 100 g，滴完再注。",
+            },
+        ).status_code
+        == 200
+    )
+    _login(client, "boss@coffeebar.local")
+    kid = client.post(f"/api/admin/kingdom/collect/{bean['id']}", json={}).json()["id"]
+    card = client.get(f"/api/kingdom/{kid}").json()
+    assert card["cups"] == 1
+    text = " ".join(
+        (s.get("comment") or "") + " " + ((s.get("brew") or {}).get("note") or "")
+        for s in card["scores"]
+    )
+    assert "戚浩辰" not in text
+    assert any(s.get("source") == "brew" for s in card["scores"])
+    assert any("酸质很坚挺" in (s.get("comment") or "") for s in card["scores"])
+    plaza = client.get(f"/api/public/beans/{bean['id']}").json()
+    assert plaza["brew"]["method"] == "drip2"
+    assert plaza["brew"]["stages"][0]["add_g"] == 100
+    assert plaza["brew"]["stages"][1]["add_g"] == 0
+    assert "戚浩辰" not in (plaza["scores"]["comment"] or "")
+    assert "balance_g" not in plaza

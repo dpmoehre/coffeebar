@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 
 from . import db
@@ -15,6 +16,26 @@ def _rows(cur) -> list[dict]:
 def _row(cur) -> dict | None:
     r = cur.fetchone()
     return dict(r) if r else None
+
+
+def hide_names(conn: sqlite3.Connection, text: str | None) -> str | None:
+    """公开的杯测和冲煮备注里不写「谁喝的」。账号昵称另算，这里只拿人名表。"""
+    if text is None:
+        return None
+    names = [
+        (row[0] or "").strip()
+        for row in conn.execute("SELECT name FROM person")
+    ]
+    out = str(text)
+    for name in sorted({n for n in names if len(n) >= 2}, key=len, reverse=True):
+        if not any("\u4e00" <= ch <= "\u9fff" or ch.isalpha() for ch in name):
+            continue
+        out = out.replace(name, "")
+    out = re.sub(r"(?:\s*·\s*){2,}", " · ", out)
+    out = re.sub(r"^\s*·\s*", "", out)
+    out = re.sub(r"\s*·\s*$", "", out)
+    out = re.sub(r"[ \t]{2,}", " ", out).strip()
+    return out or None
 
 
 def list_people(

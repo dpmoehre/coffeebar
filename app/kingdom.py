@@ -12,7 +12,7 @@ import sqlite3
 
 from fastapi import HTTPException
 
-from . import auth, brew as brew_mod, db, photos, store
+from . import auth, brew as brew_mod, db, people, photos, store
 
 # 杯测和冲煮常常一前一后写下。超过这段就不当成同一杯。
 BREW_MATCH_S = 6 * 3600
@@ -131,7 +131,7 @@ def _brew_public(row) -> dict | None:
 
 def _brews_of(conn: sqlite3.Connection, bean_id: int) -> list:
     return conn.execute(
-        """SELECT c.at, c.amount_g, c.brew_method, c.brew_ratio, c.brew_total_s,
+        """SELECT c.id, c.at, c.amount_g, c.brew_method, c.brew_ratio, c.brew_total_s,
                   c.brew_stages, c.note
              FROM consumption_event c
              JOIN bean_lot l ON l.id = c.lot_id
@@ -158,7 +158,7 @@ def _closest_brew(brews, at: str | None) -> dict | None:
         if delta <= BREW_MATCH_S and (gap is None or delta < gap):
             best = row
             gap = delta
-    return _brew_public(best) if best else None
+    return best
 
 
 def _score_public(conn: sqlite3.Connection, row: sqlite3.Row, *, name: str, mine: bool) -> dict:
@@ -190,6 +190,7 @@ def cupping_log(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
     events: list[dict] = []
     for card in cards:
         brews = _brews_of(conn, card["id"])
+        used = set()
         name = auth.public_name(card)
         mine = viewer_id == card["owner_id"]
         rows = conn.execute(
@@ -197,6 +198,9 @@ def cupping_log(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
             (card["id"],),
         ).fetchall()
         for row in rows:
+            hit = _closest_brew(brews, row["at"])
+            if hit is not None:
+                used.add(hit["id"])
             item = {k: row[k] for k in DIMS}
             item.update(
                 {
@@ -209,10 +213,27 @@ def cupping_log(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
                     "author": _author_label(name, mine),
                     "mine": mine,
                     "photos": [],
-                    "brew": _closest_brew(brews, row["at"]),
+                    "brew": _brew_public(hit) if hit is not None else None,
                 }
             )
             events.append(item)
+        for brew_row in brews:
+            if brew_row["id"] in used:
+                continue
+            events.append(
+                {
+                    **{k: None for k in DIMS},
+                    "id": brew_row["id"],
+                    "key": f"brew-{brew_row['id']}",
+                    "source": "brew",
+                    "comment": None,
+                    "at": brew_row["at"],
+                    "author": None,
+                    "mine": False,
+                    "photos": [],
+                    "brew": _brew_public(brew_row),
+                }
+            )
 
     authors = {
         r["id"]: auth.public_name(r)
@@ -252,12 +273,17 @@ def cupping_log(conn: sqlite3.Connection, kingdom_id: int, viewer_id: int | None
     events.sort(key=lambda s: (s.get("at") or "", int(s["id"])), reverse=True)
     for ev in events:
         ev.pop("author_id", None)
+        ev["comment"] = people.hide_names(conn, ev.get("comment"))
+        brew = ev.get("brew")
+        if brew and brew.get("note"):
+            brew["note"] = people.hide_names(conn, brew["note"])
     return events
 
 
 def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) -> dict:
     kid = row["id"]
     scores = cupping_log(conn, kid, viewer_id)
+    scored = [s for s in scores if s.get("source") != "brew"]
     favs = conn.execute(
         "SELECT COUNT(*) FROM kingdom_favorite WHERE kingdom_id = ?", (kid,)
     ).fetchone()[0]
@@ -270,7 +296,7 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
                 (kid, viewer_id),
             ).fetchone()
         )
-        mine = next((s for s in scores if s["mine"]), None)
+        mine = next((s for s in scored if s["mine"]), None)
         if mine:
             mine_score = mine["overall"]
     shots = _photos(conn, kid)
@@ -291,8 +317,8 @@ def _brief(conn: sqlite3.Connection, row: sqlite3.Row, viewer_id: int | None) ->
         "note": row["note"],
         "updated_at": row["updated_at"],
         "cover": photos.with_list(shots[-1]) if shots else None,
-        "avg": _avg(scores),
-        "cups": len(scores),
+        "avg": _avg(scored),
+        "cups": len(scored),
         "favorites": favs,
         "favorited": mine_fav,
         "mine_overall": mine_score,

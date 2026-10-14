@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { api } from "../api.js";
 import { recall, remember } from "../listCache.js";
 import Radar, { LayeredRadar } from "../components/Radar.jsx";
+import { hasDims } from "../radarMath.js";
 import { Plus } from "../icons.jsx";
 import { KingdomGearCard, KingdomGearList } from "../components/KingdomGear.jsx";
 import { Btn, Chip, Cover, DetailPhotos, Empty, Field, Input, Panel, ScorePick, coverSrc } from "../ui.jsx";
@@ -267,19 +268,21 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
       <Panel className="mt-5">
         <div className="serif text-lg">杯测与评价</div>
         <p className="mt-1 mb-0 text-[13px] text-muted">
-          豆卡和广场上的每一次杯测都在这里，并写上那一杯的冲煮。
+          每一次杯测和没单独打分的冲煮都在这里。杯测旁边是这一次自己的雷达。不写谁喝的。
         </p>
         {bean.scores?.length ? (
           <div className="mt-4 space-y-4">
             {bean.scores.map((s) => (
               <div key={s.key || s.id} className="border-b border-line pb-4 last:border-0 last:pb-0">
+                <div className="grid items-start gap-3 md:grid-cols-[minmax(0,1fr)_200px]">
+                  <div>
                 <div className="flex flex-wrap items-baseline justify-between gap-2">
                   <span className="text-cream">
-                    {s.author}
+                    {s.mine ? "我的" : s.source === "brew" ? "冲煮" : "杯测"}
                     {s.at ? <span className="ml-2 text-[13px] text-muted">{s.at.slice(5, 16)}</span> : null}
                   </span>
                   <span className="text-sm text-amber">
-                    {s.overall != null ? `总体 ${s.overall}` : "没打总体"}
+                    {s.overall != null ? `总体 ${s.overall}` : s.source === "brew" ? "" : "没打总体"}
                   </span>
                 </div>
                 <div className="mt-1 text-[13px] text-muted">
@@ -291,6 +294,13 @@ function KingdomCard({ id, onBack, onOpenPlaza, toast, oops }) {
                   <p className="serif mt-2 mb-0 text-[15px] leading-relaxed">{s.comment}</p>
                 ) : null}
                 <BrewLine brew={s.brew} comment={s.comment} />
+                  </div>
+                  {hasDims(s) ? (
+                    <div className="mx-auto w-full max-w-[220px]">
+                      <Radar scores={s} />
+                    </div>
+                  ) : null}
+                </div>
                 {s.photos?.length ? (
                   <div className="mt-3 grid grid-cols-3 gap-2">
                     {s.photos.map((p) => (

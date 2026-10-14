@@ -733,6 +733,7 @@ function GearPane({ toast, oops }) {
                   <option value="kasuya">4:6 粕谷</option>
                   <option value="kalita">Kalita</option>
                   <option value="volcano">多段式火山冲</option>
+                  <option value="drip2">滴完再注</option>
                 </Select>
               </Field>
             </div>
@@ -790,6 +791,7 @@ function GearPane({ toast, oops }) {
                         <option value="kasuya">4:6 粕谷</option>
                         <option value="kalita">Kalita</option>
                         <option value="volcano">多段式火山冲</option>
+                        <option value="drip2">滴完再注</option>
                       </Select>
                       <Input
                         className="sm:col-span-2"
@@ -1003,6 +1005,7 @@ const BREW_METHOD = {
   kasuya: "4:6 粕谷",
   kalita: "Kalita",
   volcano: "多段式火山冲",
+  drip2: "滴完再注",
 };
 
 function cardLine(b) {

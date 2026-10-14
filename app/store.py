@@ -15,7 +15,14 @@ from functools import cmp_to_key
 
 from . import brew, db, freshness, photos, places
 from .errors import Conflict
-from .people import delete_person, ensure_person, list_people, rename_person, set_person_active
+from .people import (
+    delete_person,
+    ensure_person,
+    hide_names,
+    list_people,
+    rename_person,
+    set_person_active,
+)
 
 # 一杯的钱 = 豆 + 滤纸。纸钱冻在 filter_unit_cost，没开包就是 0。
 COFFEE_SPENT_SQL = (
@@ -736,6 +743,44 @@ def sort_public_cards(cards: list[dict], sort: str | None = "recent") -> list[di
     return out
 
 
+def _public_brew(conn: sqlite3.Connection, bean_id: int, water_temp) -> dict | None:
+    """广场上的推荐冲法。没有存过默认方案就不编一套。"""
+    guide = _row(
+        conn.execute(
+            "SELECT method, dose_g, ratio, note FROM brew_guide WHERE bean_id = ?",
+            (bean_id,),
+        )
+    )
+    if not guide or not guide.get("method"):
+        return None
+    dose = float(guide.get("dose_g") or brew.DEFAULT_DOSE)
+    ratio = float(guide.get("ratio") or brew.DEFAULT_RATIO)
+    plan = brew.plan(guide["method"], dose, ratio)
+    stages = [
+        {
+            "name": s["name"],
+            "add_g": s["add_g"],
+            "target_g": s["target_g"],
+            "add_ratio": s["add_ratio"],
+            "target_ratio": s["target_ratio"],
+            "seconds": s["seconds"],
+            "how": s["how"],
+        }
+        for s in plan["stages"]
+    ]
+    return {
+        "method": plan["method"],
+        "method_label": plan["method_label"],
+        "dose_g": dose,
+        "ratio": ratio,
+        "note": guide.get("note"),
+        "water_temp": water_temp,
+        "total_water_g": plan["total_water_g"],
+        "total_seconds": plan["total_seconds"],
+        "stages": stages,
+    }
+
+
 def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = None) -> dict | None:
     """广场上看的豆卡：产地/照片/杯测/买袋价/袋上克重可以，剩余和流水不给。"""
     bean = _row(
@@ -757,7 +802,7 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         ).fetchone()
         if hit:
             cloned_id = int(hit["id"])
-    return {
+    out = {
         "id": bean["id"],
         "name": bean["name"],
         "origin": bean.get("origin"),
@@ -787,7 +832,13 @@ def public_card(conn: sqlite3.Connection, bean_id: int, viewer_id: int | None = 
         "offer": plaza_offer(conn, bean_id),
         "taken": cloned_id is not None,
         "cloned_id": cloned_id,
+        "brew": _public_brew(conn, bean_id, bean.get("water_temp")),
     }
+    if out.get("scores") and out["scores"].get("comment"):
+        out["scores"]["comment"] = hide_names(conn, out["scores"]["comment"])
+    if out.get("brew") and out["brew"].get("note"):
+        out["brew"]["note"] = hide_names(conn, out["brew"]["note"])
+    return out
 
 
 def _owner_public(conn: sqlite3.Connection, owner_id) -> dict:
