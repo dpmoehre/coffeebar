@@ -21,6 +21,14 @@ export function groupByDate(entries = CHANGELOG) {
 
 export const CHANGELOG = [
   {
+    date: "2026-10-19",
+    title: "挂耳里多了怒江明珠",
+    notes: [
+      "比顿的怒江明珠挂耳进了挂耳咖啡。一盒 10 袋，每袋 10 克，水洗，极深烘。",
+      "盒子上没写价钱，网上也没查到这一款的标价，所以先没填钱。",
+    ],
+  },
+  {
     date: "2026-10-14",
     title: "画像按喝法看，不按某一包豆",
     notes: [

@@ -5,6 +5,10 @@
 
 ---
 
+## 2026-10-19
+
+- **挂耳入了比顿怒江明珠**：一盒 10 袋 × 10 g，水洗、极深烘，生产日期 2026-08-11。网上没有这一款的标价，价钱空着。见 [docs/023-🚧](docs/023-🚧-挂耳咖啡.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。
+
 ## 2026-10-14
 
 - **画像改看喝法**：不再用「最常喝某一支豆」下结论。看烘焙、产地、豆种、冲法、粉量、过冰，并判断是不是老手；下次买的豆子可以是黄蜜、冷泉、暗房这类还没喝过的。喝得最多的人排在画像第一位。见 [docs/014-✅](docs/014-✅-画像推一杯.md)，手测 [docs/006-🚧](docs/006-🚧-手工验收.md)。**验收**：`uv run pytest tests/test_stats.py::test_habits_expand_past_beans_already_drunk tests/test_stats.py::test_people_with_more_cups_listed_first`。
